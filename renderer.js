@@ -385,7 +385,6 @@ if (isMiniPlayerWindow) {
     if (event.data && event.data.source === 'sleeve-main-player') updateMiniWindow();
   });
   updateMiniWindow();
-  return;
 }
 
 const mediaEl = document.getElementById('mediaEl');
@@ -4985,3 +4984,4 @@ seekBar.addEventListener('change', () => {
     if (playlist.length > 0) loadTrack(0, false);
   })();
 ;
+console.log("SLEEVE RENDERER LOADED");
