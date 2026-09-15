@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sleeve | Music Player </title>
+<link rel="icon" type="image/png" href="data:image/png;base64,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">
+ <link href="main.css" rel="stylesheet" type="text/css" />
+<script
+      type="text/javascript">
+    </script>
+    <script src="renderer.js" defer></script>
+</head>
+<body>
+
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <h1>Sleeve</h1>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item" id="navArtists">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Artists
+        </button>
+        <button class="nav-item" id="navBrowse">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Browse
+        </button>
+        <button class="nav-item active" id="navHome">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5M5 10v10h14V10"/></svg>
+          Home
+        </button>
+        <button class="nav-item" id="navCustomize">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-section-label playlist-section-label">
+        <span>Music playlists</span>
+        <button class="playlist-new-btn" id="newMusicPlaylistBtn" title="New music playlist">+</button>
+      </div>
+      <div class="playlist-list" id="musicPlaylistList"></div>
+      <div class="sidebar-section-label playlist-section-label">
+        <span>Video playlists</span>
+        <button class="playlist-new-btn" id="newVideoPlaylistBtn" title="New video playlist">+</button>
+      </div>
+      <div class="playlist-list" id="videoPlaylistList"></div>
+
+      <button class="add-btn" id="addBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Add media
+      </button>
+      <button class="add-btn add-btn-secondary" id="addFolderBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Add folder
+      </button>
+      <input type="file" id="fileInput"
+        accept="audio/*,video/*,.mp3,.wav,.ogg,.oga,.m4a,.aac,.flac,.wma,.opus,.webm,.aiff,.aif,.amr,.3gp,.mid,.midi,.mp4,.m4v,.mov,.mkv,.ogv,.avi,.mpeg,.mpg,.ts,.m2ts,.wmv,.flv"
+        multiple>
+      <input type="file" id="folderInput" webkitdirectory multiple style="display:none">
+      <input type="file" id="thumbInput" accept="image/*,video/*,.mp4,.m4v,.mov,.webm,.ogv" style="display:none">
+      <input type="file" id="albumThumbInput" accept="image/*,video/*,.mp4,.m4v,.mov,.webm,.ogv" style="display:none">
+      <input type="file" id="playlistThumbInput" accept="image/*" style="display:none">
+      <input type="file" id="artistThumbInput" accept="image/*" style="display:none">
+
+      <div class="sidebar-section-label">Your Library</div>
+      <div class="track-list" id="trackListSidebar">
+        <div class="empty-shelf" id="emptyShelfSidebar">Nothing added yet.</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="save-note" id="saveNote"><strong>Saved in this browser</strong> — your shelf will still be here next time you open this file.</div>
+        <button class="clear-link" id="clearThumbsBtn">Clear all thumbnails</button>
+        <button class="clear-link" id="clearLibraryBtn">Clear library</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-topbar">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="searchInput" type="text" placeholder="Search your library">
+        </div>
+        <nav class="top-page-nav" id="topPageNav" aria-label="Main navigation"></nav>
+      </div>
+
+      <div class="main-content">
+        <h2 id="greeting">Your shelf</h2>
+        <div class="subhead" id="subhead">Add audio or video files from your computer to start playing</div>
+        <button class="back-link" id="viewBackBtn" type="button" style="display:none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span id="viewBackBtnLabel">Back</span>
+        </button>
+<div class="stage-panel" id="stagePanel">
+          <button class="stage-close-btn" id="stageCloseBtn" type="button" title="Close now-playing panel" aria-label="Close now-playing panel">&times;</button>
+          <div class="stage-visual" id="stageVisual">
+            <video id="mediaEl" playsinline></video>
+            <div class="stage-vinyl">
+              <div class="stage-disc" id="stageDisc"><div class="stage-disc-label"></div></div>
+            </div>
+            <img class="stage-thumb" id="stageThumb" loading="lazy" decoding="async" alt="">
+            <video class="stage-thumb-video" id="stageThumbVideo" muted loop playsinline></video>
+            <button class="fullscreen-btn" id="fullscreenBtn" type="button" title="Fullscreen" aria-label="Fullscreen">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
+            </button>
+          </div>
+          <div class="stage-text">
+            <div class="stage-title" id="stageTitle">Nothing playing</div>
+            <div class="stage-sub" id="stageSub">Pick a track from your shelf below</div>
+            <div class="stage-text-row">
+              <div class="stage-kind-badge" id="stageBadge" style="display:none;"></div>
+              <button class="lyrics-toggle-btn" id="lyricsToggleBtn" type="button" style="display:none;">Lyrics</button>
+            </div>
+            <div class="video-tools" id="videoTools">
+              <button class="video-pip-btn" id="videoPipBtn" type="button">Picture-in-picture</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="lyrics-panel" id="lyricsPanel">
+          <div class="lyrics-panel-lines" id="lyricsPanelLines"></div>
+        </div>
+
+        <div class="browse-switch" id="browseSwitch" style="display:none;">
+          <button class="browse-switch-btn" id="browseSwitchYear" type="button">Filter by year</button>
+          <button class="browse-switch-btn" id="browseSwitchGenre" type="button">Filter by genre</button>
+        </div>
+        <div class="album-detail" id="albumDetail" style="display:none;"></div>
+        <div class="card-grid" id="cardGrid"></div>
+        <div class="pagination-controls" id="paginationControls" style="display:none;"></div>
+        <div class="empty-main" id="emptyMain">
+          <h3>Nothing on the shelf yet</h3>
+          <p>Almost any audio or video file works — MP3, WAV, FLAC, AAC, M4A, OGG, MP4, WebM, MOV, and more. Everything you add is saved in this browser automatically.</p>
+          <div class="empty-main-actions">
+            <button class="add-btn" id="addBtnEmpty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Add media
+            </button>
+            <button class="add-btn add-btn-secondary" id="addFolderBtnEmpty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Add folder
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <aside class="queue-panel" id="queuePanel" aria-label="Play queue">
+    <div class="queue-panel-head">
+      <div class="queue-panel-title">Up Next</div>
+      <div class="queue-panel-actions">
+        <button class="queue-panel-btn" id="queueShuffleBtn" type="button" title="Shuffle queue">⇄</button>
+        <button class="queue-panel-btn" id="queueClearBtn" type="button" title="Clear queue">×</button>
+        <button class="queue-panel-btn" id="queueCloseBtn" type="button" title="Close queue">⌄</button>
+      </div>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+  </aside>
+
+  <div class="stats-overlay" id="statsOverlay" role="dialog" aria-modal="true">
+    <div class="stats-modal">
+      <div class="stats-head"><h3>Library Statistics</h3><button class="overlay-close" id="statsClose" type="button">&times;</button></div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="stats-list" id="statsLists"></div>
+    </div>
+  </div>
+
+  <div class="eq-overlay" id="eqOverlay" role="dialog" aria-modal="true" aria-label="Equalizer">
+    <div class="eq-modal">
+      <div class="eq-head"><h3>Equalizer</h3><button class="overlay-close" id="eqClose" type="button" aria-label="Close equalizer">&times;</button></div>
+      <div class="eq-body">
+        <label class="eq-preset-label" for="eqPreset">Preset</label>
+        <select class="eq-select" id="eqPreset">
+          <option value="flat">Flat</option><option value="bass">Bass Boost</option><option value="treble">Treble Boost</option>
+          <option value="vocal">Vocal</option><option value="rock">Rock</option><option value="electronic">Electronic</option><option value="acoustic">Acoustic</option><option value="piano">Piano</option><option value="metal">Metal</option><option value="custom">Custom</option>
+        </select>
+        <svg class="eq-graph" id="eqGraph" viewBox="0 0 420 145" preserveAspectRatio="none" aria-label="Frequency response curve">
+          <line class="eq-graph-grid" x1="0" y1="72.5" x2="420" y2="72.5"></line><polyline class="eq-curve" id="eqCurve" points="0,72.5 420,72.5"></polyline>
+        </svg>
+        <div class="eq-scale"><span>+24 dB</span><span>0 dB</span><span>-24 dB</span></div><div class="eq-sliders" id="eqGrid"></div>
+        <button class="eq-reset" id="eqReset" type="button">Reset</button>
+      </div>
+    </div>
+  </div>
+  <div class="stem-overlay" id="stemOverlay" role="dialog" aria-modal="true" aria-label="Stem Splitter">
+  <div class="stem-panel">
+    <h3>Split into Stems</h3>
+    <p>This uses an AI model (Demucs) to separate this song into six tracks — drums, vocals, bass, guitar, piano, and everything else — so you can raise or mute each one independently instead of just boosting frequency ranges.</p>
+    <p>It runs entirely on your computer, takes anywhere from a few seconds to a couple minutes depending on the song and your CPU, and only needs to happen once per song — the result is saved.</p>
+    <div class="stem-actions">
+      <button id="stemCancel" type="button">Cancel</button>
+      <button id="stemConfirm" type="button" class="primary">Split Stems</button>
+    </div>
+    <div class="stem-progress" id="stemProgress" hidden>
+      <div class="stem-progress-bar" id="stemProgressBar"></div>
+      <span id="stemProgressLabel">Starting…</span>
+    </div>
+  </div>
+</div>
+
+  <div class="stem-overlay" id="convertOverlay" role="dialog" aria-modal="true" aria-label="Convert to MP3">
+  <div class="stem-panel">
+    <h3>Can't Split This File Type</h3>
+    <p id="convertOverlayMessage">This file cannot be split into stems because of its file type. Do you want to convert this file to MP3?</p>
+    <div class="stem-actions">
+      <button id="convertCancel" type="button">Cancel</button>
+      <button id="convertConfirm" type="button" class="primary">Convert to MP3</button>
+    </div>
+    <div class="stem-progress" id="convertProgress" hidden>
+      <div class="stem-progress-bar" id="convertProgressBar" style="width:100%"></div>
+      <span id="convertProgressLabel">Converting…</span>
+    </div>
+  </div>
+</div>
+
+  <div class="player-bar">
+    <div class="np-info">
+      <div class="np-art" id="npArt"><div class="disc" id="disc"><div class="disc-label"></div></div><img class="np-thumb" id="npThumb" loading="lazy" decoding="async" alt=""><video class="np-thumb-video" id="npThumbVideo" muted loop playsinline></video></div>
+      <div class="np-text">
+        <div class="np-title" id="npTitle">Nothing playing</div>
+        <div class="np-sub" id="npSub">—</div>
+      </div>
+    </div>
+
+    <div class="player-center">
+      <div class="transport">
+        <button class="mode-btn" id="repeatBtn" type="button" title="Repeat off">↻</button>
+        <button class="mode-btn" id="shuffleBtn" type="button" title="Shuffle off">⇄</button>
+        <button class="ctrl-btn" id="prevBtn" title="Previous">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6v12l-10-6z"/></svg>
+        </button>
+        <button class="ctrl-btn play-btn" id="playBtn" title="Play/Pause">
+          <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <button class="ctrl-btn" id="nextBtn" title="Next">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM4 6v12l10-6z"/></svg>
+        </button>
+      </div>
+      <div class="seek-row">
+        <span class="time" id="curTime">0:00</span>
+        <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1">
+        <span class="time end" id="durTime">0:00</span>
+      </div>
+    </div>
+
+    <div class="player-right">
+      <button class="queue-panel-btn" id="playerQueueBtn" type="button" title="Show queue" aria-label="Show queue">☷</button>
+      <button class="eq-trigger" id="eqTrigger" type="button" title="Equalizer" aria-label="Open equalizer" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v16M12 4v16M18 4v16"/><path d="M3 8h6M9 15h6M15 10h6"/></svg>
+      </button>
+      <button class="stem-trigger" id="stemTrigger" type="button" title="Split into stems">
+        Split Stems
+      </button>
+      <button class="mini-toggle-btn" id="miniPlayerBtn" type="button" title="Open mini player" aria-label="Open mini player">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h10M7 13h7"/></svg>
+      </button>
+      <div class="speed-group">
+        <span class="speed-label">Speed</span>
+        <select class="speed-select" id="speedSelect">
+          <option value="0.5">0.5×</option>
+          <option value="0.75">0.75×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.25">1.25×</option>
+          <option value="1.5">1.5×</option>
+          <option value="1.75">1.75×</option>
+          <option value="2">2×</option>
+        </select>
+      </div>
+      <div class="vol-group">
+        <button class="ctrl-btn" id="muteBtn" type="button" title="Mute">
+          <svg id="volIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5 6 9H2v6h4l5 4zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 10 0 0 1 0 7.07"/></svg>
+        </button>
+        <input type="range" id="volBar" min="0" max="1" step="0.01" value="1">
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@wasm-audio-decoders/flac@0.2.10/dist/flac-decoder.min.js" charset="UTF-8"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js" charset="UTF-8"></script>
+
+  <div class="drop-overlay" id="dropOverlay">
+    <div class="drop-overlay-title">Drop to add to your shelf</div>
+    <div class="drop-overlay-sub">Audio and video files are welcome</div>
+  </div>
+
+  <div class="lyrics-modal-overlay" id="lyricsModalOverlay"></div>
+  <div class="lyrics-modal" id="lyricsModal">
+    <div class="lyrics-modal-header">
+      <h3>Lyrics — <span id="lyricsModalTrackName">Track</span></h3>
+      <button class="drawer-close" id="lyricsModalClose" type="button" title="Close">&times;</button>
+    </div>
+
+    <div class="lyrics-modal-tabs">
+      <button type="button" class="lyrics-tab active" data-tab="edit">Edit</button>
+      <button type="button" class="lyrics-tab" data-tab="sync">Sync to music</button>
+    </div>
+
+    <div class="lyrics-modal-body" id="lyricsEditPane">
+      <p class="lyrics-hint">Paste plain lyrics, or lines already tagged like <code>[00:12.50]</code> for synced scrolling. Use the Sync tab to tag the timing automatically while the song plays.</p>
+      <textarea id="lyricsTextarea" class="lyrics-textarea" placeholder="Paste lyrics here…" spellcheck="false"></textarea>
+    </div>
+
+    <div class="lyrics-modal-body lyrics-sync-pane" id="lyricsSyncPane" style="display:none;">
+      <p class="lyrics-hint">Play the song and tap <strong>Tag line</strong> (or press <kbd>Space</kbd>) right as each line starts.</p>
+      <div class="lyrics-sync-transport">
+        <button type="button" class="ctrl-btn" id="lyricsSyncPlayBtn" title="Play/Pause">
+          <svg id="lyricsSyncPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+        <span class="lyrics-sync-time" id="lyricsSyncTime">0:00</span>
+        <button type="button" class="lyrics-tag-btn" id="lyricsTagBtn">Tag line</button>
+        <button type="button" class="lyrics-sync-restart" id="lyricsSyncRestart" title="Start over">Restart</button>
+      </div>
+      <div class="lyrics-sync-list" id="lyricsSyncList"></div>
+    </div>
+
+    <div class="lyrics-modal-footer">
+      <button type="button" class="drawer-reset-btn" id="lyricsClearBtn">Clear lyrics</button>
+      <button type="button" class="add-btn" id="lyricsSaveBtn" style="margin:0;">Save lyrics</button>
+    </div>
+  </div>
+
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="drawer" id="customizeDrawer">
+    <div class="drawer-header">
+      <h3>Settings</h3>
+      <button class="drawer-close" id="drawerClose" title="Close" type="button">&times;</button>
+    </div>
+    <div class="drawer-body">
+
+      <div class="drawer-section-title settings-customize-heading">Customize</div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Library thumbnail size</div>
+        <div class="range-row">
+          <input type="range" id="libraryThumbSizeRange" min="28" max="72" step="2" value="34">
+          <span class="range-value" id="libraryThumbSizeValue">34px</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Accent color</div>
+        <div class="swatch-row" id="accentSwatches">
+          <button class="swatch" type="button" data-accent="cyan" style="--sw:#17abe8" title="Cyan"></button>
+          <button class="swatch" type="button" data-accent="violet" style="--sw:#8b6bd8" title="Violet"></button>
+          <button class="swatch" type="button" data-accent="rose" style="--sw:#e0658f" title="Rose"></button>
+          <button class="swatch" type="button" data-accent="green" style="--sw:#3fae72" title="Green"></button>
+          <button class="swatch" type="button" data-accent="amber" style="--sw:#d9a441" title="Amber"></button>
+          <button class="swatch" type="button" data-accent="red" style="--sw:#d3564a" title="Red"></button>
+          <button class="swatch" type="button" data-accent="teal" style="--sw:#22b8a7" title="Teal"></button>
+          <button class="swatch" type="button" data-accent="gold" style="--sw:#e0b341" title="Gold"></button>
+          <button class="swatch" type="button" data-accent="coral" style="--sw:#f07862" title="Coral"></button>
+        </div>
+        <label class="custom-color-row">
+          <span>Custom color</span>
+          <input type="color" id="accentCustom" value="#17abe8">
+        </label>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Background theme</div>
+        <div class="theme-row" id="themeSwatches">
+          <button class="theme-swatch" type="button" data-theme="navy" title="Navy"></button>
+          <button class="theme-swatch" type="button" data-theme="charcoal" title="Charcoal"></button>
+          <button class="theme-swatch" type="button" data-theme="plum" title="Plum"></button>
+          <button class="theme-swatch" type="button" data-theme="forest" title="Forest"></button>
+          <button class="theme-swatch" type="button" data-theme="ocean" title="Ocean"></button>
+          <button class="theme-swatch" type="button" data-theme="sunset" title="Sunset"></button>
+          <button class="theme-swatch" type="button" data-theme="paper" title="Paper"></button>
+          <button class="theme-swatch" type="button" data-theme="midnight" title="Midnight"></button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Corner roundness</div>
+        <div class="range-row">
+          <input type="range" id="radiusRange" min="0" max="24" value="10">
+          <span class="range-value" id="radiusValue">10</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Thumbnail roundness</div>
+        <div class="range-row">
+          <input type="range" id="thumbRadiusRange" min="0" max="24" value="10">
+          <span class="range-value" id="thumbRadiusValue">10</span>
+        </div>
+        <div class="drawer-section">
+          <div class="drawer-section-title">Preview / video player roundness</div>
+          <div class="range-row">
+            <input type="range" id="previewRadiusRange" min="0" max="24" value="10">
+            <span class="range-value" id="previewRadiusValue">10</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Playlist thumbnail size</div>
+        <div class="range-row">
+          <input type="range" id="playlistThumbSizeRange" min="18" max="56" step="2" value="24">
+          <span class="range-value" id="playlistThumbSizeValue">24px</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Card style</div>
+        <div class="segmented" id="cardStyleSeg">
+          <button type="button" data-value="normal" class="active">Normal</button>
+          <button type="button" data-value="glass">Glass</button>
+          <button type="button" data-value="flat">Flat</button>
+          <button type="button" data-value="outline">Outline</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Card behavior</div>
+        <div class="drawer-toggle-row">
+          <span>Compact cards</span>
+          <label class="switch"><input type="checkbox" id="toggleCompactCards"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Disable hover lift</span>
+          <label class="switch"><input type="checkbox" id="toggleNoCardLift"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Drop shadows</span>
+          <label class="switch"><input type="checkbox" id="toggleCardShadow" checked><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Bold titles</span>
+          <label class="switch"><input type="checkbox" id="toggleBoldTitles"><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Effects</div>
+        <div class="drawer-toggle-row">
+          <span>Glow on playing item</span>
+          <label class="switch"><input type="checkbox" id="toggleActiveGlow"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Frosted sidebar</span>
+          <label class="switch"><input type="checkbox" id="toggleSidebarBlur"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Divider lines</span>
+          <label class="switch"><input type="checkbox" id="toggleHairlines" checked><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Page atmosphere</div>
+        <div class="drawer-toggle-row">
+          <span>Accent glow</span>
+          <label class="switch"><input type="checkbox" id="toggleAtmosphere"><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Page readability</div>
+        <div class="drawer-toggle-row">
+          <span>Stronger contrast</span>
+          <label class="switch"><input type="checkbox" id="toggleHighContrast"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Textured background</span>
+          <label class="switch"><input type="checkbox" id="togglePattern"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Thumbnail in now playing</span>
+          <label class="switch"><input type="checkbox" id="toggleNowPlayingThumb"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-section-title" style="margin-top:14px;">Thumbnail framing</div>
+        <div class="segmented" id="thumbnailFitSeg">
+          <button type="button" data-value="cover" class="active">Crop</button>
+          <button type="button" data-value="contain">Fit</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Headings</div>
+        <div class="segmented" id="fontSeg">
+          <button type="button" data-value="serif" class="active">Serif</button>
+          <button type="button" data-value="sans">Sans</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Library view</div>
+        <div class="segmented" id="viewSeg">
+          <button type="button" data-value="grid" class="active">Grid</button>
+          <button type="button" data-value="list">List</button>
+          <button type="button" data-value="shelf">Shelf</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Sidebar row density</div>
+        <div class="segmented" id="rowDensitySeg">
+          <button type="button" data-value="comfortable" class="active">Comfortable</button>
+          <button type="button" data-value="compact">Compact</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Card size</div>
+        <div class="range-row">
+          <input type="range" id="sizeRange" min="120" max="300" value="160">
+          <span class="range-value" id="sizeValue">160</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Video player size</div>
+        <div class="video-size-options">
+          <button class="video-size-btn" type="button" data-video-size="compact">Compact</button>
+          <button class="video-size-btn" type="button" data-video-size="standard">Standard</button>
+          <button class="video-size-btn" type="button" data-video-size="large">Large</button>
+          <button class="video-size-btn" type="button" data-video-size="wide">Wide</button>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Spacing</div>
+        <div class="range-row">
+          <input type="range" id="gapRange" min="5" max="50" value="18">
+          <span class="range-value" id="gapValue">18</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Behavior</div>
+        <div class="drawer-toggle-row">
+          <span>Show now-playing panel</span>
+          <label class="switch"><input type="checkbox" id="toggleStage" checked><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Autoplay next track</span>
+          <label class="switch"><input type="checkbox" id="toggleAutoplay" checked><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Reduce motion</span>
+          <label class="switch"><input type="checkbox" id="toggleReduceMotion"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Detailed album page</span>
+          <label class="switch"><input type="checkbox" id="toggleDetailedAlbum"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Order album tracks by #</span>
+          <label class="switch"><input type="checkbox" id="toggleAlbumTrackOrder" checked><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Use album art as track thumbnail</span>
+          <label class="switch"><input type="checkbox" id="toggleAlbumArtThumb"><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Main sidebar width</div>
+        <div class="range-row">
+          <input type="range" id="sidebarWidthRange" min="180" max="360" step="10" value="260">
+          <span class="range-value" id="sidebarWidthValue">260px</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Overall app scale</div>
+        <div class="range-row">
+          <input type="range" id="uiScaleRange" min="85" max="130" step="5" value="100">
+          <span class="range-value" id="uiScaleValue">100%</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Mini player size</div>
+        <div class="range-row">
+          <input type="range" id="miniPlayerScaleRange" min="15" max="140" step="5" value="100">
+          <span class="range-value" id="miniPlayerScaleValue">100%</span>
+        </div>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">Navigation</div>
+        <div class="drawer-toggle-row">
+          <span>Show Home, Artists and Browse at the top</span>
+          <label class="switch"><input type="checkbox" id="toggleTopPageNavigation"><span class="switch-track"></span></label>
+        </div>
+      </div>
+
+      <div class="drawer-section" id="settingsStatsSection">
+        <div class="drawer-section-title">Stats</div>
+        <div class="stats-grid" id="settingsStatsGrid"></div>
+        <div class="stats-list" id="settingsStatsLists"></div>
+      </div>
+
+      <button class="drawer-reset-btn" id="resetSettingsBtn" type="button">Reset to defaults</button>
+    </div>
+  </aside>
+
+  <!-- Manual metadata editor -->
+  <div class="metadata-editor-backdrop" id="metadataEditorBackdrop" role="dialog" aria-modal="true" aria-labelledby="metadataEditorTitle">
+    <div class="metadata-editor">
+      <h2 id="metadataEditorTitle">Edit song metadata</h2>
+      <p class="metadata-editor-sub" id="metadataEditorFile"></p>
+      <div class="metadata-grid">
+        <div class="metadata-field full">
+          <label for="metadataArtist">Artist</label>
+          <input id="metadataArtist" type="text" autocomplete="off" placeholder="Artist">
+        </div>
+        <div class="metadata-field full">
+          <label for="metadataAlbum">Album</label>
+          <input id="metadataAlbum" type="text" autocomplete="off" placeholder="Album">
+        </div>
+        <div class="metadata-field">
+          <label for="metadataGenre">Genre</label>
+          <input id="metadataGenre" type="text" autocomplete="off" placeholder="Genre">
+        </div>
+        <div class="metadata-field">
+          <label for="metadataYear">Year</label>
+          <input id="metadataYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="YYYY">
+        </div>
+      </div>
+      <div class="metadata-lock-note">
+        These values are saved by Sleeve and take priority over the tags read from the song.
+        Leaving a field blank removes Sleeve's manual override for that field.
+      </div>
+      <div class="metadata-editor-actions">
+        <button type="button" id="metadataCancelBtn">Cancel</button>
+        <button type="button" class="metadata-save" id="metadataSaveBtn">Save metadata</button>
+      </div>
+    </div>
+  </div>
+ 
+
+</body>
+</html>
