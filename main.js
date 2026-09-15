@@ -124,18 +124,21 @@ function allStemsExist(stems) {
 }
 
 function getPythonPath() {
+
   const isWin = process.platform === 'win32'
+
   const platformDir =
     process.platform === 'win32' ? 'win-x64' :
-    process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64' // extend for linux as needed
+    process.arch === 'arm64' ? 'mac-arm64' : 'mac-x64'
 
   const base = app.isPackaged
-    ? path.join(process.resourcesPath, 'embedded', platformDir)
-    : path.join(__dirname, 'python', 'venv') // your existing dev path
+    ? path.join(process.resourcesPath, 'app', 'python', 'embedded', platformDir)
+    : path.join(__dirname, 'python', 'venv')
 
   return app.isPackaged
     ? path.join(base, isWin ? 'python.exe' : 'bin/python3')
     : path.join(base, isWin ? 'Scripts/python.exe' : 'bin/python')
+
 }
 
 ipcMain.handle('stems:check-engine', async () => {
@@ -378,7 +381,39 @@ except ImportError:
     })
   })
 })
+ipcMain.handle('stems:find-existing-for-source', async (_event, filePath) => {
+  if (typeof filePath !== 'string' || !filePath.trim()) return null
 
+  const resolvedPath = resolveSourcePath(filePath)
+
+  if (!fs.existsSync(resolvedPath)) return null
+
+  // For FLAC (or any source that needs conversion), find the
+  // persistent converted file first.
+  const convertedDir = path.join(app.getPath('userData'), 'converted')
+
+  const hash = crypto
+    .createHash('sha1')
+    .update(resolvedPath)
+    .digest('hex')
+    .slice(0, 16)
+
+  const mp3Path = path.join(convertedDir, `${hash}.mp3`)
+  const wavPath = path.join(convertedDir, `${hash}.wav`)
+
+  let stemSourcePath = resolvedPath
+
+  if (fs.existsSync(mp3Path)) {
+    stemSourcePath = mp3Path
+  } else if (fs.existsSync(wavPath)) {
+    stemSourcePath = wavPath
+  }
+
+  const outDir = getStemsOutDir(stemSourcePath)
+  const stems = getStemPaths(outDir, stemSourcePath)
+
+  return allStemsExist(stems) ? stems : null
+})
 ipcMain.handle('shell:show-in-folder', async (_event, filePath) => {
   shell.showItemInFolder(filePath)
 })

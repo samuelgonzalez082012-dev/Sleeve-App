@@ -18,7 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkStemEngine: () => ipcRenderer.invoke('stems:check-engine'),
   convertToMp3: (filePath) => ipcRenderer.invoke('stems:convert-to-mp3', filePath),
   findExistingStems: (filePath) => ipcRenderer.invoke('stems:find-existing', filePath),
-  verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
+findExistingStemsForSource: (filePath) =>
+  ipcRenderer.invoke('stems:find-existing-for-source', filePath),
+verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
   showItemInFolder: (path) => ipcRenderer.invoke('shell:show-in-folder', path),
   getPathForFile: (file) => webUtils.getPathForFile(file),
 })

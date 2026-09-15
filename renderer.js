@@ -1215,6 +1215,34 @@ async function runConvertAndSplit(track) {
   document.getElementById('stemProgress').hidden = false
   document.getElementById('stemCancel').onclick = closeStemOverlay
 
+    try {
+    const existingStems =
+      await window.electronAPI.findExistingStems(mp3Path)
+
+    if (existingStems) {
+      track.stems = existingStems
+      dbPut(track)
+
+      closeStemOverlay()
+
+      createStemMixerUI()
+      await loadStemTrack(track)
+
+      const mixer = document.getElementById('stemMixer')
+      if (mixer) {
+        mixer.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        })
+      }
+
+      await playStems()
+      return
+    }
+  } catch (err) {
+    console.warn('[STEMS] Could not check cached stems:', err)
+  }
+
   runStemSplit(track, mp3Path)
 }
 
@@ -1239,8 +1267,11 @@ async function runStemSplit(track, sourcePathOverride) {
   })
 
   try {
-  const stems = await window.electronAPI.splitStems(sourcePathOverride || track.sourcePath)
+  const filePath = window.electronAPI.getPathForFile(track?.file) || sourcePathOverride || track.sourcePath;
 
+console.log('[STEMS DEBUG] REAL PATH:', filePath);
+
+const stems = await window.electronAPI.splitStems(filePath);
 track.stems = stems
 dbPut(track)
 
@@ -1268,11 +1299,12 @@ document.getElementById('stemTrigger').addEventListener('click', () => {
   const track = currentIndex >= 0 ? playlist[currentIndex] : null;
 
   console.log('[STEMS DEBUG] track:', track);
-  console.log('[STEMS DEBUG] sourcePath:', track?.sourcePath);
-  console.log('[STEMS DEBUG] file:', track?.file);
-  console.log('[STEMS DEBUG] file.name:', track?.file?.name);
-  console.log('[STEMS DEBUG] file.path:', track?.file?.path);
-  console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativePath);
+console.log('[STEMS DEBUG] sourcePath:', track?.sourcePath);
+console.log('[STEMS DEBUG] file:', track?.file);
+console.log('[STEMS DEBUG] file.name:', track?.file?.name);
+console.log('[STEMS DEBUG] file.path:', track?.file?.path);
+console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativePath);
+
 
   if (!track) return;
 
@@ -4546,11 +4578,18 @@ document.getElementById('stemTrigger').addEventListener('click', () => {
     } else {
 
   if (!track.stems && track.sourcePath) {
-    try {
-      track.stems = await window.electronAPI.findExistingStems(track.sourcePath) || null;
-      if (track.stems) dbPut(track);
-    } catch (e) {}
-  }
+  try {
+    if (track.kind === 'flac') {
+      track.stems =
+        await window.electronAPI.findExistingStemsForSource(track.sourcePath) || null;
+    } else {
+      track.stems =
+        await window.electronAPI.findExistingStems(track.sourcePath) || null;
+    }
+
+    if (track.stems) dbPut(track);
+  } catch (e) {}
+}
 
   if (track.stems) {
     const stemsOk = await window.electronAPI.verifyStems(track.stems);
