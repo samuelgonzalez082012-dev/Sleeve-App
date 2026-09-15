@@ -740,29 +740,22 @@ body.preset-spotify #clearThumbsBtn{
 }
 
 /* ---------- Spotify: Sleeve's Now Playing becomes a right-side panel ---------- */
-
 body.preset-spotify #stagePanel{
   position:fixed;
   z-index:12;
-
   top:78px;
   right:0;
   bottom:calc(var(--player-h) + 12px);
-
   width:292px;
   max-width:292px;
-
   margin:0;
   padding:16px;
-
   overflow:auto;
-
   display:flex;
   flex-direction:column;
   align-items:stretch;
   flex-wrap:nowrap;
   gap:14px;
-
   background:#181818;
   border:1px solid #2b2b2b;
   border-right:0;
@@ -896,9 +889,7 @@ body.preset-amazonMusic #trackListSidebar{
 }
 
 /* ---------- Preserve the existing Sleeve layout ---------- */
-/* No overrides needed for the Sleeve preset. */
-
-
+/* No overrides are needed for the Sleeve preset. */
 
 @media(max-width:1100px){
   body.preset-spotify #stagePanel{
@@ -971,32 +962,35 @@ body.preset-spotify #searchInput{
   font-size:14px;
 }
 
-/* Spotify: the existing Sleeve stage becomes the right-hand
-   Now Playing panel. Nothing is duplicated; the same stage element
-   is simply moved visually into the right column. */
+/* Spotify: keep the main content in one scrolling column while the
+   existing Sleeve stage is fixed on the right. */
 body.preset-spotify .main-content{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 330px;
-  grid-auto-flow:row;
-  gap:0 22px;
-  align-items:start;
-  padding:18px 28px 118px;
+  display:block;
+  padding:18px calc(292px + 28px) 118px 28px;
+  width:100%;
+  max-width:none;
 }
 body.preset-spotify .main-content > .stage-panel{
-  grid-column:2;
-  grid-row:1 / span 20;
-  position:sticky;
-  top:18px;
-  width:100%;
+  display:flex;
+  position:fixed;
+  z-index:12;
+  top:78px;
+  right:0;
+  left:auto;
+  bottom:calc(var(--player-h) + 12px);
+  width:292px;
+  max-width:292px;
   min-width:0;
-  min-height:620px;
+  min-height:0;
+  margin:0;
+  padding:16px;
   flex-direction:column;
   align-items:stretch;
   gap:14px;
-  padding:16px;
-  border-radius:10px;
+  border-radius:10px 0 0 10px;
   background:#181818;
   border:1px solid #2a2a2a;
+  border-right:0;
   box-shadow:none;
   overflow:auto;
 }
@@ -1007,21 +1001,8 @@ body.preset-spotify .main-content > .stage-panel .stage-visual{
   border-radius:7px;
   flex-shrink:0;
 }
-body.preset-spotify .main-content > .stage-panel .stage-text{
-  width:100%;
-}
-body.preset-spotify .main-content > :not(.stage-panel){
-  grid-column:1;
-}
-body.preset-spotify .main-content > .stage-panel + *{
-  grid-column:1;
-}
-body.preset-spotify .main-content .card-grid,
-body.preset-spotify .main-content .smart-home-wrap,
-body.preset-spotify .main-content #albumDetail,
-body.preset-spotify .main-content #paginationControls{
-  min-width:0;
-}
+body.preset-spotify .main-content > .stage-panel .stage-text{ width:100%; }
+body.preset-spotify .main-content > *{ min-width:0; }
 
 /* The old “Clear all thumbnails / Clear library” controls stay
    available, but read as maintenance tools instead of navigation. */
@@ -1042,7 +1023,9 @@ body.preset-amazonMusic .sidebar-footer .save-note{
 body.preset-amazonMusic .app{
   background:#05070b;
 }
-
+body.preset-amazonMusic .sidebar{
+  display:none;
+}
 body.preset-amazonMusic .main{
   width:100%;
   min-width:0;
@@ -1077,6 +1060,18 @@ body.preset-amazonMusic .top-page-nav .nav-item.active{
   background:rgba(25,167,255,.15);
   box-shadow:inset 0 -2px 0 #19a7ff;
 }
+body.preset-amazonMusic .top-page-nav #navCustomize{
+  margin-left:8px;
+  padding-left:14px;
+  border-left:1px solid #1d2b38;
+  color:#8fa7b4;
+}
+body.preset-amazonMusic .top-page-nav #navCustomize:hover,
+body.preset-amazonMusic .top-page-nav #navCustomize.active{
+  color:#fff;
+  background:rgba(255,255,255,.06);
+  box-shadow:none;
+}
 body.preset-amazonMusic .search-wrap{
   grid-column:2;
   width:100%;
@@ -1102,18 +1097,25 @@ body.preset-amazonMusic .main-content{
   width:100%;
   max-width:none;
 }
-body.preset-amazonMusic .main-content > .stage-panel{
+body.preset-amazonMusic.amazon-home-active .main-content > .stage-panel{
   display:none !important;
 }
 body.preset-amazonMusic.amazon-home-active #cardGrid{
   display:none !important;
 }
-body.preset-amazonMusic.amazon-home-active .main-content > .stage-panel{
-  display:none !important;
-}
 body.preset-amazonMusic #smartHomeWrap{
   width:100%;
   max-width:none;
+}
+body.preset-amazonMusic.amazon-home-active #smartHomeWrap{
+  display:none !important;
+}
+body.preset-amazonMusic.amazon-home-active #greeting,
+body.preset-amazonMusic.amazon-home-active #subhead,
+body.preset-amazonMusic.amazon-home-active #viewBackBtn,
+body.preset-amazonMusic.amazon-home-active #browseSwitch,
+body.preset-amazonMusic.amazon-home-active #emptyMain{
+  display:none !important;
 }
 body.preset-amazonMusic .amazon-home-wrap{
   width:100%;
@@ -1289,4 +1291,217 @@ body.preset-amazonMusic .player-bar{
     grid-template-columns:48px minmax(0,1fr) 70px;
   }
   body.preset-amazonMusic .amazon-library-sub{display:none;}
+}
+
+
+/* =========================================================
+   FINAL PRESET SAFETY OVERRIDES
+   ========================================================= */
+
+/* The Amazon preset intentionally has no left navigation rail. Its
+   navigation and Customize control are moved into the top bar by JS,
+   while the maintenance footer is moved below the main content. */
+body.preset-amazonMusic .sidebar{
+  display:none !important;
+}
+body.preset-amazonMusic > .app,
+body.preset-amazonMusic .app{
+  width:100%;
+}
+body.preset-amazonMusic > .app > .main,
+body.preset-amazonMusic .app > .main{
+  width:100%;
+  min-width:0;
+}
+body.preset-amazonMusic .main > .sidebar-footer{
+  margin:0 34px 18px;
+  padding:12px 0 0;
+  border-top:1px solid #17252d;
+  flex-shrink:0;
+  background:transparent;
+}
+body.preset-amazonMusic .main > .sidebar-footer .save-note{
+  opacity:.48;
+}
+body.preset-amazonMusic.amazon-home-active .main-content{
+  padding-bottom:72px;
+}
+
+/* Spotify keeps Sleeve's original left library rail but gives the
+   Now Playing stage its own fixed rail on the right. */
+body.preset-spotify .main-content{
+  display:block !important;
+  padding-left:28px !important;
+  padding-right:calc(292px + 28px) !important;
+  padding-bottom:118px !important;
+}
+body.preset-spotify .main-content > .stage-panel{
+  position:fixed !important;
+  top:78px !important;
+  right:0 !important;
+  left:auto !important;
+  bottom:calc(var(--player-h) + 12px) !important;
+  width:292px !important;
+  max-width:292px !important;
+  min-height:0 !important;
+  margin:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  border-radius:10px 0 0 10px !important;
+  border-right:0 !important;
+}
+
+@media(max-width:1100px){
+  body.preset-spotify .main-content{
+    padding:18px 28px 118px !important;
+  }
+  body.preset-spotify .main-content > .stage-panel{
+    position:relative !important;
+    top:auto !important;
+    right:auto !important;
+    left:auto !important;
+    bottom:auto !important;
+    width:100% !important;
+    max-width:none !important;
+    min-height:0 !important;
+    margin:0 0 18px !important;
+    border-right:1px solid #2a2a2a !important;
+    border-radius:10px !important;
+  }
+}
+
+@media(max-width:900px){
+  body.preset-amazonMusic .main-topbar,
+  body.preset-spotify .main-topbar{
+    grid-template-columns:1fr;
+  }
+  body.preset-amazonMusic .top-page-nav,
+  body.preset-spotify .top-page-nav,
+  body.preset-amazonMusic .search-wrap,
+  body.preset-spotify .search-wrap{
+    grid-column:1;
+  }
+  body.preset-amazonMusic .top-page-nav{
+    justify-content:flex-start;
+    flex-wrap:wrap;
+  }
+  body.preset-amazonMusic .top-page-nav #navCustomize{
+    margin-left:0;
+    padding-left:12px;
+  }
+}
+
+
+/* =========================================================
+   V5 FINAL PRESET LAYOUT — coherent end-state overrides
+   ========================================================= */
+
+/* Amazon Music: no left rail. Navigation lives in the top bar;
+   the existing maintenance footer is moved there by renderer.js. */
+body.preset-amazonMusic .sidebar{
+  display:none !important;
+}
+body.preset-amazonMusic .app{
+  display:flex;
+  width:100%;
+  min-width:0;
+}
+body.preset-amazonMusic .main{
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+}
+body.preset-amazonMusic .main-content{
+  display:block !important;
+  width:100% !important;
+  max-width:none !important;
+  padding:28px 34px 110px !important;
+}
+body.preset-amazonMusic .main > .sidebar-footer{
+  display:flex !important;
+  width:auto;
+  margin:0 34px 18px;
+  padding:12px 0 0;
+  border-top:1px solid #17252d;
+  background:transparent;
+  flex-shrink:0;
+}
+body.preset-amazonMusic .main > .sidebar-footer .save-note{
+  opacity:.48;
+}
+
+/* Amazon home is a single full-width hierarchy: Artists → Playlists → Your Library. */
+body.preset-amazonMusic.amazon-home-active .main-content > .stage-panel,
+body.preset-amazonMusic.amazon-home-active #cardGrid,
+body.preset-amazonMusic.amazon-home-active #smartHomeWrap,
+body.preset-amazonMusic.amazon-home-active #greeting,
+body.preset-amazonMusic.amazon-home-active #subhead,
+body.preset-amazonMusic.amazon-home-active #viewBackBtn,
+body.preset-amazonMusic.amazon-home-active #browseSwitch,
+body.preset-amazonMusic.amazon-home-active #emptyMain{
+  display:none !important;
+}
+body.preset-amazonMusic .amazon-home-wrap{
+  width:100%;
+  max-width:none;
+}
+body.preset-amazonMusic .amazon-home-section{
+  width:100%;
+}
+body.preset-amazonMusic .amazon-artist-row,
+body.preset-amazonMusic .amazon-playlist-row{
+  width:100%;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+}
+body.preset-amazonMusic .amazon-library{
+  width:100%;
+}
+body.preset-amazonMusic .amazon-library-row{
+  width:100%;
+}
+
+/* Spotify: preserve the left library rail and use the same Now Playing
+   stage on the fixed right-hand side. */
+body.preset-spotify .main-content{
+  display:block !important;
+  padding-left:28px !important;
+  padding-right:calc(292px + 28px) !important;
+  padding-bottom:118px !important;
+}
+body.preset-spotify .main-content > .stage-panel{
+  position:fixed !important;
+  z-index:12 !important;
+  top:78px !important;
+  right:0 !important;
+  left:auto !important;
+  bottom:calc(var(--player-h) + 12px) !important;
+  width:292px !important;
+  max-width:292px !important;
+  min-height:0 !important;
+  margin:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  flex-wrap:nowrap !important;
+  border-radius:10px 0 0 10px !important;
+  border-right:0 !important;
+}
+
+@media(max-width:1100px){
+  body.preset-spotify .main-content{
+    padding:18px 28px 118px !important;
+  }
+  body.preset-spotify .main-content > .stage-panel{
+    position:relative !important;
+    top:auto !important;
+    right:auto !important;
+    left:auto !important;
+    bottom:auto !important;
+    width:100% !important;
+    max-width:none !important;
+    min-height:0 !important;
+    margin:0 0 18px !important;
+    border-right:1px solid #2b2b2b !important;
+    border-radius:10px !important;
+  }
 }
