@@ -1,104 +1,626 @@
-/* Sleeve preset visual overrides. Add after Main.css. */
+/*
+  Sleeve preset visual overrides v2.
+  Load this AFTER Main.css.
+  Scope is limited to the preset body classes so the normal Sleeve style stays intact.
+*/
 
-/* ===================== Spotify-inspired ===================== */
+/* =========================================================
+   SHARED PRESET LAYOUT
+   ========================================================= */
+body.preset-spotify .sidebar,
+body.preset-amazonMusic .sidebar{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+
+body.preset-spotify .nav,
+body.preset-amazonMusic .nav{
+  display:flex;
+  flex-direction:column;
+}
+
+body.preset-spotify .sidebar > .sidebar-section-label,
+body.preset-spotify .sidebar > .playlist-list,
+body.preset-spotify .sidebar > #addBtn,
+body.preset-spotify .sidebar > #trackListSidebar,
+body.preset-spotify .sidebar > .nav,
+body.preset-spotify .sidebar > .brand,
+body.preset-amazonMusic .sidebar > .sidebar-section-label,
+body.preset-amazonMusic .sidebar > .playlist-list,
+body.preset-amazonMusic .sidebar > #addBtn,
+body.preset-amazonMusic .sidebar > #trackListSidebar,
+body.preset-amazonMusic .sidebar > .nav,
+body.preset-amazonMusic .sidebar > .brand{
+  flex-shrink:0;
+}
+
+/* =========================================================
+   SPOTIFY-INSPIRED — much closer to the desktop hierarchy
+   ========================================================= */
 body.preset-spotify{
   --spotify-green:#1ed760;
+  --spotify-green-bright:#1fdf68;
+  --spotify-black:#000;
+  --spotify-base:#121212;
+  --spotify-panel:#181818;
+  --spotify-panel-2:#242424;
+  --spotify-text:#f7f7f7;
+  --spotify-sub:#b3b3b3;
 }
-body.preset-spotify .sidebar{background:#000;border-right-color:rgba(255,255,255,.05);padding:20px 12px}
-body.preset-spotify .main{background:linear-gradient(180deg,#1b1b1b 0,#121212 300px)}
-body.preset-spotify .main-topbar{background:rgba(18,18,18,.78);backdrop-filter:blur(14px)}
-body.preset-spotify .player-bar{background:#181818;border-top-color:rgba(255,255,255,.08)}
-body.preset-spotify .player-bar::before{background:linear-gradient(90deg,transparent,rgba(30,215,96,.5) 35%,rgba(30,215,96,.85) 65%,transparent)}
-body.preset-spotify .brand h1,
-body.preset-spotify .main-content h2,
-body.preset-spotify .stage-title,
-body.preset-spotify .empty-main h3,
-body.preset-spotify .album-detail-title,
-body.preset-spotify .smart-section-title,
-body.preset-spotify .queue-panel-title{font-family:var(--sans);letter-spacing:-.025em}
-body.preset-spotify .brand h1{font-size:20px;font-weight:800}
-body.preset-spotify .nav-item{border-radius:6px;font-size:13.5px}
-body.preset-spotify .nav-item:hover{background:rgba(255,255,255,.07)}
-body.preset-spotify .nav-item.active{background:rgba(255,255,255,.10);color:#fff}
-body.preset-spotify .nav-item::before{background:var(--spotify-green)}
-body.preset-spotify .sidebar-section-label{color:#8d8d8d}
-body.preset-spotify .playlist-new-btn{border-color:#404040;color:#b3b3b3;border-radius:50%}
-body.preset-spotify .playlist-new-btn:hover{color:#fff;border-color:var(--spotify-green);background:rgba(30,215,96,.10)}
-body.preset-spotify #searchInput{background:#242424;border-color:transparent;color:#fff}
-body.preset-spotify #searchInput:focus{background:#2a2a2a;border-color:rgba(30,215,96,.55);box-shadow:0 0 0 3px rgba(30,215,96,.10)}
-body.preset-spotify .search-wrap svg{color:#a7a7a7}
-body.preset-spotify .search-wrap:focus-within svg{color:var(--spotify-green)}
+
+body.preset-spotify .app{
+  background:#000;
+}
+
+body.preset-spotify .sidebar{
+  width:272px;
+  min-width:272px;
+  background:#000;
+  border-right:0;
+  padding:12px 10px 10px;
+  gap:0;
+}
+
+/* Brand is intentionally compact like a music-service wordmark. */
+body.preset-spotify .brand{
+  min-height:46px;
+  padding:2px 10px 10px;
+  border-bottom:0;
+}
+
+body.preset-spotify .brand h1{
+  font-family:var(--sans);
+  font-size:19px;
+  font-weight:800;
+  letter-spacing:-.035em;
+  color:#fff;
+}
+
+body.preset-spotify .brand-mark{
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  box-shadow:0 0 0 1px rgba(255,255,255,.08),0 7px 20px rgba(30,215,96,.14);
+}
+
+/* Navigation order becomes Home / Browse / Artists / Settings. */
+body.preset-spotify #navHome{order:1}
+body.preset-spotify #navBrowse{order:2}
+body.preset-spotify #navArtists{order:3}
+body.preset-spotify #navCustomize{order:4;margin-top:10px}
+
+body.preset-spotify .nav{
+  margin:4px 0 12px;
+  gap:2px;
+  padding:0 2px 10px;
+  border-bottom:1px solid #282828;
+}
+
+body.preset-spotify .nav-item{
+  min-height:40px;
+  padding:0 12px;
+  border-radius:6px;
+  color:#b3b3b3;
+  font-family:var(--sans);
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:-.01em;
+}
+
+body.preset-spotify .nav-item svg{
+  width:20px;
+  height:20px;
+}
+
+body.preset-spotify .nav-item:hover{
+  background:#1a1a1a;
+  color:#fff;
+}
+
+body.preset-spotify .nav-item.active{
+  background:#1a1a1a;
+  color:#fff;
+}
+
+body.preset-spotify .nav-item::before{
+  width:3px;
+  left:0;
+  border-radius:2px;
+  background:var(--spotify-green);
+}
+
+/* Reorder the existing sidebar blocks without touching their IDs. */
+body.preset-spotify .sidebar > .brand{order:1}
+body.preset-spotify .sidebar > .nav{order:2}
+body.preset-spotify .sidebar > .sidebar-section-label:has(+ #musicPlaylistList){order:3}
+body.preset-spotify .sidebar > #musicPlaylistList{order:4}
+body.preset-spotify .sidebar > .sidebar-section-label:has(+ #videoPlaylistList){order:5}
+body.preset-spotify .sidebar > #videoPlaylistList{order:6}
+body.preset-spotify .sidebar > .sidebar-section-label:not(.playlist-section-label){order:7}
+body.preset-spotify .sidebar > #trackListSidebar{order:8}
+body.preset-spotify .sidebar > #addBtn{order:9;margin-top:auto}
+
+body.preset-spotify .sidebar > .playlist-section-label:has(+ #musicPlaylistList) span::before{
+  content:'Your Library';
+}
+body.preset-spotify .sidebar > .playlist-section-label:has(+ #musicPlaylistList) span{
+  font-size:0;
+}
+body.preset-spotify .sidebar > .playlist-section-label:has(+ #musicPlaylistList) span::before{
+  font-size:11px;
+}
+body.preset-spotify .sidebar > .playlist-section-label:has(+ #videoPlaylistList) span{
+  font-size:0;
+}
+body.preset-spotify .sidebar > .playlist-section-label:has(+ #videoPlaylistList) span::before{
+  content:'Video';
+  font-size:11px;
+}
+body.preset-spotify .sidebar > .sidebar-section-label:not(.playlist-section-label){
+  display:none;
+}
+
+body.preset-spotify .playlist-section-label{
+  min-height:28px;
+  padding:0 8px;
+  margin:0;
+  color:#a7a7a7;
+  text-transform:none;
+  letter-spacing:.01em;
+}
+
+body.preset-spotify .playlist-section-actions{gap:2px}
+
+body.preset-spotify .playlist-new-btn{
+  width:24px;
+  height:24px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:#b3b3b3;
+}
+
+body.preset-spotify .playlist-new-btn:hover{
+  background:#1a1a1a;
+  color:#fff;
+  border-color:transparent;
+}
+
+body.preset-spotify .playlist-list{
+  max-height:180px;
+  overflow:auto;
+  margin:0 0 8px;
+  padding:0 2px 2px;
+}
+
+body.preset-spotify .playlist-list::-webkit-scrollbar{width:8px}
+body.preset-spotify .playlist-list::-webkit-scrollbar-thumb{background:#3d3d3d;border-radius:8px}
+
+body.preset-spotify .playlist-list > *{
+  border-radius:4px;
+}
+
+body.preset-spotify #trackListSidebar{
+  display:none;
+}
+
+body.preset-spotify #addBtn{
+  min-height:38px;
+  border-radius:6px;
+  background:#1a1a1a;
+  border-color:#2b2b2b;
+  color:#d7d7d7;
+  font-family:var(--sans);
+  font-weight:700;
+}
+
+body.preset-spotify #addBtn:hover{
+  background:#242424;
+  border-color:#3d3d3d;
+  color:#fff;
+}
+
+/* Main Spotify-like surfaces. */
+body.preset-spotify .main{
+  background:
+    radial-gradient(circle at 50% -12%,rgba(95,95,95,.24),transparent 27%),
+    linear-gradient(180deg,#202020 0,#121212 360px);
+}
+
+body.preset-spotify .main-topbar{
+  background:rgba(18,18,18,.84);
+  border-bottom-color:rgba(255,255,255,.03);
+  backdrop-filter:blur(14px);
+}
+
+body.preset-spotify #searchInput{
+  min-height:42px;
+  background:#242424;
+  border:0;
+  border-radius:999px;
+  color:#fff;
+  box-shadow:none;
+}
+
+body.preset-spotify #searchInput::placeholder{color:#b3b3b3}
+body.preset-spotify #searchInput:focus{
+  background:#2a2a2a;
+  box-shadow:0 0 0 1px #fff;
+}
+
 body.preset-spotify .card,
-body.preset-spotify .browse-card{background:#181818;border-color:transparent;border-radius:8px;box-shadow:none}
+body.preset-spotify .browse-card{
+  background:#181818;
+  border:0;
+  border-radius:7px;
+  box-shadow:none;
+}
+
 body.preset-spotify .card:hover,
-body.preset-spotify .browse-card:hover{background:#242424;transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.28)}
-body.preset-spotify .card-art{border-radius:5px;box-shadow:none;background:#181818}
-body.preset-spotify .card-play{background:var(--spotify-green);color:#051108;box-shadow:0 8px 22px rgba(0,0,0,.40)}
-body.preset-spotify .card-play:hover{background:#1fdf68}
-body.preset-spotify .card.active{border-color:rgba(30,215,96,.7);box-shadow:0 0 0 2px rgba(30,215,96,.14)}
-body.preset-spotify .stage-panel{background:linear-gradient(145deg,#202020,#151515);border-color:rgba(255,255,255,.06);border-radius:12px;box-shadow:0 18px 40px rgba(0,0,0,.35)}
-body.preset-spotify .stage-visual{border-radius:6px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
-body.preset-spotify .stage-disc-label,
-body.preset-spotify .np-art .disc-label{background:radial-gradient(circle at 35% 30%,#1fdf68,#1ed760 60%,#126b34 100%)}
-body.preset-spotify .album-detail-hero{background:linear-gradient(180deg,#202020,#181818);box-shadow:none}
-body.preset-spotify .album-detail-play{background:var(--spotify-green);color:#061108;border-radius:999px}
-body.preset-spotify .album-detail-shuffle,
-body.preset-spotify .album-detail-more{background:#242424;border-color:rgba(255,255,255,.08)}
-body.preset-spotify .playlist-item-count{background:transparent;padding:0}
-body.preset-spotify .play-btn{background:#fff;color:#111}
-body.preset-spotify .play-btn:hover{background:var(--spotify-green);color:#061108;box-shadow:0 0 22px rgba(30,215,96,.28)}
-body.preset-spotify input[type=range]{background:linear-gradient(to right,var(--spotify-green) var(--range-progress,0%),rgba(255,255,255,.22) var(--range-progress,0%))}
-body.preset-spotify input[type=range]::-webkit-slider-thumb{background:var(--spotify-green)}
-body.preset-spotify input[type=range]::-moz-range-thumb{background:var(--spotify-green)}
+body.preset-spotify .browse-card:hover{
+  background:#242424;
+  transform:none;
+  box-shadow:none;
+}
+
+body.preset-spotify .card-art{
+  border-radius:5px;
+  box-shadow:none;
+}
+
+body.preset-spotify .card-play,
+body.preset-spotify .album-detail-play{
+  background:var(--spotify-green);
+  color:#071109;
+  border-radius:999px;
+  box-shadow:0 8px 18px rgba(0,0,0,.38);
+}
+
+body.preset-spotify .card-play:hover,
+body.preset-spotify .album-detail-play:hover{
+  background:var(--spotify-green-bright);
+  transform:translateY(-1px);
+}
+
+body.preset-spotify .stage-panel,
+body.preset-spotify .album-detail-hero{
+  background:linear-gradient(145deg,#222,#181818);
+  border:0;
+  border-radius:10px;
+  box-shadow:none;
+}
+
+body.preset-spotify .stage-visual{
+  border-radius:5px;
+  box-shadow:none;
+}
+
+body.preset-spotify .album-detail-hero{
+  box-shadow:none;
+}
+
+body.preset-spotify .play-btn{
+  background:#fff;
+  color:#000;
+}
+body.preset-spotify .play-btn:hover{
+  background:var(--spotify-green);
+  color:#061108;
+}
+
+body.preset-spotify .player-bar{
+  background:#181818;
+  border-top:1px solid #282828;
+  box-shadow:none;
+}
+
+body.preset-spotify .player-bar::before{
+  background:var(--spotify-green);
+  height:2px;
+}
+
+body.preset-spotify input[type=range]{
+  background:linear-gradient(to right,var(--spotify-green) var(--range-progress,0%),#535353 var(--range-progress,0%));
+}
+body.preset-spotify input[type=range]::-webkit-slider-thumb{background:#fff}
+body.preset-spotify input[type=range]::-moz-range-thumb{background:#fff}
+
 body.preset-spotify .queue-panel,
 body.preset-spotify .drawer,
 body.preset-spotify .modal-box,
-body.preset-spotify .stats-modal{background:#181818;border-color:rgba(255,255,255,.08)}
-body.preset-spotify .queue-row:hover,
-body.preset-spotify .playlist-menu-item:hover,
-body.preset-spotify .modal-option-btn:hover{background:#242424}
+body.preset-spotify .stats-modal{
+  background:#181818;
+  border-color:#2b2b2b;
+}
 
-/* ===================== Amazon Music-inspired ===================== */
-body.preset-amazonMusic{--amazon-blue:#19a7ff}
-body.preset-amazonMusic .sidebar{background:linear-gradient(180deg,#06101b,#081522);border-right-color:rgba(25,167,255,.12);padding:22px 15px}
-body.preset-amazonMusic .main{background:radial-gradient(ellipse 900px 460px at 72% -8%,rgba(25,167,255,.16),transparent 65%),linear-gradient(180deg,#0c1827 0,#07111d 340px)}
-body.preset-amazonMusic .main-topbar{background:rgba(7,17,29,.70);backdrop-filter:blur(16px)}
-body.preset-amazonMusic .player-bar{background:#081522;border-top-color:rgba(25,167,255,.13)}
-body.preset-amazonMusic .player-bar::before{background:linear-gradient(90deg,transparent,rgba(25,167,255,.35) 30%,rgba(139,220,255,.7) 70%,transparent)}
-body.preset-amazonMusic .brand h1,
-body.preset-amazonMusic .main-content h2,
-body.preset-amazonMusic .stage-title,
-body.preset-amazonMusic .empty-main h3,
-body.preset-amazonMusic .album-detail-title,
-body.preset-amazonMusic .smart-section-title,
-body.preset-amazonMusic .queue-panel-title{font-family:var(--sans);letter-spacing:-.018em}
-body.preset-amazonMusic .nav-item{border-radius:9px}
-body.preset-amazonMusic .nav-item.active{background:linear-gradient(90deg,rgba(25,167,255,.20),rgba(25,167,255,.08))}
-body.preset-amazonMusic .nav-item::before{background:var(--amazon-blue)}
-body.preset-amazonMusic #searchInput{background:#102135;border-color:rgba(25,167,255,.09)}
-body.preset-amazonMusic #searchInput:focus{border-color:rgba(25,167,255,.55);box-shadow:0 0 0 3px rgba(25,167,255,.12)}
+/* =========================================================
+   AMAZON MUSIC-INSPIRED — dark, cyan-forward, library-first
+   ========================================================= */
+body.preset-amazonMusic{
+  --amazon-blue:#25d7ff;
+  --amazon-blue-dark:#0099c9;
+  --amazon-bg:#050b10;
+  --amazon-panel:#0d151b;
+  --amazon-panel-2:#141e25;
+  --amazon-text:#f3f8fb;
+  --amazon-sub:#a7b5bc;
+}
+
+body.preset-amazonMusic .app{
+  background:#050b10;
+}
+
+body.preset-amazonMusic .sidebar{
+  width:254px;
+  min-width:254px;
+  background:linear-gradient(180deg,#071016 0,#050b10 78%);
+  border-right:1px solid #162229;
+  padding:14px 12px 12px;
+}
+
+body.preset-amazonMusic .brand{
+  min-height:50px;
+  padding:4px 10px 12px;
+  border-bottom:1px solid #162229;
+}
+
+body.preset-amazonMusic .brand h1{
+  font-family:var(--sans);
+  font-size:19px;
+  font-weight:800;
+  letter-spacing:-.03em;
+}
+
+body.preset-amazonMusic .brand-mark{
+  width:29px;
+  height:29px;
+  border-radius:8px;
+  box-shadow:0 0 0 1px rgba(37,215,255,.14),0 7px 20px rgba(37,215,255,.10);
+}
+
+/* Amazon-style library navigation emphasis. */
+body.preset-amazonMusic #navHome{order:1}
+body.preset-amazonMusic #navBrowse{order:2}
+body.preset-amazonMusic #navArtists{order:3}
+body.preset-amazonMusic #navCustomize{order:4;margin-top:8px}
+
+body.preset-amazonMusic .nav{
+  margin:10px 0 12px;
+  gap:3px;
+  padding:0 0 10px;
+  border-bottom:1px solid #162229;
+}
+
+body.preset-amazonMusic .nav-item{
+  min-height:40px;
+  border-radius:5px;
+  color:#aebbc1;
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:700;
+}
+
+body.preset-amazonMusic .nav-item:hover{
+  background:#101b22;
+  color:#fff;
+}
+
+body.preset-amazonMusic .nav-item.active{
+  color:#fff;
+  background:#10212a;
+  box-shadow:inset 3px 0 0 var(--amazon-blue);
+}
+
+body.preset-amazonMusic .nav-item::before{display:none}
+
+/* Amazon-like hierarchy: Library content comes before playlists. */
+body.preset-amazonMusic .sidebar > .brand{order:1}
+body.preset-amazonMusic .sidebar > .nav{order:2}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:not(.playlist-section-label){order:3}
+body.preset-amazonMusic .sidebar > #trackListSidebar{order:4}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:has(+ #musicPlaylistList){order:5}
+body.preset-amazonMusic .sidebar > #musicPlaylistList{order:6}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:has(+ #videoPlaylistList){order:7}
+body.preset-amazonMusic .sidebar > #videoPlaylistList{order:8}
+body.preset-amazonMusic .sidebar > #addBtn{order:9;margin-top:auto}
+
+body.preset-amazonMusic .sidebar > .sidebar-section-label:not(.playlist-section-label){
+  padding:4px 8px;
+  color:#fff;
+  font-family:var(--sans);
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+body.preset-amazonMusic .playlist-section-label{
+  min-height:28px;
+  margin:0;
+  padding:0 8px;
+  color:#a7b5bc;
+  font-family:var(--sans);
+}
+
+body.preset-amazonMusic .sidebar > .playlist-section-label:has(+ #musicPlaylistList) span{
+  font-size:0;
+}
+body.preset-amazonMusic .sidebar > .playlist-section-label:has(+ #musicPlaylistList) span::before{
+  content:'Playlists';
+  font-size:11px;
+}
+body.preset-amazonMusic .sidebar > .playlist-section-label:has(+ #videoPlaylistList) span{
+  font-size:0;
+}
+body.preset-amazonMusic .sidebar > .playlist-section-label:has(+ #videoPlaylistList) span::before{
+  content:'Video';
+  font-size:11px;
+}
+
+body.preset-amazonMusic .playlist-new-btn{
+  width:24px;
+  height:24px;
+  border-radius:5px;
+  border-color:#26353d;
+  color:#9eb0b8;
+}
+
+body.preset-amazonMusic .playlist-new-btn:hover{
+  color:#fff;
+  background:#10212a;
+  border-color:var(--amazon-blue);
+}
+
+body.preset-amazonMusic .playlist-list{
+  max-height:150px;
+  overflow:auto;
+  margin-bottom:9px;
+  padding:0 2px 2px;
+}
+
+body.preset-amazonMusic #trackListSidebar{
+  max-height:190px;
+  overflow:auto;
+  margin-bottom:10px;
+}
+
+body.preset-amazonMusic #addBtn{
+  min-height:38px;
+  border-radius:5px;
+  background:#0d1820;
+  border-color:#1d2c34;
+  color:#d5e3e8;
+  font-family:var(--sans);
+  font-weight:700;
+}
+
+body.preset-amazonMusic #addBtn:hover{
+  background:#10232d;
+  border-color:var(--amazon-blue);
+  color:#fff;
+}
+
+body.preset-amazonMusic .main{
+  background:
+    radial-gradient(ellipse 1000px 520px at 54% -5%,rgba(37,215,255,.13),transparent 62%),
+    linear-gradient(180deg,#0d171d 0,#050b10 390px);
+}
+
+body.preset-amazonMusic .main-topbar{
+  background:#050b10;
+  border-bottom:1px solid #17252d;
+}
+
+body.preset-amazonMusic #searchInput{
+  min-height:40px;
+  border-radius:5px;
+  background:#101a20;
+  border:1px solid #22323a;
+}
+
+body.preset-amazonMusic #searchInput:focus{
+  border-color:var(--amazon-blue);
+  box-shadow:0 0 0 2px rgba(37,215,255,.12);
+}
+
 body.preset-amazonMusic .card,
-body.preset-amazonMusic .browse-card{background:linear-gradient(145deg,#0e1c2d,#0a1624);border-color:rgba(255,255,255,.035);border-radius:13px;box-shadow:0 10px 28px rgba(0,0,0,.28)}
+body.preset-amazonMusic .browse-card{
+  background:linear-gradient(180deg,#111b22,#0c141a);
+  border:1px solid #1b2a32;
+  border-radius:8px;
+  box-shadow:0 12px 26px rgba(0,0,0,.20);
+}
+
 body.preset-amazonMusic .card:hover,
-body.preset-amazonMusic .browse-card:hover{background:linear-gradient(145deg,#13263d,#0e1c2d);transform:translateY(-3px);box-shadow:0 16px 34px rgba(0,0,0,.36),0 0 0 1px rgba(25,167,255,.10)}
-body.preset-amazonMusic .card-art{border-radius:10px;box-shadow:0 10px 22px rgba(0,0,0,.35),inset 0 0 0 1px rgba(25,167,255,.08)}
-body.preset-amazonMusic .card-play{background:var(--amazon-blue);color:#04111c}
-body.preset-amazonMusic .stage-panel{background:radial-gradient(circle at 78% 35%,rgba(25,167,255,.16),transparent 38%),linear-gradient(145deg,#14283f,#0b1726 72%);border-color:rgba(25,167,255,.12);border-radius:15px;box-shadow:0 20px 46px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.035)}
-body.preset-amazonMusic .stage-visual{border-radius:10px;box-shadow:0 12px 28px rgba(0,0,0,.38),inset 0 0 0 1px rgba(139,220,255,.10)}
-body.preset-amazonMusic .stage-disc-label,
-body.preset-amazonMusic .np-art .disc-label{background:radial-gradient(circle at 35% 30%,#8bdcff,#19a7ff 60%,#07527f 100%)}
-body.preset-amazonMusic .album-detail-hero{background:linear-gradient(145deg,#13263c,#0b1725);border:1px solid rgba(25,167,255,.09)}
-body.preset-amazonMusic .album-detail-play{background:var(--amazon-blue);color:#04111c;border-radius:10px}
-body.preset-amazonMusic .album-detail-shuffle,
-body.preset-amazonMusic .album-detail-more{background:#12243a;border-color:rgba(25,167,255,.10)}
-body.preset-amazonMusic .play-btn:hover{background:var(--amazon-blue);color:#04111c;box-shadow:0 0 22px rgba(25,167,255,.25)}
-body.preset-amazonMusic input[type=range]{background:linear-gradient(to right,var(--amazon-blue) var(--range-progress,0%),rgba(139,220,255,.17) var(--range-progress,0%))}
+body.preset-amazonMusic .browse-card:hover{
+  background:linear-gradient(180deg,#15222a,#0e171d);
+  border-color:#2a454f;
+  transform:translateY(-1px);
+  box-shadow:0 15px 28px rgba(0,0,0,.28);
+}
+
+body.preset-amazonMusic .card-art{
+  border-radius:6px;
+  box-shadow:0 8px 18px rgba(0,0,0,.32);
+}
+
+body.preset-amazonMusic .card-play,
+body.preset-amazonMusic .album-detail-play{
+  background:var(--amazon-blue);
+  color:#061116;
+  border-radius:5px;
+  box-shadow:none;
+}
+
+body.preset-amazonMusic .card-play:hover,
+body.preset-amazonMusic .album-detail-play:hover{
+  background:#59e1ff;
+}
+
+body.preset-amazonMusic .stage-panel{
+  background:
+    radial-gradient(circle at 80% 28%,rgba(37,215,255,.13),transparent 28%),
+    linear-gradient(145deg,#132029,#091117 75%);
+  border:1px solid #1d313b;
+  border-radius:8px;
+  box-shadow:0 18px 42px rgba(0,0,0,.30);
+}
+
+body.preset-amazonMusic .stage-visual{
+  border-radius:6px;
+  box-shadow:0 10px 24px rgba(0,0,0,.35);
+}
+
+body.preset-amazonMusic .album-detail-hero{
+  background:linear-gradient(145deg,#15242d,#0b141a);
+  border:1px solid #22343c;
+  border-radius:8px;
+}
+
+body.preset-amazonMusic .play-btn:hover{
+  background:var(--amazon-blue);
+  color:#061116;
+  box-shadow:none;
+}
+
+body.preset-amazonMusic .player-bar{
+  background:#050b10;
+  border-top:1px solid #17252d;
+}
+
+body.preset-amazonMusic .player-bar::before{
+  background:linear-gradient(90deg,transparent,var(--amazon-blue) 50%,transparent);
+  height:2px;
+}
+
+body.preset-amazonMusic input[type=range]{
+  background:linear-gradient(to right,var(--amazon-blue) var(--range-progress,0%),#33434a var(--range-progress,0%));
+}
 body.preset-amazonMusic input[type=range]::-webkit-slider-thumb{background:var(--amazon-blue)}
 body.preset-amazonMusic input[type=range]::-moz-range-thumb{background:var(--amazon-blue)}
+
 body.preset-amazonMusic .queue-panel,
 body.preset-amazonMusic .drawer,
 body.preset-amazonMusic .modal-box,
-body.preset-amazonMusic .stats-modal{background:#0d1b2b;border-color:rgba(25,167,255,.10)}
+body.preset-amazonMusic .stats-modal{
+  background:#0a141a;
+  border-color:#1b3039;
+}
 
-/* Generated-playlist SVG icon. */
-#generateSmartPlaylistBtn svg{width:12px;height:12px;display:block;flex-shrink:0}
+/* =========================================================
+   ICON SIZE FOR THE REPLACED SMART-PLAYLIST BUTTON
+   ========================================================= */
+#generateSmartPlaylistBtn svg{
+  width:12px;
+  height:12px;
+  display:block;
+  flex-shrink:0;
+}
+
+/* Keep the generated-playlist icon clean in both presets. */
+body.preset-spotify #generateSmartPlaylistBtn,
+body.preset-amazonMusic #generateSmartPlaylistBtn{
+  line-height:0;
+}
