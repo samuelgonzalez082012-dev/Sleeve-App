@@ -1746,18 +1746,20 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   topPageNavigation: true,
   showStage: true,
 },
-    amazonMusic: {
-      accent: 'cyan',
-      theme: 'midnight',
-      font: 'sans',
-      cardStyle: 'normal',
-      radius: 12,
-      cardShadow: true,
-      boldTitles: false,
-      rowDensity: 'comfortable',
-      activeGlow: false,
-    },
-  };
+   amazonMusic: {
+  accent: 'cyan',
+  theme: 'midnight',
+  font: 'sans',
+  cardStyle: 'normal',
+  radius: 12,
+  cardShadow: true,
+  boldTitles: false,
+  rowDensity: 'comfortable',
+  activeGlow: false,
+topPageNavigation: true,
+},
+};
+
 
   function hexToHsl(hex){
     hex = hex.replace('#','');
@@ -4055,6 +4057,156 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     if(m<1)return 'just now'; if(m<60)return `${m}m ago`; if(h<24)return `${h}h ago`; if(day<30)return `${day}d ago`; return new Date(ts).toLocaleDateString();
   }
 
+ // ---------- Amazon Music preset home ----------
+  function renderAmazonMusicHome(query){
+    const oldWrap = document.getElementById('amazonHomeWrap');
+    if (oldWrap) oldWrap.remove();
+
+    const active = settings.appPreset === 'amazonMusic'
+      && currentView.type === 'home'
+      && !query;
+
+    document.body.classList.toggle('amazon-home-active', active);
+    if (!active) return;
+
+    const mainContent = cardGrid?.parentElement;
+    if (!mainContent) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'amazonHomeWrap';
+    wrap.className = 'amazon-home-wrap';
+
+    const addSection = (title, label, className, buildContent) => {
+      const section = document.createElement('section');
+      section.className = `amazon-home-section ${className || ''}`;
+
+      const heading = document.createElement('div');
+      heading.className = 'amazon-home-heading';
+      heading.innerHTML = `<h2>${escapeHtml(title)}</h2><span>${escapeHtml(label)}</span>`;
+      section.appendChild(heading);
+
+      buildContent(section);
+      wrap.appendChild(section);
+    };
+
+    // 1. Artists — full-width row across the main page.
+    const artists = getArtists().slice().sort((a, b) => a.name.localeCompare(b.name));
+    addSection('Artists', `${artists.length} artists`, 'amazon-artists-section', (section) => {
+      const row = document.createElement('div');
+      row.className = 'amazon-artist-row';
+
+      artists.forEach(({ name, tracks }) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-artist-card';
+
+        const entry = artistThumbs.get(name);
+        const art = entry
+          ? `<img src="${entry.url}" loading="lazy" decoding="async" alt="">`
+          : `<div class="amazon-artist-placeholder">${PERSON_ICON}</div>`;
+
+        card.innerHTML = `${art}<span class="name">${escapeHtml(name)}</span><span class="meta">${tracks.length} track${tracks.length === 1 ? '' : 's'}</span>`;
+
+        card.addEventListener('click', () => {
+          currentView = { type: 'artistAlbums', artist: name };
+          scheduleRender(searchInput.value);
+        });
+
+        row.appendChild(card);
+      });
+
+      if (!artists.length){
+        row.innerHTML = '<div class="empty-shelf">No artists yet.</div>';
+      }
+
+      section.appendChild(row);
+    });
+
+    // 2. Playlists — full-width row under Artists.
+    const musicPlaylists = playlists
+      .filter(pl => (pl.type || 'music') === 'music')
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    addSection('Playlists', `${musicPlaylists.length} playlists`, 'amazon-playlists-section', (section) => {
+      const row = document.createElement('div');
+      row.className = 'amazon-playlist-row';
+
+      musicPlaylists.forEach((pl) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-playlist-card';
+
+        const art = pl.thumb
+          ? `<img src="${pl.thumb}" loading="lazy" decoding="async" alt="">`
+          : `<div class="amazon-playlist-art" style="display:flex;align-items:center;justify-content:center;background:#162231;color:#6280a0;font-size:30px;">♫</div>`;
+
+        card.innerHTML = `<div class="amazon-playlist-art">${art}</div><span class="name">${escapeHtml(pl.name)}</span><span class="meta">${pl.trackIds.length} track${pl.trackIds.length === 1 ? '' : 's'}</span>`;
+
+        card.addEventListener('click', () => {
+          currentView = { type: 'playlist', id: pl.id };
+          queueIds = pl.trackIds.slice();
+          activeQueueIds = queueIds.slice();
+          if (shuffleEnabled) queueIds = shuffleArray(queueIds);
+          scheduleRender(searchInput.value);
+        });
+
+        row.appendChild(card);
+      });
+
+      if (!musicPlaylists.length){
+        row.innerHTML = '<div class="empty-shelf">No music playlists yet.</div>';
+      }
+
+      section.appendChild(row);
+    });
+
+    // 3. Your Library — full-width song list beneath playlists.
+    const songs = playlist
+      .filter(track => track.kind !== 'video')
+      .slice()
+      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    const songIds = songs.map(track => track.id);
+
+    addSection('Your Library', `${songs.length} songs`, 'amazon-library-section', (section) => {
+      const list = document.createElement('div');
+      list.className = 'amazon-library';
+
+      songs.forEach((track) => {
+        const row = document.createElement('div');
+        row.className = 'amazon-library-row';
+
+        const artUrl = track.thumbUrl || '';
+        const art = artUrl
+          ? `<img src="${artUrl}" loading="lazy" decoding="async" alt="">`
+          : iconFor(track.kind);
+
+        row.innerHTML = `
+          <div class="amazon-library-art">${art}</div>
+          <div class="amazon-library-title">${escapeHtml(track.title)}</div>
+          <div class="amazon-library-sub">${escapeHtml(track.artist || 'Unknown Artist')} · ${escapeHtml(track.album || 'Unknown Album')}</div>
+          <div class="amazon-library-kind">${escapeHtml(track.kind === 'flac' ? 'FLAC' : 'Audio')}</div>
+        `;
+
+        row.addEventListener('click', () => {
+          const index = playlist.indexOf(track);
+          if (index !== -1) playTrackAt(index, true, songIds);
+        });
+
+        list.appendChild(row);
+      });
+
+      if (!songs.length){
+        list.innerHTML = '<div class="empty-shelf">Nothing added to your library yet.</div>';
+      }
+
+      section.appendChild(list);
+    });
+
+    mainContent.insertBefore(wrap, cardGrid);
+  }
+
+
   // ---------- Performance: coalesce expensive UI renders ----------
   let renderFramePending = false;
   let pendingRenderQuery = null;
@@ -4135,7 +4287,129 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   // start/end indices depend on — recheck so they don't go stale.
   window.addEventListener('resize', () => queueVirtualScrollRender(), { passive:true });
 
+function renderAmazonMusicHome(){
+    const existing = document.getElementById('amazonMusicHomeWrap');
+    if (existing) existing.remove();
+
+    const wrap = document.createElement('div');
+    wrap.id = 'amazonMusicHomeWrap';
+    wrap.className = 'amazon-music-home';
+
+    const musicTracks = playlist.filter(t => t.kind !== 'video');
+    const artists = getArtists();
+    const musicPlaylists = playlists.filter(p => p.type === 'music');
+
+    // Artists
+    const artistsSection = document.createElement('section');
+    artistsSection.className = 'amazon-home-section';
+
+    const artistsTitle = document.createElement('h2');
+    artistsTitle.textContent = 'Artists';
+    artistsSection.appendChild(artistsTitle);
+
+    const artistsRow = document.createElement('div');
+    artistsRow.className = 'amazon-horizontal-row';
+
+    artists.forEach(artist => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-artist-card';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'amazon-artist-thumb';
+
+        const image = artistThumbs[artist.name];
+        if (image) {
+            thumb.style.backgroundImage = `url("${image}")`;
+        }
+
+        const name = document.createElement('span');
+        name.textContent = artist.name;
+
+        card.appendChild(thumb);
+        card.appendChild(name);
+
+        card.addEventListener('click', () => {
+            currentView = {
+                type: 'artistAlbums',
+                artist: artist.name
+            };
+            scheduleRender();
+        });
+
+        artistsRow.appendChild(card);
+    });
+
+    artistsSection.appendChild(artistsRow);
+    wrap.appendChild(artistsSection);
+
+    // Playlists
+    const playlistsSection = document.createElement('section');
+    playlistsSection.className = 'amazon-home-section';
+
+    const playlistsTitle = document.createElement('h2');
+    playlistsTitle.textContent = 'Playlists';
+    playlistsSection.appendChild(playlistsTitle);
+
+    const playlistsRow = document.createElement('div');
+    playlistsRow.className = 'amazon-horizontal-row';
+
+    musicPlaylists.forEach(pl => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-playlist-card';
+
+        const title = document.createElement('span');
+        title.textContent = pl.name;
+
+        card.appendChild(title);
+
+        card.addEventListener('click', () => {
+            currentView = {
+                type: 'playlist',
+                playlistId: pl.id
+            };
+            scheduleRender();
+        });
+
+        playlistsRow.appendChild(card);
+    });
+
+    playlistsSection.appendChild(playlistsRow);
+    wrap.appendChild(playlistsSection);
+
+    // Your Library / Songs
+    const librarySection = document.createElement('section');
+    librarySection.className = 'amazon-home-section amazon-library-section';
+
+    const libraryTitle = document.createElement('h2');
+    libraryTitle.textContent = 'Your Library';
+    librarySection.appendChild(libraryTitle);
+
+    const songList = document.createElement('div');
+    songList.className = 'amazon-song-list';
+
+    musicTracks.forEach((track, index) => {
+        const row = buildFlatTrackCard(track, index, musicTracks);
+        songList.appendChild(row);
+    });
+
+    if (!musicTracks.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-shelf';
+        empty.textContent = 'Nothing added yet.';
+        songList.appendChild(empty);
+    }
+
+    librarySection.appendChild(songList);
+    wrap.appendChild(librarySection);
+
+    cardGrid.style.display = 'none';
+    cardGrid.parentNode.insertBefore(wrap, cardGrid);
+}
+
   function renderAll(query, opts){
+    renderPlaylistList();
     const skipSidebar = !!(opts && opts.skipSidebar);
     query = (query || '').toLowerCase();
 

@@ -739,26 +739,34 @@ body.preset-spotify #clearThumbsBtn{
   opacity:.8;
 }
 
-/* ---------- Spotify: Sleeve's Now Playing becomes a left-side panel ---------- */
+/* ---------- Spotify: Sleeve's Now Playing becomes a right-side panel ---------- */
+
 body.preset-spotify #stagePanel{
   position:fixed;
   z-index:12;
-  left:calc(272px + 12px);
+
   top:78px;
+  right:0;
   bottom:calc(var(--player-h) + 12px);
+
   width:292px;
   max-width:292px;
+
   margin:0;
   padding:16px;
+
   overflow:auto;
+
   display:flex;
   flex-direction:column;
   align-items:stretch;
   flex-wrap:nowrap;
   gap:14px;
+
   background:#181818;
   border:1px solid #2b2b2b;
-  border-radius:10px;
+  border-right:0;
+  border-radius:10px 0 0 10px;
   box-shadow:none;
 }
 
@@ -888,11 +896,9 @@ body.preset-amazonMusic #trackListSidebar{
 }
 
 /* ---------- Preserve the existing Sleeve layout ---------- */
-body.preset-sleeve .main-topbar,
-body.preset-sleeve .sidebar,
-body.preset-sleeve #stagePanel{
-  /* Intentionally untouched. */
-}
+/* No overrides needed for the Sleeve preset. */
+
+
 
 @media(max-width:1100px){
   body.preset-spotify #stagePanel{
@@ -916,4 +922,371 @@ body.preset-sleeve #stagePanel{
     grid-column:1;
   }
   body.preset-spotify .top-page-nav{justify-content:center;}
+}
+
+/* =========================================================
+   V4 LAYOUT CORRECTIONS
+   ========================================================= */
+
+/* Spotify: Home / Browse / Artists stay in the top bar,
+   with the search field centered and substantially wider. */
+body.preset-spotify .main-topbar{
+  display:grid;
+  grid-template-columns:minmax(210px,1fr) minmax(360px,680px) minmax(210px,1fr);
+  align-items:center;
+  gap:20px;
+  justify-content:initial;
+}
+body.preset-spotify .top-page-nav{
+  grid-column:1;
+  justify-self:start;
+  min-width:0;
+  display:flex !important;
+  align-items:center;
+  gap:6px;
+}
+body.preset-spotify .top-page-nav .nav-item{
+  min-height:36px;
+  padding:0 12px;
+  border-radius:999px;
+  background:transparent;
+}
+body.preset-spotify .top-page-nav .nav-item:hover{
+  background:#242424;
+}
+body.preset-spotify .top-page-nav .nav-item.active{
+  background:#fff;
+  color:#111;
+}
+body.preset-spotify .search-wrap{
+  grid-column:2;
+  width:100%;
+  max-width:none;
+  justify-self:center;
+}
+body.preset-spotify #searchInput{
+  width:100%;
+  min-height:46px;
+  padding-left:46px;
+  font-size:14px;
+}
+
+/* Spotify: the existing Sleeve stage becomes the right-hand
+   Now Playing panel. Nothing is duplicated; the same stage element
+   is simply moved visually into the right column. */
+body.preset-spotify .main-content{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 330px;
+  grid-auto-flow:row;
+  gap:0 22px;
+  align-items:start;
+  padding:18px 28px 118px;
+}
+body.preset-spotify .main-content > .stage-panel{
+  grid-column:2;
+  grid-row:1 / span 20;
+  position:sticky;
+  top:18px;
+  width:100%;
+  min-width:0;
+  min-height:620px;
+  flex-direction:column;
+  align-items:stretch;
+  gap:14px;
+  padding:16px;
+  border-radius:10px;
+  background:#181818;
+  border:1px solid #2a2a2a;
+  box-shadow:none;
+  overflow:auto;
+}
+body.preset-spotify .main-content > .stage-panel .stage-visual{
+  width:100%;
+  height:auto;
+  aspect-ratio:1 / 1;
+  border-radius:7px;
+  flex-shrink:0;
+}
+body.preset-spotify .main-content > .stage-panel .stage-text{
+  width:100%;
+}
+body.preset-spotify .main-content > :not(.stage-panel){
+  grid-column:1;
+}
+body.preset-spotify .main-content > .stage-panel + *{
+  grid-column:1;
+}
+body.preset-spotify .main-content .card-grid,
+body.preset-spotify .main-content .smart-home-wrap,
+body.preset-spotify .main-content #albumDetail,
+body.preset-spotify .main-content #paginationControls{
+  min-width:0;
+}
+
+/* The old “Clear all thumbnails / Clear library” controls stay
+   available, but read as maintenance tools instead of navigation. */
+body.preset-spotify .sidebar-footer,
+body.preset-amazonMusic .sidebar-footer{
+  margin-top:auto;
+  padding-top:10px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+body.preset-spotify .sidebar-footer .save-note,
+body.preset-amazonMusic .sidebar-footer .save-note{
+  opacity:.55;
+}
+
+/* Amazon Music: full-width content experience. The old left sidebar
+   becomes visually secondary while the home page is rendered as
+   Artists -> Playlists -> Your Library across the entire main area. */
+body.preset-amazonMusic .app{
+  background:#05070b;
+}
+
+body.preset-amazonMusic .main{
+  width:100%;
+  min-width:0;
+  background:
+    radial-gradient(circle at 50% -20%,rgba(25,167,255,.18),transparent 34%),
+    linear-gradient(180deg,#08101b 0,#05070b 520px);
+}
+body.preset-amazonMusic .main-topbar{
+  display:grid;
+  grid-template-columns:minmax(180px,1fr) minmax(380px,760px) minmax(180px,1fr);
+  align-items:center;
+  gap:22px;
+  padding:14px 28px;
+  background:rgba(4,7,12,.88);
+  border-bottom:1px solid rgba(25,167,255,.12);
+  backdrop-filter:blur(16px);
+}
+body.preset-amazonMusic .top-page-nav{
+  grid-column:1;
+  justify-self:start;
+  display:flex !important;
+  gap:5px;
+  align-items:center;
+}
+body.preset-amazonMusic .top-page-nav .nav-item{
+  min-height:36px;
+  padding:0 12px;
+  border-radius:7px;
+}
+body.preset-amazonMusic .top-page-nav .nav-item.active{
+  color:#fff;
+  background:rgba(25,167,255,.15);
+  box-shadow:inset 0 -2px 0 #19a7ff;
+}
+body.preset-amazonMusic .search-wrap{
+  grid-column:2;
+  width:100%;
+  max-width:none;
+  justify-self:center;
+}
+body.preset-amazonMusic #searchInput{
+  width:100%;
+  min-height:46px;
+  padding-left:46px;
+  border-radius:8px;
+  background:#111923;
+  border:1px solid #263548;
+  font-size:14px;
+}
+body.preset-amazonMusic #searchInput:focus{
+  border-color:#19a7ff;
+  box-shadow:0 0 0 2px rgba(25,167,255,.14);
+}
+body.preset-amazonMusic .main-content{
+  display:block;
+  padding:28px 34px 124px;
+  width:100%;
+  max-width:none;
+}
+body.preset-amazonMusic .main-content > .stage-panel{
+  display:none !important;
+}
+body.preset-amazonMusic.amazon-home-active #cardGrid{
+  display:none !important;
+}
+body.preset-amazonMusic.amazon-home-active .main-content > .stage-panel{
+  display:none !important;
+}
+body.preset-amazonMusic #smartHomeWrap{
+  width:100%;
+  max-width:none;
+}
+body.preset-amazonMusic .amazon-home-wrap{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  gap:42px;
+}
+body.preset-amazonMusic .amazon-home-section{
+  width:100%;
+}
+body.preset-amazonMusic .amazon-home-heading{
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:20px;
+  margin-bottom:14px;
+}
+body.preset-amazonMusic .amazon-home-heading h2{
+  margin:0;
+  font-family:var(--sans);
+  font-size:22px;
+  font-weight:750;
+  letter-spacing:-.02em;
+  color:#fff;
+}
+body.preset-amazonMusic .amazon-home-heading span{
+  font-size:11px;
+  color:#7890a8;
+  text-transform:uppercase;
+  letter-spacing:.12em;
+}
+body.preset-amazonMusic .amazon-artist-row,
+body.preset-amazonMusic .amazon-playlist-row{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:16px;
+  width:100%;
+}
+body.preset-amazonMusic .amazon-artist-card,
+body.preset-amazonMusic .amazon-playlist-card{
+  min-width:0;
+  border:1px solid #1c2a3b;
+  background:linear-gradient(180deg,#0f1824,#0a111b);
+  border-radius:10px;
+  padding:10px;
+  color:#fff;
+  cursor:pointer;
+  transition:transform .14s var(--ease),border-color .14s var(--ease),background .14s var(--ease);
+}
+body.preset-amazonMusic .amazon-artist-card:hover,
+body.preset-amazonMusic .amazon-playlist-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(25,167,255,.42);
+  background:linear-gradient(180deg,#152233,#0d1622);
+}
+body.preset-amazonMusic .amazon-artist-card img,
+body.preset-amazonMusic .amazon-artist-placeholder,
+body.preset-amazonMusic .amazon-playlist-art,
+body.preset-amazonMusic .amazon-playlist-art img{
+  width:100%;
+  aspect-ratio:1 / 1;
+  border-radius:8px;
+  object-fit:cover;
+}
+body.preset-amazonMusic .amazon-artist-placeholder{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:#172231;
+  color:#6f8aa5;
+}
+body.preset-amazonMusic .amazon-artist-card .name,
+body.preset-amazonMusic .amazon-playlist-card .name{
+  display:block;
+  margin-top:9px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  font-size:13px;
+  font-weight:700;
+}
+body.preset-amazonMusic .amazon-artist-card .meta,
+body.preset-amazonMusic .amazon-playlist-card .meta{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+  color:#7890a8;
+}
+body.preset-amazonMusic .amazon-library{
+  width:100%;
+  border-top:1px solid #1a2735;
+}
+body.preset-amazonMusic .amazon-library-row{
+  display:grid;
+  grid-template-columns:56px minmax(0,1fr) minmax(150px,24%) 80px;
+  align-items:center;
+  gap:16px;
+  width:100%;
+  min-height:62px;
+  padding:8px 10px;
+  border-bottom:1px solid #151f2b;
+  color:#fff;
+  cursor:pointer;
+}
+body.preset-amazonMusic .amazon-library-row:hover{
+  background:rgba(25,167,255,.06);
+}
+body.preset-amazonMusic .amazon-library-art{
+  width:48px;
+  height:48px;
+  border-radius:6px;
+  overflow:hidden;
+  background:#131d2a;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#5d7791;
+}
+body.preset-amazonMusic .amazon-library-art img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+body.preset-amazonMusic .amazon-library-title{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:13px;
+  font-weight:650;
+}
+body.preset-amazonMusic .amazon-library-sub{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:12px;
+  color:#7890a8;
+}
+body.preset-amazonMusic .amazon-library-kind{
+  text-align:right;
+  color:#6d849b;
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+body.preset-amazonMusic .player-bar{
+  background:#07101a;
+  border-top:1px solid #1d3041;
+}
+
+@media(max-width:900px){
+  body.preset-spotify .main-topbar,
+  body.preset-amazonMusic .main-topbar{
+    grid-template-columns:1fr;
+  }
+  body.preset-spotify .top-page-nav,
+  body.preset-amazonMusic .top-page-nav,
+  body.preset-spotify .search-wrap,
+  body.preset-amazonMusic .search-wrap{
+    grid-column:1;
+  }
+  body.preset-spotify .main-content{
+    display:block;
+  }
+  body.preset-spotify .main-content > .stage-panel{
+    position:relative;
+    top:auto;
+    min-height:0;
+    margin-bottom:20px;
+  }
+  body.preset-amazonMusic .amazon-library-row{
+    grid-template-columns:48px minmax(0,1fr) 70px;
+  }
+  body.preset-amazonMusic .amazon-library-sub{display:none;}
 }
