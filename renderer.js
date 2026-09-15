@@ -1921,7 +1921,11 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     document.body.classList.toggle('active-glow', !!settings.activeGlow);
     document.body.classList.toggle('sidebar-blur', !!settings.sidebarBlur);
     document.body.classList.toggle('top-page-navigation', !!settings.topPageNavigation);
-
+    
+    document.body.classList.toggle('preset-sleeve', settings.appPreset === 'sleeve');
+    document.body.classList.toggle('preset-spotify', settings.appPreset === 'spotify');
+    document.body.classList.toggle('preset-amazonMusic', settings.appPreset === 'amazonMusic');
+    
     cardGrid.classList.toggle('view-list', settings.view === 'list');
     cardGrid.classList.toggle('view-shelf', settings.view === 'shelf');
     if (settings.view === 'grid' || settings.view === 'shelf'){
