@@ -38,7 +38,10 @@
 
       <div class="sidebar-section-label playlist-section-label">
         <span>Music playlists</span>
-        <button class="playlist-new-btn" id="newMusicPlaylistBtn" title="New music playlist">+</button>
+        <div class="playlist-section-actions">
+          <button class="playlist-new-btn" id="generateSmartPlaylistBtn" title="Generate a playlist">&#10024;</button>
+          <button class="playlist-new-btn" id="newMusicPlaylistBtn" title="New music playlist">+</button>
+        </div>
       </div>
       <div class="playlist-list" id="musicPlaylistList"></div>
       <div class="sidebar-section-label playlist-section-label">
@@ -330,6 +333,16 @@
     <div class="drawer-body">
 
       <div class="drawer-section-title settings-customize-heading">Customize</div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">App style</div>
+        <div class="segmented" id="appStyleSeg">
+          <button type="button" data-value="sleeve" class="active">Sleeve</button>
+          <button type="button" data-value="spotify">Spotify-inspired</button>
+          <button type="button" data-value="amazonMusic">Amazon Music-inspired</button>
+        </div>
+        <div class="drawer-hint">Presets are a starting point — every setting below still overrides them.</div>
+      </div>
 
       <div class="drawer-section">
         <div class="drawer-section-title">Library thumbnail size</div>

@@ -1,5 +1,4 @@
-
-  .track-delete-btn{
+.track-delete-btn{
     opacity: 0;
     flex-shrink: 0;
     width: 44px;
@@ -215,6 +214,8 @@
     color: var(--text-dimmer); padding: 4px 10px 0;
     display:flex; align-items:center; justify-content:space-between;
   }
+
+  .playlist-section-actions{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
 
   .playlist-new-btn{
     background:none; border:1px solid var(--line); color:var(--text-dim);
@@ -786,6 +787,17 @@
     background: var(--accent-blue); border-color: var(--accent-blue); color:#fff;
   }
   .modal-btn-primary:hover{ background: var(--accent-blue-bright); border-color: var(--accent-blue-bright); }
+  .modal-box-wide{ width:380px; }
+  .modal-option-list{ display:flex; flex-direction:column; gap:8px; }
+  .modal-option-btn{
+    display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+    width:100%; text-align:left; padding:10px 12px; border-radius:9px;
+    background: var(--bg-card); border:1px solid var(--line); color: var(--text); cursor:pointer;
+    transition: background 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .modal-option-btn:hover{ background: var(--bg-elevated-2); border-color: var(--line-bright); }
+  .modal-option-title{ font-size:13.5px; font-weight:600; }
+  .modal-option-sub{ font-size:11.5px; color: var(--text-dim); }
   .card-title{ font-size: 13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:text; }
   .card-sub{ font-size: 12px; color: var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
   .card-error{ color: var(--error); font-size:11px; margin-top:4px; }
@@ -1167,6 +1179,8 @@
   .segmented button.active{ background: var(--bg-elevated-2); color:var(--text); }
   .segmented button:hover{ color:var(--text); }
 
+  .drawer-hint{ font-size:11px; color:var(--text-dimmer); margin-top:8px; line-height:1.4; }
+
   .drawer-toggle-row{ display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--text-dim); padding:2px 0; }
   .switch{ position:relative; width:36px; height:20px; display:inline-block; flex-shrink:0; }
   .switch input{ opacity:0; width:0; height:0; position:absolute; }
@@ -1384,4 +1398,3 @@
   }
    
   @media(max-width:620px){.eq-grid,.stats-list{grid-template-columns:1fr;}}
-

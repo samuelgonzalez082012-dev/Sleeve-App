@@ -424,6 +424,20 @@ const stemSourceNodes = {
   other: null
 };
 
+// Native <audio>.volume is spec-capped at 1.0, so boosting a stem above
+// 100% has to happen via a Web Audio GainNode (gain.value has no upper
+// cap) sitting between each stem's source node and the rest of the graph.
+const stemGainNodes = {
+  drums: null,
+  vocals: null,
+  bass: null,
+  guitar: null,
+  piano: null,
+  other: null
+};
+
+const STEM_VOLUME_MAX = 2.5;
+
 const stemVolumes = {
   drums: 1,
   vocals: 1,
@@ -458,7 +472,11 @@ function ensureStemAudioGraph() {
         stemSourceNodes[name] =
           ctx.createMediaElementSource(stemAudio[name]);
 
-        stemSourceNodes[name].connect(first);
+        stemGainNodes[name] = ctx.createGain();
+        stemGainNodes[name].gain.value = stemVolumes[name];
+
+        stemSourceNodes[name].connect(stemGainNodes[name]);
+        stemGainNodes[name].connect(first);
       } catch (err) {
         console.warn(
           `[Sleeve] Could not connect ${name} stem:`,
@@ -504,10 +522,16 @@ function hideStemMixerUI() {
 }
 
 function setStemVolume(name, value) {
-  const v = Math.max(0, Math.min(1, Number(value) || 0));
+  const v = Math.max(0, Math.min(STEM_VOLUME_MAX, Number(value) || 0));
 
   stemVolumes[name] = v;
-  stemAudio[name].volume = v;
+
+  // audio.volume stays at 1 always — actual level (including boosts
+  // above 100%) is applied on the stem's GainNode instead, since
+  // audio.volume can't go above 1.
+  if (stemGainNodes[name]) {
+    stemGainNodes[name].gain.value = v;
+  }
 
   const slider = document.querySelector(
     `[data-stem-volume="${name}"]`
@@ -521,6 +545,7 @@ function setStemVolume(name, value) {
 
   if (valueLabel) {
     valueLabel.textContent = `${Math.round(v * 100)}%`;
+    valueLabel.style.color = v > 1 ? '#f5a524' : '';
   }
 }
 
@@ -610,7 +635,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="drums"
@@ -623,7 +648,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="vocals"
@@ -636,7 +661,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="bass"
@@ -649,7 +674,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="guitar"
@@ -662,7 +687,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="piano"
@@ -675,7 +700,7 @@ function createStemMixerUI() {
       <input
         type="range"
         min="0"
-        max="1"
+        max="2.5"
         step="0.01"
         value="1"
         data-stem-volume="other"
@@ -763,9 +788,14 @@ async function loadStemTrack(track) {
 
     audio.preload = 'auto';
     audio.src = stemPathToUrl(stems[name]);
-    audio.volume = stemVolumes[name];
+    // Real level is applied via the stem's GainNode (see
+    // ensureStemAudioGraph/setStemVolume) so it can go above 100%.
+    audio.volume = 1;
     audio.playbackRate = currentSpeed;
     audio.load();
+    if (stemGainNodes[name]) {
+      stemGainNodes[name].gain.value = stemVolumes[name];
+    }
   });
 
   setAllStemTimes(0);
@@ -1194,6 +1224,13 @@ function closeConvertOverlay() {
 }
 
 async function runConvertAndSplit(track) {
+  // Stop whatever's currently playing (media/wasm/stems) first. Without
+  // this, converting+splitting a FLAC that's already playing leaves the
+  // original wasm playback running underneath the new stems, and since
+  // currentEngine switches to 'stems' right after, the play/pause button
+  // can no longer reach that orphaned original playback at all.
+  stopEverything();
+
   document.getElementById('convertConfirm').hidden = true
   document.getElementById('convertProgress').hidden = false
   document.getElementById('convertProgressLabel').textContent = 'Converting…'
@@ -1647,6 +1684,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     playlistThumbSize: 24,
     libraryThumbSize: 34,
     topPageNavigation: false,
+    appPreset: 'sleeve',
     smartCollapsed: {},
     smartRecentlyAdded: true,
     smartRecentlyPlayed: true,
@@ -1675,6 +1713,48 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     sunset:   { bg: '#211416', bgSidebar: '#140b0d', bgElevated: '#3b2020', bgElevated2: '#563027', bgCard: '#2d191b', bgCardHover: '#472426' },
     paper:    { bg: '#d8d8d1', bgSidebar: '#c4c8c5', bgElevated: '#e7e6df', bgElevated2: '#f1f0e9', bgCard: '#eeede5', bgCardHover: '#ffffff', text: '#20252a', textDim: '#566169', textDimmer: '#758087' },
     midnight: { bg: '#07090e', bgSidebar: '#04050a', bgElevated: '#101521', bgElevated2: '#1a2332', bgCard: '#0c111b', bgCardHover: '#151e2c' },
+  };
+
+  // App style presets. These are subtle nods to other players' look and
+  // feel — built entirely out of settings Sleeve already supports, not a
+  // pixel clone — so someone unfamiliar with Sleeve's native look has a
+  // more comfortable starting point. Every field below can still be
+  // overridden individually afterward; picking a preset just changes the
+  // defaults it fills in.
+  const APP_PRESETS = {
+    sleeve: {
+      accent: 'cyan',
+      theme: 'navy',
+      font: 'serif',
+      cardStyle: 'normal',
+      radius: 10,
+      cardShadow: true,
+      boldTitles: false,
+      rowDensity: 'comfortable',
+      activeGlow: false,
+    },
+    spotify: {
+      accent: 'green',
+      theme: 'charcoal',
+      font: 'sans',
+      cardStyle: 'flat',
+      radius: 8,
+      cardShadow: false,
+      boldTitles: true,
+      rowDensity: 'compact',
+      activeGlow: true,
+    },
+    amazonMusic: {
+      accent: 'cyan',
+      theme: 'midnight',
+      font: 'sans',
+      cardStyle: 'normal',
+      radius: 12,
+      cardShadow: true,
+      boldTitles: false,
+      rowDensity: 'comfortable',
+      activeGlow: false,
+    },
   };
 
   function hexToHsl(hex){
@@ -1906,6 +1986,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     setSegmented('viewSeg', settings.view);
     setSegmented('thumbnailFitSeg', settings.thumbnailFit || 'cover');
     setSegmented('rowDensitySeg', settings.rowDensity || 'comfortable');
+    setSegmented('appStyleSeg', settings.appPreset || 'sleeve');
   }
 
   function setSegmented(id, value){
@@ -1918,6 +1999,13 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     Object.assign(settings, patch);
     saveSettings();
     applySettings();
+  }
+
+  function applyPreset(key){
+    const preset = APP_PRESETS[key];
+    if (!preset) return;
+    updateSetting(Object.assign({ appPreset: key }, preset));
+    syncDrawerControls();
   }
 
   // Drawer open/close
@@ -1958,6 +2046,11 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   });
   drawerClose.addEventListener('click', closeDrawer);
   drawerOverlay.addEventListener('click', closeDrawer);
+
+  // App style presets
+  document.querySelectorAll('#appStyleSeg button').forEach(btn => {
+    btn.addEventListener('click', () => applyPreset(btn.dataset.value));
+  });
 
   // Accent swatches
   document.querySelectorAll('#accentSwatches .swatch').forEach(el => {
@@ -3563,6 +3656,117 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     if (pl) scheduleRender(searchInput.value);
   });
 
+  // Smart/generated playlists: turns "most played", "least played", etc.
+  // into a real, ordinary playlist (pinnable, renameable, deletable, just
+  // like one you built by hand) instead of a rotating home-page shelf.
+  const SMART_PLAYLIST_CRITERIA = [
+    { key: 'mostPlayed', title: 'Most Played', sub: 'Your heaviest rotation, in one place' },
+    { key: 'leastPlayed', title: 'Least Played', sub: "Songs you own but rarely reach for" },
+    { key: 'recentlyAdded', title: 'Recently Added', sub: 'Newest additions to your library' },
+    { key: 'random', title: 'Random Mix', sub: 'A shuffled grab-bag for a change of pace' },
+  ];
+  const SMART_PLAYLIST_SIZE = 25;
+
+  function showGeneratePlaylistChooser(){
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal-box modal-box-wide">
+          <h3>What should this playlist be based on?</h3>
+          <div class="modal-option-list">
+            ${SMART_PLAYLIST_CRITERIA.map(c => `
+              <button class="modal-option-btn" type="button" data-key="${c.key}">
+                <span class="modal-option-title">${escapeHtml(c.title)}</span>
+                <span class="modal-option-sub">${escapeHtml(c.sub)}</span>
+              </button>
+            `).join('')}
+          </div>
+          <div class="modal-actions">
+            <button class="modal-btn" type="button" data-action="cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      let settled = false;
+      function finish(value){
+        if (settled) return;
+        settled = true;
+        overlay.remove();
+        document.removeEventListener('keydown', onKeydown, true);
+        resolve(value);
+      }
+      function onKeydown(e){
+        e.stopPropagation();
+        if (e.key === 'Escape'){ e.preventDefault(); finish(null); }
+      }
+      overlay.addEventListener('mousedown', (e) => {
+        if (e.target === overlay) finish(null);
+      });
+      overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => finish(null));
+      overlay.querySelectorAll('.modal-option-btn').forEach(btn => {
+        btn.addEventListener('click', () => finish(btn.dataset.key));
+      });
+      document.addEventListener('keydown', onKeydown, true);
+    });
+  }
+
+  function pickTracksForCriterion(criterion){
+    const musicTracks = playlist.filter(t => t.kind !== 'video');
+    switch (criterion){
+      case 'mostPlayed':
+        return musicTracks
+          .filter(t => (t.playCount || 0) > 0)
+          .sort((a, b) => (b.playCount || 0) - (a.playCount || 0))
+          .slice(0, SMART_PLAYLIST_SIZE);
+      case 'leastPlayed':
+        return musicTracks
+          .slice()
+          .sort((a, b) => (a.playCount || 0) - (b.playCount || 0))
+          .slice(0, SMART_PLAYLIST_SIZE);
+      case 'recentlyAdded':
+        return sortedByAdded(musicTracks).slice(0, SMART_PLAYLIST_SIZE);
+      case 'random':
+        return shuffleArray(musicTracks.slice()).slice(0, SMART_PLAYLIST_SIZE);
+      default:
+        return [];
+    }
+  }
+
+  function uniquePlaylistName(baseName){
+    if (!playlists.some(p => p.name === baseName)) return baseName;
+    let n = 2;
+    while (playlists.some(p => p.name === `${baseName} ${n}`)) n++;
+    return `${baseName} ${n}`;
+  }
+
+  async function generateSmartPlaylist(){
+    const criterion = await showGeneratePlaylistChooser();
+    if (!criterion) return null;
+
+    const meta = SMART_PLAYLIST_CRITERIA.find(c => c.key === criterion);
+    const picked = pickTracksForCriterion(criterion);
+
+    if (!picked.length){
+      alert("There isn't enough listening history yet to build that playlist.");
+      return null;
+    }
+
+    const pl = {
+      id: nextPlaylistId++,
+      name: uniquePlaylistName(`${meta.title} Mix`),
+      type: 'music',
+      trackIds: picked.map(t => t.id),
+    };
+    playlists.push(pl);
+    dbPutPlaylist(pl);
+    scheduleRender(searchInput.value);
+    return pl;
+  }
+
+  document.getElementById('generateSmartPlaylistBtn').addEventListener('click', generateSmartPlaylist);
+
   async function promptNewPlaylist(type, prefillTrackId){
     if (typeof type !== 'string'){
       prefillTrackId = type;
@@ -4543,6 +4747,35 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     scheduleRender(searchInput.value);
 
     if (track.kind === 'flac'){
+      // If this FLAC has already been converted+split before, load the
+      // saved stems instead of falling back to raw wasm playback. This
+      // check previously lived further down inside the "else" branch of
+      // this very if-statement, so it could never actually run for a
+      // FLAC track and the stem mixer never came back after reopening
+      // the app on a FLAC file that had already been split.
+      if (!track.stems && track.sourcePath) {
+        try {
+          track.stems = await window.electronAPI.findExistingStemsForSource(track.sourcePath) || null;
+          if (track.stems) dbPut(track);
+        } catch (e) {}
+      }
+
+      if (track.stems) {
+        const stemsOk = await window.electronAPI.verifyStems(track.stems);
+        if (!stemsOk) {
+          track.stems = null;
+          dbPut(track);
+        }
+      }
+
+      if (track.stems) {
+        const loaded = await loadStemTrack(track);
+        if (loaded) {
+          if (autoplay) await playStems();
+          return;
+        }
+      }
+
       currentEngine = 'wasm';
       stagePanel.classList.remove('has-video');
       stageVisual.classList.remove('has-video');
@@ -4579,13 +4812,10 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
 
   if (!track.stems && track.sourcePath) {
   try {
-    if (track.kind === 'flac') {
-      track.stems =
-        await window.electronAPI.findExistingStemsForSource(track.sourcePath) || null;
-    } else {
-      track.stems =
-        await window.electronAPI.findExistingStems(track.sourcePath) || null;
-    }
+    // track.kind is never 'flac' here — FLAC tracks are handled entirely
+    // in the `if (track.kind === 'flac')` branch above.
+    track.stems =
+      await window.electronAPI.findExistingStems(track.sourcePath) || null;
 
     if (track.stems) dbPut(track);
   } catch (e) {}
