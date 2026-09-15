@@ -624,3 +624,296 @@ body.preset-spotify #generateSmartPlaylistBtn,
 body.preset-amazonMusic #generateSmartPlaylistBtn{
   line-height:0;
 }
+
+/* =========================================================
+   V3 STRUCTURAL LAYOUT — Spotify / Amazon hierarchy
+   Uses the existing DOM and IDs; no playback logic changes.
+   ========================================================= */
+
+/* ---------- Spotify: top navigation + wider centered search ---------- */
+body.preset-spotify .main-topbar{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(360px,620px) minmax(0,1fr);
+  align-items:center;
+  column-gap:14px;
+  padding:12px 20px;
+  min-height:66px;
+  background:#121212;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+
+body.preset-spotify .top-page-nav{
+  grid-column:2;
+  grid-row:1;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:4px;
+  white-space:nowrap;
+}
+
+body.preset-spotify .top-page-nav .nav-item{
+  min-height:40px;
+  padding:0 10px;
+  border-radius:999px;
+  background:transparent;
+  color:#b3b3b3;
+  font-size:13px;
+  font-weight:700;
+}
+
+body.preset-spotify .top-page-nav .nav-item svg{
+  width:18px;
+  height:18px;
+}
+
+body.preset-spotify .top-page-nav .nav-item:hover{
+  background:#242424;
+  color:#fff;
+}
+
+body.preset-spotify .top-page-nav .nav-item.active{
+  background:#fff;
+  color:#111;
+}
+
+body.preset-spotify .search-wrap{
+  grid-column:3;
+  grid-row:1;
+  width:min(620px,100%);
+  max-width:none;
+  justify-self:center;
+}
+
+body.preset-spotify .search-wrap svg{
+  left:15px;
+  width:18px;
+  height:18px;
+}
+
+body.preset-spotify #searchInput{
+  width:100%;
+  min-height:46px;
+  padding-left:45px;
+  padding-right:18px;
+  font-size:14px;
+}
+
+/* Settings remains available at the top of the left sidebar. */
+body.preset-spotify .sidebar > .nav{
+  position:relative;
+  margin-top:2px;
+  padding-bottom:10px;
+}
+body.preset-spotify .sidebar > .nav #navCustomize{
+  display:flex;
+  margin-top:0;
+}
+
+/* ---------- Spotify: library cleanup / hierarchy ---------- */
+body.preset-spotify .sidebar-footer{
+  order:20;
+  margin-top:8px;
+  padding:8px 6px 2px;
+  border-top:1px solid #282828;
+  background:transparent;
+  flex-shrink:0;
+}
+
+body.preset-spotify .sidebar-footer .save-note{
+  display:none;
+}
+
+body.preset-spotify .sidebar-footer .clear-link{
+  color:#686868;
+  font-size:10px;
+  padding:4px 6px;
+}
+
+body.preset-spotify .sidebar-footer .clear-link:hover{
+  color:#b3b3b3;
+  background:#1a1a1a;
+}
+
+body.preset-spotify #clearThumbsBtn{
+  opacity:.8;
+}
+
+/* ---------- Spotify: Sleeve's Now Playing becomes a left-side panel ---------- */
+body.preset-spotify #stagePanel{
+  position:fixed;
+  z-index:12;
+  left:calc(272px + 12px);
+  top:78px;
+  bottom:calc(var(--player-h) + 12px);
+  width:292px;
+  max-width:292px;
+  margin:0;
+  padding:16px;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  flex-wrap:nowrap;
+  gap:14px;
+  background:#181818;
+  border:1px solid #2b2b2b;
+  border-radius:10px;
+  box-shadow:none;
+}
+
+body.preset-spotify #stagePanel .stage-visual,
+body.preset-spotify #stagePanel.video-compact .stage-visual,
+body.preset-spotify #stagePanel.video-standard .stage-visual,
+body.preset-spotify #stagePanel.video-large .stage-visual,
+body.preset-spotify #stagePanel.video-wide .stage-visual{
+  width:100%;
+  height:auto;
+  aspect-ratio:1 / 1;
+  max-width:none;
+  flex-shrink:0;
+}
+
+body.preset-spotify #stagePanel .stage-text{
+  width:100%;
+  min-width:0;
+}
+
+body.preset-spotify #stagePanel .stage-title{
+  font-family:var(--sans);
+  font-size:22px;
+  font-weight:800;
+  letter-spacing:-.03em;
+}
+
+body.preset-spotify .main-content{
+  padding-left:326px;
+  padding-right:28px;
+}
+
+body.preset-spotify .stage-close-btn{
+  width:26px;
+  height:26px;
+  border-radius:50%;
+  background:#242424;
+  color:#b3b3b3;
+}
+
+/* Spotify content stays clear of the fixed Now Playing panel. */
+body.preset-spotify .main-content > .stage-panel + *{
+  min-width:0;
+}
+
+/* ---------- Amazon Music: larger search, library-first left rail ---------- */
+body.preset-amazonMusic .main-topbar{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(360px,620px) minmax(0,1fr);
+  align-items:center;
+  column-gap:18px;
+  padding:12px 24px;
+  min-height:66px;
+}
+
+body.preset-amazonMusic .search-wrap{
+  grid-column:2;
+  width:min(620px,100%);
+  max-width:none;
+  justify-self:center;
+}
+
+body.preset-amazonMusic .search-wrap svg{
+  left:14px;
+  width:18px;
+  height:18px;
+}
+
+body.preset-amazonMusic #searchInput{
+  width:100%;
+  min-height:44px;
+  padding-left:43px;
+  padding-right:16px;
+  font-size:13.5px;
+}
+
+body.preset-amazonMusic .sidebar-footer{
+  order:20;
+  margin-top:8px;
+  padding:8px 6px 2px;
+  border-top:1px solid #162229;
+  background:transparent;
+  flex-shrink:0;
+}
+
+body.preset-amazonMusic .sidebar-footer .save-note{
+  display:none;
+}
+
+body.preset-amazonMusic .sidebar-footer .clear-link{
+  color:#56666e;
+  font-size:10px;
+  padding:4px 6px;
+}
+
+body.preset-amazonMusic .sidebar-footer .clear-link:hover{
+  color:#b7c7ce;
+  background:#101b22;
+}
+
+/* Artists stay above playlists; playlists stay above the song/library list. */
+body.preset-amazonMusic .sidebar > .brand{order:1}
+body.preset-amazonMusic .sidebar > .nav{order:2}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:has(+ #musicPlaylistList){order:3}
+body.preset-amazonMusic .sidebar > #musicPlaylistList{order:4}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:has(+ #videoPlaylistList){order:5}
+body.preset-amazonMusic .sidebar > #videoPlaylistList{order:6}
+body.preset-amazonMusic .sidebar > .sidebar-section-label:not(.playlist-section-label){order:7}
+body.preset-amazonMusic .sidebar > #trackListSidebar{order:8}
+body.preset-amazonMusic .sidebar > #addBtn{order:9}
+body.preset-amazonMusic .sidebar > .sidebar-footer{order:10}
+
+/* Amazon gives the song list a clear section heading after playlists. */
+body.preset-amazonMusic .sidebar > .sidebar-section-label:not(.playlist-section-label) span,
+body.preset-amazonMusic .sidebar > .sidebar-section-label:not(.playlist-section-label){
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+/* Give the Amazon library blocks practical scrolling without mixing maintenance controls into them. */
+body.preset-amazonMusic #musicPlaylistList,
+body.preset-amazonMusic #videoPlaylistList,
+body.preset-amazonMusic #trackListSidebar{
+  min-height:0;
+}
+
+/* ---------- Preserve the existing Sleeve layout ---------- */
+body.preset-sleeve .main-topbar,
+body.preset-sleeve .sidebar,
+body.preset-sleeve #stagePanel{
+  /* Intentionally untouched. */
+}
+
+@media(max-width:1100px){
+  body.preset-spotify #stagePanel{
+    position:relative;
+    left:auto;
+    top:auto;
+    bottom:auto;
+    width:auto;
+    max-width:none;
+    margin:0 0 18px;
+  }
+  body.preset-spotify .main-content{
+    padding-left:32px;
+  }
+  body.preset-spotify .main-topbar{
+    grid-template-columns:1fr;
+    gap:8px;
+  }
+  body.preset-spotify .top-page-nav,
+  body.preset-spotify .search-wrap{
+    grid-column:1;
+  }
+  body.preset-spotify .top-page-nav{justify-content:center;}
+}
