@@ -4287,1711 +4287,634 @@ topPageNavigation: true,
   // start/end indices depend on — recheck so they don't go stale.
   window.addEventListener('resize', () => queueVirtualScrollRender(), { passive:true });
 
+function renderAmazonMusicHome(){
+    const existing = document.getElementById('amazonMusicHomeWrap');
+    if (existing) existing.remove();
 
+    const wrap = document.createElement('div');
+    wrap.id = 'amazonMusicHomeWrap';
+    wrap.className = 'amazon-music-home';
+
+    const musicTracks = playlist.filter(t => t.kind !== 'video');
+    const artists = getArtists();
+    const musicPlaylists = playlists.filter(p => p.type === 'music');
+
+    // Artists
+    const artistsSection = document.createElement('section');
+    artistsSection.className = 'amazon-home-section';
+
+    const artistsTitle = document.createElement('h2');
+    artistsTitle.textContent = 'Artists';
+    artistsSection.appendChild(artistsTitle);
+
+    const artistsRow = document.createElement('div');
+    artistsRow.className = 'amazon-horizontal-row';
+
+    artists.forEach(artist => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-artist-card';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'amazon-artist-thumb';
+
+        const image = artistThumbs[artist.name];
+        if (image) {
+            thumb.style.backgroundImage = `url("${image}")`;
+        }
+
+        const name = document.createElement('span');
+        name.textContent = artist.name;
+
+        card.appendChild(thumb);
+        card.appendChild(name);
+
+        card.addEventListener('click', () => {
+            currentView = {
+                type: 'artistAlbums',
+                artist: artist.name
+            };
+            scheduleRender();
+        });
+
+        artistsRow.appendChild(card);
+    });
+
+    artistsSection.appendChild(artistsRow);
+    wrap.appendChild(artistsSection);
+
+    // Playlists
+    const playlistsSection = document.createElement('section');
+    playlistsSection.className = 'amazon-home-section';
+
+    const playlistsTitle = document.createElement('h2');
+    playlistsTitle.textContent = 'Playlists';
+    playlistsSection.appendChild(playlistsTitle);
+
+    const playlistsRow = document.createElement('div');
+    playlistsRow.className = 'amazon-horizontal-row';
+
+    musicPlaylists.forEach(pl => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'amazon-playlist-card';
+
+        const title = document.createElement('span');
+        title.textContent = pl.name;
+
+        card.appendChild(title);
+
+        card.addEventListener('click', () => {
+            currentView = {
+                type: 'playlist',
+                playlistId: pl.id
+            };
+            scheduleRender();
+        });
+
+        playlistsRow.appendChild(card);
+    });
+
+    playlistsSection.appendChild(playlistsRow);
+    wrap.appendChild(playlistsSection);
+
+    // Your Library / Songs
+    const librarySection = document.createElement('section');
+    librarySection.className = 'amazon-home-section amazon-library-section';
+
+    const libraryTitle = document.createElement('h2');
+    libraryTitle.textContent = 'Your Library';
+    librarySection.appendChild(libraryTitle);
+
+    const songList = document.createElement('div');
+    songList.className = 'amazon-song-list';
+
+    musicTracks.forEach((track, index) => {
+        const row = buildFlatTrackCard(track, index, musicTracks);
+        songList.appendChild(row);
+    });
+
+    if (!musicTracks.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-shelf';
+        empty.textContent = 'Nothing added yet.';
+        songList.appendChild(empty);
+    }
+
+    librarySection.appendChild(songList);
+    wrap.appendChild(librarySection);
+
+    cardGrid.style.display = 'none';
+    cardGrid.parentNode.insertBefore(wrap, cardGrid);
+}
 
   function renderAll(query, opts){
-  renderPlaylistList();
+    renderPlaylistList();
+    const skipSidebar = !!(opts && opts.skipSidebar);
+    query = (query || '').toLowerCase();
 
-  const skipSidebar = !!(opts && opts.skipSidebar);
-  query = (query || '').toLowerCase();
+    let activePlaylist = currentView.type === 'playlist' ? playlists.find(p => p.id === currentView.id) : null;
+    if (currentView.type === 'playlist' && !activePlaylist) currentView = { type: 'home' };
 
-  let activePlaylist = currentView.type === 'playlist'
-    ? playlists.find(p => p.id === currentView.id)
-    : null;
+    const isArtists = currentView.type === 'artists';
+    const isArtistAlbums = currentView.type === 'artistAlbums';
+    const isAlbum = currentView.type === 'album';
+    const isBrowse = currentView.type === 'browse';
+    const isBrowseGroup = currentView.type === 'browseGroup';
 
-  if (currentView.type === 'playlist' && !activePlaylist) {
-    currentView = { type: 'home' };
-    activePlaylist = null;
-  }
-
-  /*
-   * ============================================================
-   * AMAZON MUSIC HOME
-   * ============================================================
-   *
-   * Amazon has its own home renderer:
-   *
-   *   Artists
-   *   Playlists
-   *   Your Library
-   *
-   * Do NOT let the normal Sleeve card-grid renderer continue
-   * after this. Otherwise it rebuilds the normal library below
-   * the Amazon page.
-   */
-  const amazonHomeActive =
-    settings.appPreset === 'amazonMusic' &&
-    currentView.type === 'home' &&
-    !query;
-
-  if (amazonHomeActive) {
-    renderAmazonMusicHome(query);
-
-    document.body.classList.add('amazon-home-active');
-
-    // Hide the normal Sleeve home content.
-    greeting.style.display = 'none';
-    subhead.style.display = 'none';
-    cardGrid.style.display = 'none';
-    emptyMain.style.display = 'none';
-    albumDetail.style.display = 'none';
-
-    // Amazon Home has its own library layout/pagination.
-    if (paginationControls) {
-      paginationControls.style.display = 'none';
-      paginationControls.innerHTML = '';
+    let artistsData = null, albumsData = null;
+    if (isArtists){
+      artistsData = getArtists().filter(a => !query || a.name.toLowerCase().includes(query));
+    } else if (isArtistAlbums){
+      // Guard against a stale view if every track from this artist was deleted.
+      if (getArtists().every(a => a.name !== currentView.artist)) currentView = { type: 'artists' };
+      else albumsData = getAlbumsForArtist(currentView.artist).filter(a => !query || a.name.toLowerCase().includes(query));
     }
 
-    /*
-     * The tiny Amazon sidebar is navigation only.
-     * Do not leave the normal giant track list sitting inside it.
-     */
-    if (!skipSidebar) {
-      trackListSidebar.innerHTML = '';
+    let browseData = null;
+    if (isBrowse){
+      if (currentView.mode !== 'year' && currentView.mode !== 'genre') currentView.mode = 'year';
+      browseData = (currentView.mode === 'year' ? getYears() : getGenres())
+        .filter(g => !query || g.name.toLowerCase().includes(query));
     }
 
-    /*
-     * Amazon Home doesn't use the normal virtualized card grid.
-     * Reset these so scrolling doesn't try to rebuild the page.
-     */
-    lastRenderIsVirtualizable = false;
-    lastRenderVisibleCount = 0;
-    virtualLastWindowStart = -1;
-    virtualLastWindowEnd = -1;
-    virtualLastMode = '';
-
-    /*
-     * IMPORTANT:
-     * Amazon Music Home is a complete alternate renderer.
-     * Stop here instead of continuing into the normal renderer.
-     */
-    return;
-  }
-
-  /*
-   * Leaving Amazon Home.
-   * Restore the normal Sleeve renderer.
-   */
-  document.body.classList.remove('amazon-home-active');
-
-  greeting.style.display = '';
-  subhead.style.display = '';
-  cardGrid.style.display = '';
-  emptyMain.style.display = '';
-  albumDetail.style.display = '';
-
-  if (paginationControls) {
-    paginationControls.style.display = '';
-  }
-
-  /*
-   * ============================================================
-   * NORMAL SLEEVE RENDERER
-   * ============================================================
-   */
-
-  const isArtists = currentView.type === 'artists';
-  const isArtistAlbums = currentView.type === 'artistAlbums';
-  const isAlbum = currentView.type === 'album';
-  const isBrowse = currentView.type === 'browse';
-  const isBrowseGroup = currentView.type === 'browseGroup';
-
-  let artistsData = null;
-  let albumsData = null;
-
-  if (isArtists){
-    artistsData = getArtists().filter(
-      a => !query || a.name.toLowerCase().includes(query)
-    );
-  } else if (isArtistAlbums){
-    // Guard against a stale view if every track from this artist was deleted.
-    if (getArtists().every(a => a.name !== currentView.artist)) {
-      currentView = { type: 'artists' };
-    } else {
-      albumsData = getAlbumsForArtist(currentView.artist)
-        .filter(a => !query || a.name.toLowerCase().includes(query));
-    }
-  }
-
-  let browseData = null;
-
-  if (isBrowse){
-    if (currentView.mode !== 'year' && currentView.mode !== 'genre') {
-      currentView.mode = 'year';
-    }
-
-    browseData = (
-      currentView.mode === 'year'
-        ? getYears()
-        : getGenres()
-    ).filter(
-      g => !query || g.name.toLowerCase().includes(query)
-    );
-  }
-
-  const baseIndices = activePlaylist
-    ? activePlaylist.trackIds
-        .map(id => playlist.findIndex(t => t.id === id))
-        .filter(i => i !== -1)
-
-    : (
-        isAlbum
-          ? playlist
-              .map((t, i) => ({ t, i }))
-              .filter(({ t }) =>
-                t.kind !== 'video' &&
-                (t.artist || 'Unknown Artist') === currentView.artist &&
-                (t.album || 'Unknown Album') === currentView.album
-              )
+    const baseIndices = activePlaylist
+      ? activePlaylist.trackIds.map(id => playlist.findIndex(t => t.id === id)).filter(i => i !== -1)
+      : (isAlbum
+          ? playlist.map((t, i) => ({ t, i }))
+              .filter(({ t }) => t.kind !== 'video' && (t.artist || 'Unknown Artist') === currentView.artist && (t.album || 'Unknown Album') === currentView.album)
               .map(({ i }) => i)
+          : (isBrowseGroup
+              ? playlist.map((t, i) => ({ t, i }))
+                  .filter(({ t }) => t.kind !== 'video' && (currentView.mode === 'year'
+                    ? ((t.year || '').toString().trim() || 'Unknown Year')
+                    : ((t.genre || '').trim() || 'Unknown Genre')) === currentView.value)
+                  .map(({ i }) => i)
+              : playlist.map((_, i) => i)));
 
-          : (
-              isBrowseGroup
-                ? playlist
-                    .map((t, i) => ({ t, i }))
-                    .filter(({ t }) =>
-                      t.kind !== 'video' &&
-                      (
-                        currentView.mode === 'year'
-                          ? (
-                              (t.year || '').toString().trim() ||
-                              'Unknown Year'
-                            )
-                          : (
-                              (t.genre || '').trim() ||
-                              'Unknown Genre'
-                            )
-                      ) === currentView.value
-                    )
-                    .map(({ i }) => i)
+    const visible = baseIndices
+      .map(i => ({ t: playlist[i], i }))
+      .filter(({ t }) => matchesTrackQuery(t, query));
 
-                : playlist.map((_, i) => i)
-            )
-      );
+    // A new tab, search, or library change starts pagination on its first page.
+    const nextPaginationViewKey = JSON.stringify({
+      view: currentView,
+      query,
+      ids: visible.map(({ t }) => t.id)
+    });
+    if (nextPaginationViewKey !== paginationViewKey) {
+      paginationViewKey = nextPaginationViewKey;
+      currentPage = 1;
+    }
 
-  const visible = baseIndices
-    .map(i => ({ t: playlist[i], i }))
-    .filter(({ t }) => matchesTrackQuery(t, query));
+    // Back-link (breadcrumb) above the grid for the nested artist/album/browse views.
+    if (isArtistAlbums){
+      viewBackBtn.style.display = 'inline-flex';
+      viewBackBtnLabel.textContent = 'All artists';
+      viewBackBtn.onclick = () => { currentView = { type: 'artists' }; scheduleRender(searchInput.value); };
+    } else if (isAlbum){
+      viewBackBtn.style.display = 'inline-flex';
+      viewBackBtnLabel.textContent = currentView.artist;
+      viewBackBtn.onclick = () => { currentView = { type: 'artistAlbums', artist: currentView.artist }; scheduleRender(searchInput.value); };
+    } else if (isBrowseGroup){
+      viewBackBtn.style.display = 'inline-flex';
+      viewBackBtnLabel.textContent = currentView.mode === 'year' ? 'All years' : 'All genres';
+      viewBackBtn.onclick = () => { currentView = { type: 'browse', mode: currentView.mode }; scheduleRender(searchInput.value); };
+    } else {
+      viewBackBtn.style.display = 'none';
+      viewBackBtn.onclick = null;
+    }
 
-  /*
-   * A new tab, search, or library change starts pagination
-   * on its first page.
-   */
-  const nextPaginationViewKey = JSON.stringify({
-    view: currentView,
-    query,
-    ids: visible.map(({ t }) => t.id)
-  });
+    // Filter-by switch, only shown on the top-level browse page.
+    browseSwitch.style.display = isBrowse ? 'inline-flex' : 'none';
+    if (isBrowse){
+      browseSwitchYear.classList.toggle('active', currentView.mode === 'year');
+      browseSwitchGenre.classList.toggle('active', currentView.mode === 'genre');
+    }
 
-  if (nextPaginationViewKey !== paginationViewKey) {
-    paginationViewKey = nextPaginationViewKey;
-    currentPage = 1;
-  }
+    if (isArtists){
+      greeting.textContent = 'Artists';
+    } else if (isArtistAlbums){
+      greeting.textContent = currentView.artist;
+    } else if (isAlbum){
+      greeting.textContent = currentView.album;
+    } else if (isBrowse){
+      greeting.textContent = 'Browse';
+    } else if (isBrowseGroup){
+      greeting.textContent = currentView.value;
+    } else {
+      greeting.textContent = activePlaylist ? activePlaylist.name : 'Your shelf';
+    }
 
-  /*
-   * Back-link (breadcrumb) above the grid for nested views.
-   */
-  if (isArtistAlbums){
-    viewBackBtn.style.display = 'inline-flex';
-    viewBackBtnLabel.textContent = 'All artists';
+    const hasAnyInView = isArtists ? artistsData.length > 0
+      : isArtistAlbums ? albumsData.length > 0
+      : isBrowse ? browseData.length > 0
+      : baseIndices.length > 0;
 
-    viewBackBtn.onclick = () => {
-      currentView = { type: 'artists' };
-      scheduleRender(searchInput.value);
-    };
+    const useDetailedAlbum = isAlbum && settings.detailedAlbumView && baseIndices.length > 0;
 
-  } else if (isAlbum){
-    viewBackBtn.style.display = 'inline-flex';
-    viewBackBtnLabel.textContent = currentView.artist;
+    greeting.style.display = useDetailedAlbum ? 'none' : '';
+    subhead.style.display = useDetailedAlbum ? 'none' : '';
+    albumDetail.style.display = useDetailedAlbum ? 'flex' : 'none';
+    emptyMain.style.display = useDetailedAlbum ? 'none' : (hasAnyInView ? 'none' : 'block');
+    cardGrid.style.display = useDetailedAlbum ? 'none' : (hasAnyInView ? 'grid' : 'none');
 
-    viewBackBtn.onclick = () => {
-      currentView = {
-        type: 'artistAlbums',
-        artist: currentView.artist
-      };
+    if (isArtists){
+      subhead.textContent = artistsData.length
+        ? `${artistsData.length} artist${artistsData.length === 1 ? '' : 's'} in your library`
+        : 'Artist names are read automatically from your files\u2019 tags';
+    } else if (isArtistAlbums){
+      subhead.textContent = albumsData.length
+        ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
+        : `No albums found for ${currentView.artist}`;
+    } else if (isAlbum){
+      subhead.textContent = `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'} \u2022 ${currentView.artist}`;
+    } else if (isBrowse){
+      const label = currentView.mode === 'year' ? 'year' : 'genre';
+      subhead.textContent = browseData.length
+        ? `${browseData.length} ${label}${browseData.length === 1 ? '' : 's'} found in your library`
+        : `No ${label} tags found yet \u2014 most MP3s already include this in their metadata`;
+    } else if (isBrowseGroup){
+      subhead.textContent = `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'}`;
+    } else {
+      subhead.textContent = hasAnyInView
+        ? `${baseIndices.length} item${baseIndices.length === 1 ? '' : 's'}${activePlaylist ? ' in this playlist' : ' on your shelf'}`
+        : (activePlaylist ? 'This playlist is empty — use the + button on any track to add it here.' : 'Add audio or video files from your computer to start playing');
+    }
 
-      scheduleRender(searchInput.value);
-    };
-
-  } else if (isBrowseGroup){
-    viewBackBtn.style.display = 'inline-flex';
-    viewBackBtnLabel.textContent =
-      currentView.mode === 'year'
-        ? 'All years'
-        : 'All genres';
-
-    viewBackBtn.onclick = () => {
-      currentView = {
-        type: 'browse',
-        mode: currentView.mode
-      };
-
-      scheduleRender(searchInput.value);
-    };
-
-  } else {
-    viewBackBtn.style.display = 'none';
-    viewBackBtn.onclick = null;
-  }
-
-  /*
-   * Filter-by switch, only shown on the top-level browse page.
-   */
-  browseSwitch.style.display = isBrowse
-    ? 'inline-flex'
-    : 'none';
-
-  if (isBrowse){
-    browseSwitchYear.classList.toggle(
-      'active',
-      currentView.mode === 'year'
-    );
-
-    browseSwitchGenre.classList.toggle(
-      'active',
-      currentView.mode === 'genre'
-    );
-  }
-
-  /*
-   * Page heading.
-   */
-  if (isArtists){
-    greeting.textContent = 'Artists';
-
-  } else if (isArtistAlbums){
-    greeting.textContent = currentView.artist;
-
-  } else if (isAlbum){
-    greeting.textContent = currentView.album;
-
-  } else if (isBrowse){
-    greeting.textContent = 'Browse';
-
-  } else if (isBrowseGroup){
-    greeting.textContent = currentView.value;
-
-  } else {
-    greeting.textContent =
-      activePlaylist
-        ? activePlaylist.name
-        : 'Your shelf';
-  }
-
-  const hasAnyInView =
-    isArtists
-      ? artistsData.length > 0
-      : isArtistAlbums
-        ? albumsData.length > 0
-        : isBrowse
-          ? browseData.length > 0
-          : baseIndices.length > 0;
-
-  const useDetailedAlbum =
-    isAlbum &&
-    settings.detailedAlbumView &&
-    baseIndices.length > 0;
-
-  greeting.style.display =
-    useDetailedAlbum
-      ? 'none'
-      : '';
-
-  subhead.style.display =
-    useDetailedAlbum
-      ? 'none'
-      : '';
-
-  albumDetail.style.display =
-    useDetailedAlbum
-      ? 'flex'
-      : 'none';
-
-  emptyMain.style.display =
-    useDetailedAlbum
-      ? 'none'
-      : (
-          hasAnyInView
-            ? 'none'
-            : 'block'
-        );
-
-  cardGrid.style.display =
-    useDetailedAlbum
-      ? 'none'
-      : (
-          hasAnyInView
-            ? 'grid'
-            : 'none'
-        );
-
-  /*
-   * Subheading.
-   */
-  if (isArtists){
-
-    subhead.textContent = artistsData.length
-      ? `${artistsData.length} artist${artistsData.length === 1 ? '' : 's'} in your library`
-      : 'Artist names are read automatically from your files’ tags';
-
-  } else if (isArtistAlbums){
-
-    subhead.textContent = albumsData.length
-      ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
-      : `No albums found for ${currentView.artist}`;
-
-  } else if (isAlbum){
-
-    subhead.textContent =
-      `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'} • ${currentView.artist}`;
-
-  } else if (isBrowse){
-
-    const label =
-      currentView.mode === 'year'
-        ? 'year'
-        : 'genre';
-
-    subhead.textContent = browseData.length
-      ? `${browseData.length} ${label}${browseData.length === 1 ? '' : 's'} found in your library`
-      : `No ${label} tags found yet — most MP3s already include this in their metadata`;
-
-  } else if (isBrowseGroup){
-
-    subhead.textContent =
-      `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'}`;
-
-  } else {
-
-    subhead.textContent = hasAnyInView
-      ? `${baseIndices.length} item${baseIndices.length === 1 ? '' : 's'}${activePlaylist ? ' in this playlist' : ' on your shelf'}`
-      : (
-          activePlaylist
-            ? 'This playlist is empty — use the + button on any track to add it here.'
-            : 'Add audio or video files from your computer to start playing'
-        );
-  }
-
-  /*
-   * Empty-state text.
-   */
-  if (isArtists){
-
-    emptyMain.querySelector('h3').textContent =
-      'No artists found yet';
-
-    emptyMain.querySelector('p').textContent =
-      'Add some music with artist tags — most MP3s already have them — and they’ll show up here automatically.';
-
-  } else if (isArtistAlbums){
-
-    emptyMain.querySelector('h3').textContent =
-      'No albums found';
-
-    emptyMain.querySelector('p').textContent =
-      `None of ${currentView.artist}'s tracks have an album tag yet.`;
-
-  } else if (isBrowse){
-
-    emptyMain.querySelector('h3').textContent =
-      currentView.mode === 'year'
-        ? 'No years found yet'
-        : 'No genres found yet';
-
-    emptyMain.querySelector('p').textContent =
-      'Add some music with year/genre tags — most MP3s already have them — and they’ll show up here automatically.';
-
-  } else {
-
-    emptyMain.querySelector('h3').textContent =
-      activePlaylist
-        ? 'This playlist is empty'
-        : 'Nothing on the shelf yet';
-
-    emptyMain.querySelector('p').textContent =
-      activePlaylist
+    if (isArtists){
+      emptyMain.querySelector('h3').textContent = 'No artists found yet';
+      emptyMain.querySelector('p').textContent = 'Add some music with artist tags — most MP3s already have them — and they\u2019ll show up here automatically.';
+    } else if (isArtistAlbums){
+      emptyMain.querySelector('h3').textContent = 'No albums found';
+      emptyMain.querySelector('p').textContent = `None of ${currentView.artist}'s tracks have an album tag yet.`;
+    } else if (isBrowse){
+      emptyMain.querySelector('h3').textContent = currentView.mode === 'year' ? 'No years found yet' : 'No genres found yet';
+      emptyMain.querySelector('p').textContent = 'Add some music with year/genre tags — most MP3s already have them — and they\u2019ll show up here automatically.';
+    } else {
+      emptyMain.querySelector('h3').textContent = activePlaylist ? 'This playlist is empty' : 'Nothing on the shelf yet';
+      emptyMain.querySelector('p').textContent = activePlaylist
         ? 'Add tracks to this playlist using the + button that appears on any track in your library.'
         : 'Almost any audio or video file works — MP3, WAV, FLAC, AAC, M4A, OGG, MP4, WebM, MOV, and more. Everything you add is saved in this browser automatically.';
-  }
+    }
+    emptyMain.querySelector('.add-btn').style.display = (activePlaylist || isArtistAlbums || isAlbum || isBrowse || isBrowseGroup) ? 'none' : 'inline-flex';
 
-  emptyMain.querySelector('.add-btn').style.display =
-    (
-      activePlaylist ||
-      isArtistAlbums ||
-      isAlbum ||
-      isBrowse ||
-      isBrowseGroup
-    )
-      ? 'none'
-      : 'inline-flex';
-
-  /*
-   * ============================================================
-   * SIDEBAR TRACK LIST
-   * ============================================================
-   */
-  if (!skipSidebar){
-
+    if (!skipSidebar) {
     trackListSidebar.innerHTML = '';
 
     if (baseIndices.length === 0){
-
       const d = document.createElement('div');
       d.className = 'empty-shelf';
-      d.textContent =
-        activePlaylist
-          ? 'No tracks in this playlist yet.'
-          : 'Nothing added yet.';
-
+      d.textContent = activePlaylist ? 'No tracks in this playlist yet.' : 'Nothing added yet.';
       trackListSidebar.appendChild(d);
-
     } else if (visible.length === 0){
-
       const d = document.createElement('div');
       d.className = 'empty-shelf';
       d.textContent = 'No matches.';
-
       trackListSidebar.appendChild(d);
-
     } else {
-
-      visible.forEach(({ t, i }) => {
-
+      visible.forEach(({ t, i }, visIdx) => {
         const item = document.createElement('div');
-
-        item.className =
-          'track-item' +
-          (i === currentIndex ? ' active' : '');
-
+        item.className = 'track-item' + (i === currentIndex ? ' active' : '');
         item.dataset.trackId = t.id;
-
         const inPlaylist = !!activePlaylist;
-
-        let sub =
-          t.kind === 'video'
-            ? 'Video'
-            : (
-                t.kind === 'flac'
-                  ? 'FLAC'
-                  : 'Track ' + (i + 1)
-              );
-
-        if (t.loading) {
-          sub = 'Decoding…';
-        }
-
-        if (t.error) {
-          sub = 'Could not play this file';
-        }
-
+        let sub = t.kind === 'video' ? 'Video' : (t.kind === 'flac' ? 'FLAC' : 'Track ' + (i + 1));
+        if (t.loading) sub = 'Decoding…';
+        if (t.error) sub = 'Could not play this file';
         const handleHtml = inPlaylist
-          ? `<span class="drag-handle" title="Drag to reorder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-                <circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-              </svg>
-            </span>`
+          ? `<span class="drag-handle" title="Drag to reorder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg></span>`
           : '';
-
         const albumArtEntry = albumArtForTrack(t);
-
         const thumbHtml = t.thumbUrl
-          ? (
-              t.thumbKind === 'video'
-                ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>`
-                : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`
-            )
-          : (
-              albumArtEntry
-                ? albumArtMarkup(albumArtEntry, t.title)
-                : iconFor(t.kind)
-            );
-
+          ? `${t.thumbKind === 'video' ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>` : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`}`
+          : (albumArtEntry ? albumArtMarkup(albumArtEntry, t.title) : iconFor(t.kind));
         item.innerHTML = `
           ${handleHtml}
-
-          <div class="track-thumb" title="Set thumbnail">
-            ${thumbHtml}
-          </div>
-
+          <div class="track-thumb" title="Set thumbnail">${thumbHtml}</div>
           <div class="track-meta">
-            <div class="track-title" title="Double-click to rename">
-              ${escapeHtml(t.title)}
-            </div>
-
-            <div class="track-sub">
-              ${sub}
-            </div>
+            <div class="track-title" title="Double-click to rename">${escapeHtml(t.title)}</div>
+            <div class="track-sub">${sub}</div>
           </div>
-
-          <button
-            class="track-row-more"
-            type="button"
-            title="More options"
-          >
-            …
-          </button>
-        `;
-
-        item.addEventListener(
-          'click',
-          () => playTrackAt(i, true)
-        );
-
-        item
-          .querySelector('.track-thumb')
-          .addEventListener('click', (e) => {
-
-            if (e.target.closest('.track-thumb-clear')) {
-              return;
-            }
-
-            e.stopPropagation();
-            openThumbPicker(t.id);
-          });
-
-        const titleEl =
-          item.querySelector('.track-title');
-
-        titleEl.addEventListener(
-          'dblclick',
-          (e) => {
-            e.stopPropagation();
-            startInlineRename(titleEl, t);
-          }
-        );
-
-        const rowMore =
-          item.querySelector('.track-row-more');
-
-        if (rowMore){
-
-          rowMore.addEventListener(
-            'click',
-            (e) => {
-              e.stopPropagation();
-              openTrackActions(
-                t.id,
-                e.currentTarget
-              );
-            }
-          );
-        }
-
-        item.addEventListener(
-          'contextmenu',
-          (e) => {
-            e.preventDefault();
-            openTrackActions(
-              t.id,
-              e.currentTarget
-            );
-          }
-        );
-
-        item.draggable = true;
-
-        item.addEventListener(
-          'dragstart',
-          e => {
-            e.dataTransfer.setData(
-              'text/plain',
-              String(t.id)
-            );
-          }
-        );
-
+          <button class="track-row-more" type="button" title="More options">…</button>
+          `;
+        item.addEventListener('click', () => playTrackAt(i, true));
+        item.querySelector('.track-thumb').addEventListener('click', (e) => {
+          if (e.target.closest('.track-thumb-clear')) return;
+          e.stopPropagation();
+          openThumbPicker(t.id);
+        });
+        const titleEl = item.querySelector('.track-title');
+        titleEl.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          startInlineRename(titleEl, t);
+        });
+        const rowMore = item.querySelector('.track-row-more');
+        if (rowMore) rowMore.addEventListener('click', (e) => { e.stopPropagation(); openTrackActions(t.id, e.currentTarget); });
+        item.addEventListener('contextmenu', (e) => { e.preventDefault(); openTrackActions(t.id, e.currentTarget); });
+        item.draggable = true; item.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', String(t.id)); });
         if (inPlaylist){
-
-          const handle =
-            item.querySelector('.drag-handle');
-
-          handle.addEventListener(
-            'click',
-            (e) => e.stopPropagation()
-          );
-
-          setupReorderHandle(
-            handle,
-            item,
-            trackListSidebar,
-            'list',
-            t.id,
-            activePlaylist
-          );
+          const handle = item.querySelector('.drag-handle');
+          handle.addEventListener('click', (e) => e.stopPropagation());
+          setupReorderHandle(handle, item, trackListSidebar, 'list', t.id, activePlaylist);
         }
-
         trackListSidebar.appendChild(item);
       });
     }
-  }
+    }
 
-  /*
-   * ============================================================
-   * NORMAL CARD GRID
-   * ============================================================
-   */
-  cardGrid.innerHTML = '';
-  albumDetail.innerHTML = '';
+    cardGrid.innerHTML = '';
+    albumDetail.innerHTML = '';
 
-  if (!isBrowse){
-
-    cardGrid.classList.remove('browse-grid');
-
-    if (
-      settings.view === 'grid' ||
-      settings.view === 'shelf'
-    ){
-
-      cardGrid.style.gridTemplateColumns =
-        settings.view === 'shelf'
+    if (!isBrowse){
+      cardGrid.classList.remove('browse-grid');
+      if (settings.view === 'grid' || settings.view === 'shelf'){
+        cardGrid.style.gridTemplateColumns = settings.view === 'shelf'
           ? ''
           : `repeat(auto-fill, minmax(${settings.cardSize}px, 1fr))`;
+      }
+      cardGrid.style.gap = `${settings.cardGap}px`;
     }
 
-    cardGrid.style.gap =
-      `${settings.cardGap}px`;
-  }
+    // Track whether the page currently on screen is even one that uses
+    // the virtualized flat track-card grid (home/playlist/album/browseGroup)
+    // — Artists, Browse's own top-level list, and album/artist detail
+    // pages never go through that path, so scroll on those pages should
+    // never trigger a virtualization re-render at all.
+    const isFlatTrackView = !useDetailedAlbum && !isArtists && !isArtistAlbums && !isBrowse;
 
-  /*
-   * Track whether the current page uses the
-   * virtualized flat track-card grid.
-   */
-  const isFlatTrackView =
-    !useDetailedAlbum &&
-    !isArtists &&
-    !isArtistAlbums &&
-    !isBrowse;
+    // Home can optionally be organized into sections (by album, date
+    // added, artist, or genre) instead of one flat list. Grouped mode
+    // shows every section inline on one page, so it bypasses pagination
+    // and virtualization (both assume one uniform flat sequence of cards,
+    // which section headers break) and just renders everything directly.
+    const isGroupedHome = isFlatTrackView && currentView.type === 'home' && !activePlaylist
+      && settings.homeGrouping && settings.homeGrouping !== 'none';
 
-  /*
-   * Grouped Home mode.
-   */
-  const isGroupedHome =
-    isFlatTrackView &&
-    currentView.type === 'home' &&
-    !activePlaylist &&
-    settings.homeGrouping &&
-    settings.homeGrouping !== 'none';
+    // Whichever list this render will actually build cards from gets
+    // paginated down to ITEMS_PER_PAGE *before* any DOM is built. Since a
+    // page is always well under the virtualization threshold, windowed
+    // scrolling naturally stays dormant within a single page — the two
+    // systems no longer fight over the same cards.
+    let paginationSource = null;
+    if (isArtists) paginationSource = artistsData;
+    else if (isArtistAlbums) paginationSource = albumsData;
+    else if (isBrowse) paginationSource = browseData;
+    else if (isFlatTrackView && !isGroupedHome) paginationSource = visible;
+    const pagedItems = paginationSource ? pageItems(paginationSource) : null;
 
-  /*
-   * Determine pagination source.
-   */
-  let paginationSource = null;
+    lastRenderIsVirtualizable = isFlatTrackView && !isGroupedHome;
+    lastRenderVisibleCount = (isFlatTrackView && !isGroupedHome && pagedItems) ? pagedItems.length : 0;
 
-  if (isArtists) {
-    paginationSource = artistsData;
-
-  } else if (isArtistAlbums) {
-    paginationSource = albumsData;
-
-  } else if (isBrowse) {
-    paginationSource = browseData;
-
-  } else if (
-    isFlatTrackView &&
-    !isGroupedHome
-  ){
-    paginationSource = visible;
-  }
-
-  const pagedItems =
-    paginationSource
-      ? pageItems(paginationSource)
-      : null;
-
-  lastRenderIsVirtualizable =
-    isFlatTrackView &&
-    !isGroupedHome;
-
-  lastRenderVisibleCount =
-    (
-      isFlatTrackView &&
-      !isGroupedHome &&
-      pagedItems
-    )
-      ? pagedItems.length
-      : 0;
-
-  /*
-   * ============================================================
-   * BUILD FLAT TRACK CARD
-   * ============================================================
-   */
-  function buildFlatTrackCard(
-    t,
-    i,
-    inPlaylist,
-    queueContextIds
-  ){
-
-    const card =
-      document.createElement('div');
-
-    card.className =
-      'card virtual-track-card' +
-      (i === currentIndex ? ' active' : '');
-
-    card.dataset.trackId = t.id;
-
-    let statusHtml = '';
-
-    if (t.loading){
-      statusHtml =
-        '<div class="card-loading">Decoding…</div>';
-
-    } else if (t.error){
-      statusHtml =
-        '<div class="card-error">Format not supported by this browser</div>';
-    }
-
-    const cardHandleHtml = inPlaylist
-      ? `<button
-          class="card-drag-handle"
-          type="button"
-          title="Drag to reorder"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-          >
-            <circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-            <circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/>
-          </svg>
-        </button>`
-      : '';
-
-    const albumArtEntry =
-      albumArtForTrack(t);
-
-    const cardArtInner = t.thumbUrl
-      ? (
-          t.thumbKind === 'video'
-            ? `<video
-                src="${t.thumbUrl}"
-                muted
-                loop
-                autoplay
-                playsinline
-                preload="metadata"
-              ></video>`
-            : `<img
-                src="${t.thumbUrl}"
-                loading="lazy"
-                decoding="async"
-                alt=""
-              >`
-        )
-      : (
-          albumArtEntry
-            ? albumArtMarkup(
-                albumArtEntry,
-                t.title
-              )
-            : iconFor(t.kind)
-        );
-
-    const thumbClearHtml = t.thumbUrl
-      ? `<button
-          class="card-thumb-clear-btn"
-          type="button"
-          title="Remove thumbnail"
-        >
-          &times;
-        </button>`
-      : '';
-
-    card.innerHTML = `
-      <div class="card-art">
-        ${cardArtInner}
-
-        <div class="card-play">
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-          >
-            <path d="M8 5v14l11-7z"/>
-          </svg>
+    // Builds one track card — used by the normal flat/virtualized list and
+    // by grouped Home sections alike, so thumbnails, queueing, lyrics,
+    // rename, drag-reorder etc. behave identically either way. When
+    // queueContextIds is given (a specific group's track ids), clicking
+    // the card queues just that group instead of the whole view.
+    function buildFlatTrackCard(t, i, inPlaylist, queueContextIds){
+      const card = document.createElement('div');
+      card.className = 'card virtual-track-card' + (i === currentIndex ? ' active' : '');
+      card.dataset.trackId = t.id;
+      let statusHtml = '';
+      if (t.loading) statusHtml = '<div class="card-loading">Decoding…</div>';
+      else if (t.error) statusHtml = '<div class="card-error">Format not supported by this browser</div>';
+      const cardHandleHtml = inPlaylist
+        ? `<button class="card-drag-handle" type="button" title="Drag to reorder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="9" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="9" cy="18" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg></button>`
+        : '';
+      const albumArtEntry = albumArtForTrack(t);
+      const cardArtInner = t.thumbUrl
+        ? (t.thumbKind === 'video' ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>` : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`)
+        : (albumArtEntry ? albumArtMarkup(albumArtEntry, t.title) : iconFor(t.kind));
+      const thumbClearHtml = t.thumbUrl
+        ? `<button class="card-thumb-clear-btn" type="button" title="Remove thumbnail">&times;</button>`
+        : '';
+      card.innerHTML = `
+        <div class="card-art">
+          ${cardArtInner}
+          <div class="card-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         </div>
-      </div>
-
-      ${cardHandleHtml}
-
-      <button
-        class="card-add-btn"
-        type="button"
-        title="Add to playlist"
-      >
-        +
-      </button>
-
-      <button
-        class="queue-add-btn"
-        type="button"
-        title="Add to queue"
-      >
-        ☷
-      </button>
-
-      <button
-        class="track-more-btn"
-        type="button"
-        title="More options"
-      >
-        …
-      </button>
-
-      <button
-        class="card-lyrics-btn${t.lyrics ? ' has-lyrics' : ''}"
-        type="button"
-        title="Lyrics"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M4 6h16M4 12h10M4 18h7"/>
-        </svg>
-      </button>
-
-      <button
-        class="card-thumb-btn"
-        type="button"
-        title="Set thumbnail"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-      </button>
-
-      ${thumbClearHtml}
-
-      <div
-        class="card-title"
-        title="Double-click to rename"
-      >
-        ${escapeHtml(t.title)}
-      </div>
-
-      <div class="card-sub">
-        ${
-          t.kind === 'video'
-            ? 'Video'
-            : (
-                t.kind === 'flac'
-                  ? 'FLAC audio'
-                  : 'Audio'
-              )
-        }
-      </div>
-
-      ${statusHtml}
-    `;
-
-    card.addEventListener(
-      'click',
-      () => playTrackAt(
-        i,
-        true,
-        queueContextIds
-      )
-    );
-
-    card
-      .querySelector('.card-add-btn')
-      .addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          openPlaylistMenu(
-            t.id,
-            e.currentTarget
-          );
-        }
-      );
-
-    card
-      .querySelector('.queue-add-btn')
-      .addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          queueTrack(t.id);
-          openQueue();
-        }
-      );
-
-    card
-      .querySelector('.track-more-btn')
-      .addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          openTrackActions(
-            t.id,
-            e.currentTarget
-          );
-        }
-      );
-
-    card.addEventListener(
-      'contextmenu',
-      (e) => {
-        e.preventDefault();
-        openTrackActions(
-          t.id,
-          e.currentTarget
-        );
-      }
-    );
-
-    card.draggable = true;
-
-    card.addEventListener(
-      'dragstart',
-      e => {
-        e.dataTransfer.setData(
-          'text/plain',
-          String(t.id)
-        );
-      }
-    );
-
-    card
-      .querySelector('.card-lyrics-btn')
-      .addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          openLyricsEditor(t.id);
-        }
-      );
-
-    card
-      .querySelector('.card-thumb-btn')
-      .addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          openThumbPicker(t.id);
-        }
-      );
-
-    const clearBtn =
-      card.querySelector(
-        '.card-thumb-clear-btn'
-      );
-
-    if (clearBtn){
-
-      clearBtn.addEventListener(
-        'click',
-        (e) => {
-          e.stopPropagation();
-          clearTrackThumb(t.id);
-        }
-      );
-    }
-
-    const cardTitleEl =
-      card.querySelector('.card-title');
-
-    cardTitleEl.addEventListener(
-      'dblclick',
-      (e) => {
+        ${cardHandleHtml}
+        <button class="card-add-btn" type="button" title="Add to playlist">+</button>
+        <button class="queue-add-btn" type="button" title="Add to queue">☷</button>
+        <button class="track-more-btn" type="button" title="More options">…</button>
+        <button class="card-lyrics-btn${t.lyrics ? ' has-lyrics' : ''}" type="button" title="Lyrics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg></button>
+        <button class="card-thumb-btn" type="button" title="Set thumbnail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+        ${thumbClearHtml}
+        <div class="card-title" title="Double-click to rename">${escapeHtml(t.title)}</div>
+        <div class="card-sub">${t.kind === 'video' ? 'Video' : (t.kind === 'flac' ? 'FLAC audio' : 'Audio')}</div>
+        ${statusHtml}
+      `;
+      card.addEventListener('click', () => playTrackAt(i, true, queueContextIds));
+      card.querySelector('.card-add-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        startInlineRename(
-          cardTitleEl,
-          t
-        );
+        openPlaylistMenu(t.id, e.currentTarget);
+      });
+      card.querySelector('.queue-add-btn').addEventListener('click', (e) => { e.stopPropagation(); queueTrack(t.id); openQueue(); });
+      card.querySelector('.track-more-btn').addEventListener('click', (e) => { e.stopPropagation(); openTrackActions(t.id, e.currentTarget); });
+      card.addEventListener('contextmenu', (e) => { e.preventDefault(); openTrackActions(t.id, e.currentTarget); });
+      card.draggable = true; card.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', String(t.id)); });
+      card.querySelector('.card-lyrics-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openLyricsEditor(t.id);
+      });
+      card.querySelector('.card-thumb-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openThumbPicker(t.id);
+      });
+      const clearBtn = card.querySelector('.card-thumb-clear-btn');
+      if (clearBtn) clearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearTrackThumb(t.id);
+      });
+      const cardTitleEl = card.querySelector('.card-title');
+      cardTitleEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startInlineRename(cardTitleEl, t);
+      });
+      if (inPlaylist){
+        const handle = card.querySelector('.card-drag-handle');
+        handle.addEventListener('click', (e) => e.stopPropagation());
+        setupReorderHandle(handle, card, cardGrid, 'grid', t.id, activePlaylist);
       }
-    );
-
-    if (inPlaylist){
-
-      const handle =
-        card.querySelector(
-          '.card-drag-handle'
-        );
-
-      handle.addEventListener(
-        'click',
-        (e) => e.stopPropagation()
-      );
-
-      setupReorderHandle(
-        handle,
-        card,
-        cardGrid,
-        'grid',
-        t.id,
-        activePlaylist
-      );
+      return card;
     }
 
-    return card;
-  }
-
-  /*
-   * ============================================================
-   * GROUPED HOME
-   * ============================================================
-   */
-  function groupVisibleForHome(
-    entries,
-    mode
-  ){
-
-    const groups = new Map();
-
-    function bucketName(t){
-
-      if (mode === 'album'){
-        return (
-          (t.album || '').trim() ||
-          'Unknown Album'
-        );
+    // Buckets `visible` into named, sorted sections for grouped Home view.
+    function groupVisibleForHome(entries, mode){
+      const groups = new Map();
+      function bucketName(t){
+        if (mode === 'album') return (t.album || '').trim() || 'Unknown Album';
+        if (mode === 'artist') return (t.artist || '').trim() || 'Unknown Artist';
+        if (mode === 'genre') return (t.genre || '').trim() || 'Unknown Genre';
+        if (mode === 'date'){
+          if (!t.addedAt) return 'Unknown Date';
+          return new Date(t.addedAt).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+        }
+        return '';
       }
-
-      if (mode === 'artist'){
-        return (
-          (t.artist || '').trim() ||
-          'Unknown Artist'
-        );
-      }
-
-      if (mode === 'genre'){
-        return (
-          (t.genre || '').trim() ||
-          'Unknown Genre'
-        );
-      }
-
+      entries.forEach(entry => {
+        const name = bucketName(entry.t);
+        if (!groups.has(name)) groups.set(name, []);
+        groups.get(name).push(entry);
+      });
+      let out = Array.from(groups.entries()).map(([name, items]) => ({ name, items }));
+      const unknownNames = ['Unknown Album', 'Unknown Artist', 'Unknown Genre', 'Unknown Date'];
       if (mode === 'date'){
-
-        if (!t.addedAt){
-          return 'Unknown Date';
-        }
-
-        return new Date(
-          t.addedAt
-        ).toLocaleString(
-          undefined,
-          {
-            month: 'long',
-            year: 'numeric'
-          }
-        );
-      }
-
-      return '';
-    }
-
-    entries.forEach(entry => {
-
-      const name =
-        bucketName(entry.t);
-
-      if (!groups.has(name)){
-        groups.set(
-          name,
-          []
-        );
-      }
-
-      groups.get(name).push(entry);
-    });
-
-    let out =
-      Array.from(
-        groups.entries()
-      ).map(
-        ([name, items]) => ({
-          name,
-          items
-        })
-      );
-
-    const unknownNames = [
-      'Unknown Album',
-      'Unknown Artist',
-      'Unknown Genre',
-      'Unknown Date'
-    ];
-
-    if (mode === 'date'){
-
-      out.sort(
-        (a, b) => {
-
-          const aMax =
-            Math.max(
-              ...a.items.map(
-                e => e.t.addedAt || 0
-              )
-            );
-
-          const bMax =
-            Math.max(
-              ...b.items.map(
-                e => e.t.addedAt || 0
-              )
-            );
-
+        out.sort((a, b) => {
+          const aMax = Math.max(...a.items.map(e => e.t.addedAt || 0));
+          const bMax = Math.max(...b.items.map(e => e.t.addedAt || 0));
           return bMax - aMax;
+        });
+        out.forEach(g => g.items.sort((a, b) => (b.t.addedAt || 0) - (a.t.addedAt || 0)));
+      } else {
+        out.sort((a, b) => {
+          if (unknownNames.includes(a.name)) return 1;
+          if (unknownNames.includes(b.name)) return -1;
+          return a.name.localeCompare(b.name);
+        });
+        if (mode === 'album'){
+          out.forEach(g => g.items.sort((a, b) =>
+            (a.t.trackNum || Number.MAX_SAFE_INTEGER) - (b.t.trackNum || Number.MAX_SAFE_INTEGER) || a.t.title.localeCompare(b.t.title)));
         }
-      );
-
-      out.forEach(
-        g => g.items.sort(
-          (a, b) =>
-            (b.t.addedAt || 0) -
-            (a.t.addedAt || 0)
-        )
-      );
-
-    } else {
-
-      out.sort(
-        (a, b) => {
-
-          if (
-            unknownNames.includes(a.name)
-          ){
-            return 1;
-          }
-
-          if (
-            unknownNames.includes(b.name)
-          ){
-            return -1;
-          }
-
-          return a.name.localeCompare(
-            b.name
-          );
-        }
-      );
-
-      if (mode === 'album'){
-
-        out.forEach(
-          g => g.items.sort(
-            (a, b) =>
-              (
-                a.t.trackNum ||
-                Number.MAX_SAFE_INTEGER
-              ) -
-              (
-                b.t.trackNum ||
-                Number.MAX_SAFE_INTEGER
-              ) ||
-              a.t.title.localeCompare(
-                b.t.title
-              )
-          )
-        );
       }
+      return out;
     }
 
-    return out;
-  }
-
-  /*
-   * ============================================================
-   * RENDER NORMAL CONTENT
-   * ============================================================
-   */
-  if (useDetailedAlbum){
-
-    renderAlbumDetail(
-      currentView.artist,
-      currentView.album,
-      visible
-    );
-
-  } else if (isArtists){
-
-    pagedItems.forEach(
-      ({ name, tracks }) => {
-
-        const entry =
-          artistThumbs.get(name);
-
-        const thumbUrl =
-          entry
-            ? entry.url
-            : null;
-
-        const card =
-          document.createElement('div');
-
-        card.className =
-          'card artist-card';
-
-        const cardArtInner =
-          thumbUrl
-            ? `<img
-                src="${thumbUrl}"
-                loading="lazy"
-                decoding="async"
-                alt=""
-              >`
-            : PERSON_ICON;
-
-        const thumbClearHtml =
-          thumbUrl
-            ? `<button
-                class="card-thumb-clear-btn"
-                type="button"
-                title="Remove thumbnail"
-              >
-                &times;
-              </button>`
-            : '';
-
+    if (useDetailedAlbum){
+      renderAlbumDetail(currentView.artist, currentView.album, visible);
+    } else if (isArtists){
+      pagedItems.forEach(({ name, tracks }) => {
+        const entry = artistThumbs.get(name);
+        const thumbUrl = entry ? entry.url : null;
+        const card = document.createElement('div');
+        card.className = 'card artist-card';
+        const cardArtInner = thumbUrl ? `<img src="${thumbUrl}" loading="lazy" decoding="async" alt="">` : PERSON_ICON;
+        const thumbClearHtml = thumbUrl
+          ? `<button class="card-thumb-clear-btn" type="button" title="Remove thumbnail">&times;</button>`
+          : '';
         card.innerHTML = `
-          <div class="card-art card-art-round">
-            ${cardArtInner}
-          </div>
-
-          <button
-            class="card-thumb-btn"
-            type="button"
-            title="Set artist thumbnail"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-          </button>
-
+          <div class="card-art card-art-round">${cardArtInner}</div>
+          <button class="card-thumb-btn" type="button" title="Set artist thumbnail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
           ${thumbClearHtml}
-
-          <div class="card-title">
-            ${escapeHtml(name)}
-          </div>
-
-          <div class="card-sub">
-            ${tracks.length}
-            track${tracks.length === 1 ? '' : 's'}
-          </div>
+          <div class="card-title">${escapeHtml(name)}</div>
+          <div class="card-sub">${tracks.length} track${tracks.length === 1 ? '' : 's'}</div>
         `;
-
-        card.addEventListener(
-          'click',
-          (e) => {
-
-            if (
-              e.target.closest(
-                '.card-thumb-btn'
-              ) ||
-              e.target.closest(
-                '.card-thumb-clear-btn'
-              )
-            ){
-              return;
-            }
-
-            currentView = {
-              type: 'artistAlbums',
-              artist: name
-            };
-
-            scheduleRender();
-          }
-        );
-
-        card
-          .querySelector('.card-thumb-btn')
-          .addEventListener(
-            'click',
-            (e) => {
-              e.stopPropagation();
-              openArtistThumbPicker(name);
-            }
-          );
-
-        const artistClearBtn =
-          card.querySelector(
-            '.card-thumb-clear-btn'
-          );
-
-        if (artistClearBtn){
-
-          artistClearBtn.addEventListener(
-            'click',
-            (e) => {
-              e.stopPropagation();
-              clearArtistThumb(name);
-            }
-          );
-        }
-
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.card-thumb-btn') || e.target.closest('.card-thumb-clear-btn')) return;
+          currentView = { type: 'artistAlbums', artist: name };
+          scheduleRender();
+        });
+        card.querySelector('.card-thumb-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openArtistThumbPicker(name);
+        });
+        const artistClearBtn = card.querySelector('.card-thumb-clear-btn');
+        if (artistClearBtn) artistClearBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          clearArtistThumb(name);
+        });
         cardGrid.appendChild(card);
-      }
-    );
-
-  } else if (isArtistAlbums){
-
-    pagedItems.forEach(
-      ({ name, tracks }) => {
-
-        const key =
-          albumKey(
-            currentView.artist,
-            name
-          );
-
-        const entry =
-          albumThumbs.get(key);
-
-        const thumbUrl =
-          entry
-            ? entry.url
-            : null;
-
-        const card =
-          document.createElement('div');
-
-        card.className =
-          'card';
-
-        const cardArtInner =
-          albumArtMarkup(
-            entry,
-            name
-          );
-
-        const thumbClearHtml =
-          thumbUrl
-            ? `<button
-                class="card-thumb-clear-btn"
-                type="button"
-                title="Remove thumbnail"
-              >
-                &times;
-              </button>`
-            : '';
-
+      });
+    } else if (isArtistAlbums){
+      pagedItems.forEach(({ name, tracks }) => {
+        const key = albumKey(currentView.artist, name);
+        const entry = albumThumbs.get(key);
+        const thumbUrl = entry ? entry.url : null;
+        const card = document.createElement('div');
+        card.className = 'card';
+        const cardArtInner = albumArtMarkup(entry, name);
+        const thumbClearHtml = thumbUrl
+          ? `<button class="card-thumb-clear-btn" type="button" title="Remove thumbnail">&times;</button>`
+          : '';
         card.innerHTML = `
-          <div class="card-art">
-            ${cardArtInner}
-          </div>
-
-          <button
-            class="card-thumb-btn"
-            type="button"
-            title="Set album thumbnail"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-          </button>
-
+          <div class="card-art">${cardArtInner}</div>
+          <button class="card-thumb-btn" type="button" title="Set album thumbnail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
           ${thumbClearHtml}
-
-          <div class="card-title">
-            ${escapeHtml(name)}
-          </div>
-
-          <div class="card-sub">
-            ${tracks.length}
-            track${tracks.length === 1 ? '' : 's'}
-          </div>
+          <div class="card-title">${escapeHtml(name)}</div>
+          <div class="card-sub">${tracks.length} track${tracks.length === 1 ? '' : 's'}</div>
         `;
-
-        card.addEventListener(
-          'click',
-          (e) => {
-
-            if (
-              e.target.closest(
-                '.card-thumb-btn'
-              ) ||
-              e.target.closest(
-                '.card-thumb-clear-btn'
-              )
-            ){
-              return;
-            }
-
-            currentView = {
-              type: 'album',
-              artist: currentView.artist,
-              album: name
-            };
-
-            scheduleRender();
-          }
-        );
-
-        card
-          .querySelector('.card-thumb-btn')
-          .addEventListener(
-            'click',
-            (e) => {
-              e.stopPropagation();
-              openAlbumThumbPicker(key);
-            }
-          );
-
-        const albumClearBtn =
-          card.querySelector(
-            '.card-thumb-clear-btn'
-          );
-
-        if (albumClearBtn){
-
-          albumClearBtn.addEventListener(
-            'click',
-            (e) => {
-              e.stopPropagation();
-              clearAlbumThumb(key);
-            }
-          );
-        }
-
+        card.addEventListener('click', (e) => {
+          if (e.target.closest('.card-thumb-btn') || e.target.closest('.card-thumb-clear-btn')) return;
+          currentView = { type: 'album', artist: currentView.artist, album: name };
+          scheduleRender();
+        });
+        card.querySelector('.card-thumb-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          openAlbumThumbPicker(key);
+        });
+        const albumClearBtn = card.querySelector('.card-thumb-clear-btn');
+        if (albumClearBtn) albumClearBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          clearAlbumThumb(key);
+        });
         cardGrid.appendChild(card);
-      }
-    );
-
-  } else if (isBrowse){
-
-    cardGrid.classList.add(
-      'browse-grid'
-    );
-
-    cardGrid.style.gridTemplateColumns =
-      'repeat(auto-fill, minmax(200px, 1fr))';
-
-    cardGrid.style.gap = '10px';
-
-    const icon =
-      currentView.mode === 'year'
-        ? CALENDAR_ICON
-        : GENRE_ICON;
-
-    pagedItems.forEach(
-      ({ name, tracks }) => {
-
-        const card =
-          document.createElement('div');
-
-        card.className =
-          'browse-card';
-
+      });
+    } else if (isBrowse){
+      cardGrid.classList.add('browse-grid');
+      cardGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+      cardGrid.style.gap = '10px';
+      const icon = currentView.mode === 'year' ? CALENDAR_ICON : GENRE_ICON;
+      pagedItems.forEach(({ name, tracks }) => {
+        const card = document.createElement('div');
+        card.className = 'browse-card';
         card.innerHTML = `
-          <div class="browse-card-icon">
-            ${icon}
-          </div>
-
+          <div class="browse-card-icon">${icon}</div>
           <div class="browse-card-text">
-            <div class="browse-card-title">
-              ${escapeHtml(name)}
-            </div>
-
-            <div class="browse-card-sub">
-              ${tracks.length}
-              track${tracks.length === 1 ? '' : 's'}
-            </div>
+            <div class="browse-card-title">${escapeHtml(name)}</div>
+            <div class="browse-card-sub">${tracks.length} track${tracks.length === 1 ? '' : 's'}</div>
           </div>
         `;
-
-        card.addEventListener(
-          'click',
-          () => {
-
-            currentView = {
-              type: 'browseGroup',
-              mode: currentView.mode,
-              value: name
-            };
-
-            scheduleRender();
-          }
-        );
-
+        card.addEventListener('click', () => {
+          currentView = { type: 'browseGroup', mode: currentView.mode, value: name };
+          scheduleRender();
+        });
         cardGrid.appendChild(card);
-      }
-    );
-
-  } else if (isGroupedHome){
-
-    cardGrid.classList.remove(
-      'virtual-track-grid'
-    );
-
-    cardGrid.style.paddingTop = '';
-    cardGrid.style.paddingBottom = '';
-
-    virtualLastWindowStart = -1;
-    virtualLastWindowEnd = -1;
-    virtualLastMode = '';
-
-    const sections =
-      groupVisibleForHome(
-        visible,
-        settings.homeGrouping
-      );
-
-    sections.forEach(
-      section => {
-
-        const header =
-          document.createElement('div');
-
-        header.className =
-          'card-grid-section-header';
-
-        header.innerHTML = `
-          <span>
-            ${escapeHtml(section.name)}
-          </span>
-
-          <span class="card-grid-section-count">
-            ${section.items.length}
-            song${section.items.length === 1 ? '' : 's'}
-          </span>
-        `;
-
-        cardGrid.appendChild(
-          header
-        );
-
-        const groupIds =
-          section.items.map(
-            ({ t }) => t.id
-          );
-
-        section.items.forEach(
-          ({ t, i }) => {
-
-            cardGrid.appendChild(
-              buildFlatTrackCard(
-                t,
-                i,
-                false,
-                groupIds
-              )
-            );
-          }
-        );
-      }
-    );
-
-  } else {
-
-    const virtual =
-      getVirtualWindow(
-        pagedItems.length,
-        220,
-        settings.cardGap
-      );
-
-    cardGrid.classList.toggle(
-      'virtual-track-grid',
-      virtual.enabled
-    );
-
-    cardGrid.classList.toggle(
-      'no-entrance-anim',
-      skipSidebar
-    );
-
-    if (virtual.enabled){
-
-      cardGrid.style.paddingTop =
-        `${virtual.before * virtual.rowSpan}px`;
-
-      cardGrid.style.paddingBottom =
-        `${virtual.after * virtual.rowSpan}px`;
-
-      virtualLastWindowStart =
-        virtual.start;
-
-      virtualLastWindowEnd =
-        virtual.end;
-
-      virtualLastMode =
-        `${currentView.type}|${settings.view}|${settings.cardSize}|${settings.cardGap}`;
-
-    } else {
-
+      });
+    } else if (isGroupedHome){
+      cardGrid.classList.remove('virtual-track-grid');
       cardGrid.style.paddingTop = '';
       cardGrid.style.paddingBottom = '';
-
+      virtualLastWindowStart = -1;
+      virtualLastWindowEnd = -1;
+      virtualLastMode = '';
+      const sections = groupVisibleForHome(visible, settings.homeGrouping);
+      sections.forEach(section => {
+        const header = document.createElement('div');
+        header.className = 'card-grid-section-header';
+        header.innerHTML = `<span>${escapeHtml(section.name)}</span><span class="card-grid-section-count">${section.items.length} song${section.items.length === 1 ? '' : 's'}</span>`;
+        cardGrid.appendChild(header);
+        const groupIds = section.items.map(({ t }) => t.id);
+        section.items.forEach(({ t, i }) => {
+          cardGrid.appendChild(buildFlatTrackCard(t, i, false, groupIds));
+        });
+      });
+    } else {
+    const virtual = getVirtualWindow(pagedItems.length, 220, settings.cardGap);
+    cardGrid.classList.toggle('virtual-track-grid', virtual.enabled);
+    cardGrid.classList.toggle('no-entrance-anim', skipSidebar);
+    if (virtual.enabled) {
+      cardGrid.style.paddingTop = `${virtual.before * virtual.rowSpan}px`;
+      cardGrid.style.paddingBottom = `${virtual.after * virtual.rowSpan}px`;
+      virtualLastWindowStart = virtual.start;
+      virtualLastWindowEnd = virtual.end;
+      virtualLastMode = `${currentView.type}|${settings.view}|${settings.cardSize}|${settings.cardGap}`;
+    } else {
+      cardGrid.style.paddingTop = '';
+      cardGrid.style.paddingBottom = '';
       virtualLastWindowStart = -1;
       virtualLastWindowEnd = -1;
       virtualLastMode = '';
     }
+    const renderVisible = virtual.enabled ? pagedItems.slice(virtual.start, virtual.end) : pagedItems;
+    renderVisible.forEach(({ t, i }) => {
+      cardGrid.appendChild(buildFlatTrackCard(t, i, !!activePlaylist));
+    });
+    }
 
-    const renderVisible =
-      virtual.enabled
-        ? pagedItems.slice(
-            virtual.start,
-            virtual.end
-          )
-        : pagedItems;
-
-    renderVisible.forEach(
-      ({ t, i }) => {
-
-        cardGrid.appendChild(
-          buildFlatTrackCard(
-            t,
-            i,
-            !!activePlaylist
-          )
-        );
-      }
-    );
+    renderPlaylistList();
+    if (typeof window.updatePaginationControls === 'function') {
+      window.updatePaginationControls(paginationSource ? paginationSource.length : 0);
+    }
   }
-
-  /*
-   * Keep playlist UI and pagination in sync.
-   */
-  renderPlaylistList();
-
-  if (
-    typeof window.updatePaginationControls ===
-    'function'
-  ){
-    window.updatePaginationControls(
-      paginationSource
-        ? paginationSource.length
-        : 0
-    );
-  }
-}
 
   let searchDebounceTimer = null;
   searchInput.addEventListener('input', () => {
