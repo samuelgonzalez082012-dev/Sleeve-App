@@ -1414,6 +1414,23 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   function getCtx(){
     if (!audioCtx){
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            /*
+       * Apply the saved Sleeve-only output as soon as the shared
+       * AudioContext exists. setSinkId is asynchronous, so playback
+       * itself does not wait for this operation.
+       */
+      if (
+        settings &&
+        settings.audioOutputId &&
+        typeof audioCtx.setSinkId === 'function'
+      ){
+        audioCtx.setSinkId(settings.audioOutputId).catch(err => {
+          console.warn(
+            '[Sleeve] Could not restore saved audio output:',
+            err
+          );
+        });
+      }
       gainNode = audioCtx.createGain();
       eqLimiterNode = audioCtx.createDynamicsCompressor();
       eqLimiterNode.threshold.value = -18;
@@ -1647,6 +1664,8 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   // ---------- Customization settings ----------
   const SETTINGS_KEY = 'sleeveSettings';
   const DEFAULT_SETTINGS = {
+    audioOutputId: 'default',
+    audioOutputLabel: 'System Default',
     accent: 'cyan',
     accentCustom: null,
     theme: 'navy',
@@ -1798,7 +1817,326 @@ topPageNavigation: true,
   }
 
   let settings = Object.assign({}, DEFAULT_SETTINGS);
+  // ---------- Audio output routing ----------
+  //
+  // Sleeve controls its own audio destination without changing the
+  // Windows system default output device.
+  //
+  // All normal media, FLAC/WebAudio playback, EQ, and Demucs stems
+  // ultimately pass through the shared AudioContext, so changing the
+  // AudioContext sink routes Sleeve's audio as one unit.
 
+  let audioOutputDevices = [];
+  let audioOutputRefreshTimer = null;
+
+  function supportsAudioOutputSelection(){
+    return !!(
+      window.AudioContext &&
+      AudioContext.prototype &&
+      typeof AudioContext.prototype.setSinkId === 'function'
+    );
+  }
+
+  async function enumerateAudioOutputs(){
+    if (!navigator.mediaDevices ||
+        typeof navigator.mediaDevices.enumerateDevices !== 'function'){
+      audioOutputDevices = [];
+      renderAudioOutputDevices();
+      return [];
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      audioOutputDevices = devices.filter(
+        device => device.kind === 'audiooutput'
+      );
+
+      renderAudioOutputDevices();
+      return audioOutputDevices;
+    } catch (err) {
+      console.warn('[Sleeve] Could not enumerate audio outputs:', err);
+      audioOutputDevices = [];
+      renderAudioOutputDevices();
+      return [];
+    }
+  }
+
+  function getAudioOutputLabel(device){
+    if (device.deviceId === 'default'){
+      return 'System Default';
+    }
+
+    return device.label || `Speaker / Output ${audioOutputDevices.indexOf(device) + 1}`;
+  }
+
+  async function applyAudioOutputDevice(deviceId, options = {}){
+    const requestedId = deviceId || 'default';
+
+    if (!audioCtx){
+      try {
+        getCtx();
+      } catch (err) {
+        console.warn('[Sleeve] Could not initialize audio context:', err);
+        return false;
+      }
+    }
+
+    if (!audioCtx ||
+        typeof audioCtx.setSinkId !== 'function'){
+      console.warn('[Sleeve] This Electron/Chromium build does not support AudioContext.setSinkId().');
+      return false;
+    }
+
+    try {
+      await audioCtx.setSinkId(requestedId);
+
+      const device = audioOutputDevices.find(
+        d => d.deviceId === requestedId
+      );
+
+      settings.audioOutputId = requestedId;
+      settings.audioOutputLabel =
+        requestedId === 'default'
+          ? 'System Default'
+          : getAudioOutputLabel(device || {
+              deviceId: requestedId,
+              label: ''
+            });
+
+      if (!options.skipSave){
+        saveSettings();
+      }
+
+      syncAudioOutputControls();
+      return true;
+    } catch (err) {
+      console.warn(
+        `[Sleeve] Could not switch audio output to "${requestedId}":`,
+        err
+      );
+
+      // If the selected device vanished, automatically return to the
+      // Windows/system default rather than leaving Sleeve silent.
+      if (requestedId !== 'default'){
+        try {
+          await audioCtx.setSinkId('default');
+
+          settings.audioOutputId = 'default';
+          settings.audioOutputLabel = 'System Default';
+
+          if (!options.skipSave){
+            saveSettings();
+          }
+
+          syncAudioOutputControls();
+          return true;
+        } catch (fallbackErr) {
+          console.warn(
+            '[Sleeve] Could not fall back to system default output:',
+            fallbackErr
+          );
+        }
+      }
+
+      return false;
+    }
+  }
+
+  function createAudioOutputControls(){
+    if (document.getElementById('audioOutputSection')) return;
+
+    const drawerBody = document.querySelector('.drawer-body');
+    if (!drawerBody) return;
+
+    const section = document.createElement('section');
+    section.id = 'audioOutputSection';
+    section.className = 'drawer-section audio-output-section';
+
+    section.innerHTML = `
+      <div class="drawer-section-title">Audio Output</div>
+
+      <div class="audio-output-card">
+        <div class="audio-output-heading">
+          <div>
+            <div class="audio-output-label">Output device</div>
+            <div class="audio-output-description">
+              Choose where Sleeve sends its audio.
+            </div>
+          </div>
+          <span class="audio-output-status" id="audioOutputStatus">Ready</span>
+        </div>
+
+        <select
+          id="audioOutputSelect"
+          class="audio-output-select"
+          aria-label="Sleeve audio output device"
+        >
+          <option value="default">System Default</option>
+        </select>
+
+        <div class="audio-output-actions">
+          <button
+            id="audioOutputRefresh"
+            class="audio-output-refresh"
+            type="button"
+          >
+            Refresh devices
+          </button>
+        </div>
+
+        <div class="audio-output-note">
+          This only changes Sleeve's audio output. It does not change
+          Windows' default speaker for the rest of your computer.
+        </div>
+      </div>
+    `;
+
+    /*
+     * Put audio output near the top of Settings so it is easy to find,
+     * rather than burying an important playback setting at the bottom.
+     */
+    const firstSection = drawerBody.querySelector('.drawer-section');
+
+    if (firstSection){
+      drawerBody.insertBefore(section, firstSection);
+    } else {
+      drawerBody.prepend(section);
+    }
+
+    const select = document.getElementById('audioOutputSelect');
+    const refresh = document.getElementById('audioOutputRefresh');
+
+    select.addEventListener('change', async () => {
+      const deviceId = select.value;
+
+      const status = document.getElementById('audioOutputStatus');
+      if (status) status.textContent = 'Switching…';
+
+      const success = await applyAudioOutputDevice(deviceId);
+
+      if (status){
+        status.textContent = success ? 'Active' : 'Unavailable';
+      }
+    });
+
+    refresh.addEventListener('click', async () => {
+      await refreshAudioOutputDevices();
+    });
+  }
+
+  function renderAudioOutputDevices(){
+    const select = document.getElementById('audioOutputSelect');
+    if (!select) return;
+
+    const currentId = settings.audioOutputId || 'default';
+
+    select.innerHTML = '';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = 'default';
+    defaultOption.textContent = 'System Default';
+    select.appendChild(defaultOption);
+
+    const seenIds = new Set(['default']);
+
+    audioOutputDevices.forEach(device => {
+      if (!device.deviceId || seenIds.has(device.deviceId)) return;
+
+      seenIds.add(device.deviceId);
+
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.textContent = getAudioOutputLabel(device);
+
+      select.appendChild(option);
+    });
+
+    /*
+     * If Windows disconnected the previously saved speaker, don't leave
+     * a dead selection in the UI.
+     */
+    const stillExists =
+      currentId === 'default' ||
+      audioOutputDevices.some(device => device.deviceId === currentId);
+
+    if (!stillExists){
+      settings.audioOutputId = 'default';
+      settings.audioOutputLabel = 'System Default';
+      saveSettings();
+    }
+
+    select.value = stillExists ? currentId : 'default';
+
+    const status = document.getElementById('audioOutputStatus');
+
+    if (status){
+      status.textContent = supportsAudioOutputSelection()
+        ? 'Ready'
+        : 'Not supported';
+    }
+  }
+
+  function syncAudioOutputControls(){
+    createAudioOutputControls();
+
+    const select = document.getElementById('audioOutputSelect');
+    if (!select) return;
+
+    renderAudioOutputDevices();
+
+    const desired = settings.audioOutputId || 'default';
+
+    if ([...select.options].some(option => option.value === desired)){
+      select.value = desired;
+    } else {
+      select.value = 'default';
+    }
+  }
+
+  async function refreshAudioOutputDevices(){
+    createAudioOutputControls();
+
+    const status = document.getElementById('audioOutputStatus');
+
+    if (status){
+      status.textContent = 'Scanning…';
+    }
+
+    await enumerateAudioOutputs();
+
+    /*
+     * Re-apply the saved device after enumeration because Chromium can
+     * expose the output list asynchronously after the window starts.
+     */
+    const desired = settings.audioOutputId || 'default';
+    const success = await applyAudioOutputDevice(desired, {
+      skipSave: true
+    });
+
+    if (status){
+      status.textContent = success ? 'Active' : 'Unavailable';
+    }
+  }
+
+  function startAudioOutputMonitoring(){
+    if (!navigator.mediaDevices) return;
+
+    if (typeof navigator.mediaDevices.addEventListener === 'function'){
+      navigator.mediaDevices.addEventListener(
+        'devicechange',
+        () => {
+          clearTimeout(audioOutputRefreshTimer);
+
+          audioOutputRefreshTimer = setTimeout(() => {
+            enumerateAudioOutputs();
+          }, 250);
+        }
+      );
+    }
+
+    enumerateAudioOutputs();
+  }
   function loadSettings(){
     try{
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -2033,9 +2371,13 @@ topPageNavigation: true,
     customizeDrawer.classList.add('open');
     drawerOverlay.classList.add('open');
     navCustomize.classList.add('active');
+
+    createAudioOutputControls();
     syncDrawerControls();
+    syncAudioOutputControls();
+
     renderStats();
-  }
+}
   function applyTopPageNavigation(){
     if (!mainNav || !topPageNav) return;
     if (settings.topPageNavigation) {
@@ -2219,9 +2561,12 @@ topPageNavigation: true,
     applyTopPageNavigation();
   });
 
-  loadSettings();
-  applySettings();
-  applyTopPageNavigation();
+ loadSettings();
+applySettings();
+applyTopPageNavigation();
+
+createAudioOutputControls();
+startAudioOutputMonitoring();
 
 
   const ICON_PLAY = '<path d="M8 5v14l11-7z"/>';
@@ -5412,10 +5757,21 @@ seekBar.addEventListener('change', () => {
   }
   function seekBy(delta){
     if (currentIndex === -1) return;
+
     const dur = getDuration() || 0;
-    const t = Math.max(0, Math.min(getCurrentTime() + delta, dur));
-    if (currentEngine === 'wasm') wasmSeek(t); else mediaEl.currentTime = t;
-  }
+    const t = Math.max(
+      0,
+      Math.min(getCurrentTime() + delta, dur)
+    );
+
+    if (currentEngine === 'wasm'){
+      wasmSeek(t);
+    } else if (currentEngine === 'stems'){
+      seekStems(t);
+    } else {
+      mediaEl.currentTime = t;
+    }
+}
 
   document.addEventListener('keydown', (e) => {
     const tag = document.activeElement.tagName;

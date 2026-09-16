@@ -1,0 +1,455 @@
+/* ============================================================
+   SLEEVE PRESET OVERRIDES
+   ============================================================
+
+   This file is intentionally separate from Main.css.
+
+   Presets:
+     .preset-sleeve
+     .preset-spotify
+     .preset-amazonMusic
+
+   IMPORTANT:
+   - Visual styling only.
+   - Does not change playback/functionality.
+   - Main.css remains the base stylesheet.
+   - These rules are loaded after Main.css.
+   ============================================================ */
+
+
+/* ============================================================
+   SLEEVE DEFAULT
+   ============================================================ */
+
+body.preset-sleeve {
+    --preset-bg: #0b0d0f;
+    --preset-panel: #111417;
+    --preset-panel-soft: #171a1e;
+    --preset-card: #15181c;
+    --preset-hover: rgba(255, 255, 255, 0.055);
+    --preset-active: rgba(255, 255, 255, 0.085);
+    --preset-border: rgba(255, 255, 255, 0.08);
+    --preset-text: #f4f6f8;
+    --preset-muted: #9ba3aa;
+    --preset-accent: #ffffff;
+}
+
+body.preset-sleeve #app,
+body.preset-sleeve .app,
+body.preset-sleeve main {
+    background: var(--preset-bg);
+}
+
+
+/* ============================================================
+   SPOTIFY-INSPIRED
+   ============================================================ */
+
+body.preset-spotify {
+    --preset-bg: #121212;
+    --preset-panel: #181818;
+    --preset-panel-soft: #202020;
+    --preset-card: #181818;
+    --preset-hover: rgba(255, 255, 255, 0.075);
+    --preset-active: rgba(255, 255, 255, 0.12);
+    --preset-border: rgba(255, 255, 255, 0.07);
+    --preset-text: #ffffff;
+    --preset-muted: #b3b3b3;
+    --preset-accent: #1ed760;
+}
+
+
+/* Main background */
+
+body.preset-spotify {
+    background: #121212;
+    color: #ffffff;
+}
+
+
+/* Major application surfaces */
+
+body.preset-spotify .sidebar,
+body.preset-spotify .side-panel,
+body.preset-spotify .settings-panel,
+body.preset-spotify .settings-modal,
+body.preset-spotify .modal,
+body.preset-spotify .library-panel {
+    background: #181818;
+    border-color: rgba(255, 255, 255, 0.06);
+}
+
+
+/* Cards */
+
+body.preset-spotify .card,
+body.preset-spotify .album-card,
+body.preset-spotify .artist-card,
+body.preset-spotify .playlist-card,
+body.preset-spotify .track-card {
+    background: #181818;
+    border-color: rgba(255, 255, 255, 0.045);
+    border-radius: 8px;
+}
+
+
+body.preset-spotify .card:hover,
+body.preset-spotify .album-card:hover,
+body.preset-spotify .artist-card:hover,
+body.preset-spotify .playlist-card:hover,
+body.preset-spotify .track-card:hover {
+    background: #282828;
+}
+
+
+/* Track rows */
+
+body.preset-spotify .track-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+
+body.preset-spotify .track-item.active,
+body.preset-spotify .track-item.selected {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+
+/* Buttons */
+
+body.preset-spotify button {
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.12s ease;
+}
+
+
+body.preset-spotify button:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+
+/* Primary buttons */
+
+body.preset-spotify .primary,
+body.preset-spotify .primary-btn,
+body.preset-spotify .play-btn,
+body.preset-spotify .play-button {
+    background: #1ed760;
+    color: #000000;
+    border-color: #1ed760;
+}
+
+
+body.preset-spotify .primary:hover,
+body.preset-spotify .primary-btn:hover,
+body.preset-spotify .play-btn:hover,
+body.preset-spotify .play-button:hover {
+    background: #1fdf64;
+    color: #000000;
+}
+
+
+/* Accent elements */
+
+body.preset-spotify .accent,
+body.preset-spotify .active,
+body.preset-spotify .selected,
+body.preset-spotify .progress-fill {
+    --accent-color: #1ed760;
+}
+
+
+/* Range sliders */
+
+body.preset-spotify input[type="range"] {
+    accent-color: #1ed760;
+}
+
+
+/* Links / highlighted text */
+
+body.preset-spotify a:hover,
+body.preset-spotify .accent-text {
+    color: #1ed760;
+}
+
+
+/* Navigation */
+
+body.preset-spotify .nav-item.active,
+body.preset-spotify .sidebar-item.active,
+body.preset-spotify .nav-link.active {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+
+/* Section headings */
+
+body.preset-spotify h1,
+body.preset-spotify h2,
+body.preset-spotify h3 {
+    color: #ffffff;
+}
+
+
+/* Muted text */
+
+body.preset-spotify .muted,
+body.preset-spotify .secondary-text,
+body.preset-spotify .text-muted {
+    color: #b3b3b3;
+}
+
+
+/* ============================================================
+   AMAZON MUSIC-INSPIRED
+   ============================================================ */
+
+body.preset-amazonMusic {
+    --preset-bg: #101820;
+    --preset-panel: #16232d;
+    --preset-panel-soft: #1b2b36;
+    --preset-card: #182732;
+    --preset-hover: rgba(255, 255, 255, 0.065);
+    --preset-active: rgba(255, 255, 255, 0.10);
+    --preset-border: rgba(255, 255, 255, 0.08);
+    --preset-text: #f5f8fa;
+    --preset-muted: #aebbc3;
+    --preset-accent: #00a8e1;
+}
+
+
+/* Main background */
+
+body.preset-amazonMusic {
+    background: #101820;
+    color: #f5f8fa;
+}
+
+
+/* Major application surfaces */
+
+body.preset-amazonMusic .sidebar,
+body.preset-amazonMusic .side-panel,
+body.preset-amazonMusic .settings-panel,
+body.preset-amazonMusic .settings-modal,
+body.preset-amazonMusic .modal,
+body.preset-amazonMusic .library-panel {
+    background: #16232d;
+    border-color: rgba(255, 255, 255, 0.075);
+}
+
+
+/* Cards */
+
+body.preset-amazonMusic .card,
+body.preset-amazonMusic .album-card,
+body.preset-amazonMusic .artist-card,
+body.preset-amazonMusic .playlist-card,
+body.preset-amazonMusic .track-card {
+    background: #182732;
+    border-color: rgba(255, 255, 255, 0.055);
+    border-radius: 6px;
+}
+
+
+body.preset-amazonMusic .card:hover,
+body.preset-amazonMusic .album-card:hover,
+body.preset-amazonMusic .artist-card:hover,
+body.preset-amazonMusic .playlist-card:hover,
+body.preset-amazonMusic .track-card:hover {
+    background: #20333f;
+}
+
+
+/* Track rows */
+
+body.preset-amazonMusic .track-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+}
+
+
+body.preset-amazonMusic .track-item.active,
+body.preset-amazonMusic .track-item.selected {
+    background: rgba(0, 168, 225, 0.14);
+}
+
+
+/* Buttons */
+
+body.preset-amazonMusic button {
+    transition:
+        background-color 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease,
+        transform 0.12s ease;
+}
+
+
+body.preset-amazonMusic button:hover {
+    background-color: rgba(255, 255, 255, 0.075);
+}
+
+
+/* Primary buttons */
+
+body.preset-amazonMusic .primary,
+body.preset-amazonMusic .primary-btn,
+body.preset-amazonMusic .play-btn,
+body.preset-amazonMusic .play-button {
+    background: #00a8e1;
+    color: #ffffff;
+    border-color: #00a8e1;
+}
+
+
+body.preset-amazonMusic .primary:hover,
+body.preset-amazonMusic .primary-btn:hover,
+body.preset-amazonMusic .play-btn:hover,
+body.preset-amazonMusic .play-button:hover {
+    background: #12b8ed;
+    color: #ffffff;
+}
+
+
+/* Accent elements */
+
+body.preset-amazonMusic .accent,
+body.preset-amazonMusic .active,
+body.preset-amazonMusic .selected,
+body.preset-amazonMusic .progress-fill {
+    --accent-color: #00a8e1;
+}
+
+
+/* Range sliders */
+
+body.preset-amazonMusic input[type="range"] {
+    accent-color: #00a8e1;
+}
+
+
+/* Links / highlighted text */
+
+body.preset-amazonMusic a:hover,
+body.preset-amazonMusic .accent-text {
+    color: #00a8e1;
+}
+
+
+/* Navigation */
+
+body.preset-amazonMusic .nav-item.active,
+body.preset-amazonMusic .sidebar-item.active,
+body.preset-amazonMusic .nav-link.active {
+    color: #ffffff;
+    background: rgba(0, 168, 225, 0.12);
+}
+
+
+/* Section headings */
+
+body.preset-amazonMusic h1,
+body.preset-amazonMusic h2,
+body.preset-amazonMusic h3 {
+    color: #f5f8fa;
+}
+
+
+/* Muted text */
+
+body.preset-amazonMusic .muted,
+body.preset-amazonMusic .secondary-text,
+body.preset-amazonMusic .text-muted {
+    color: #aebbc3;
+}
+
+
+/* ============================================================
+   AMAZON MUSIC HOME
+   ============================================================ */
+
+body.preset-amazonMusic .amazon-home-section {
+    background: transparent;
+}
+
+
+body.preset-amazonMusic .amazon-horizontal-row {
+    gap: 18px;
+}
+
+
+body.preset-amazonMusic .amazon-artist-card,
+body.preset-amazonMusic .amazon-playlist-card {
+    background: #182732;
+    border: 1px solid rgba(255, 255, 255, 0.055);
+    border-radius: 6px;
+    transition:
+        transform 0.16s ease,
+        background-color 0.16s ease,
+        border-color 0.16s ease;
+}
+
+
+body.preset-amazonMusic .amazon-artist-card:hover,
+body.preset-amazonMusic .amazon-playlist-card:hover {
+    background: #20333f;
+    border-color: rgba(0, 168, 225, 0.30);
+    transform: translateY(-2px);
+}
+
+
+body.preset-amazonMusic .amazon-library-section {
+    background: transparent;
+}
+
+
+body.preset-amazonMusic .amazon-song-list {
+    background: transparent;
+}
+
+
+/* ============================================================
+   SHARED PRESET POLISH
+   ============================================================ */
+
+body.preset-spotify .track-delete-btn,
+body.preset-amazonMusic .track-delete-btn {
+    border-color: rgba(255, 255, 255, 0.10);
+}
+
+
+body.preset-spotify .track-delete-btn:hover {
+    background: #1ed760;
+    border-color: #1ed760;
+    color: #000000;
+}
+
+
+body.preset-amazonMusic .track-delete-btn:hover {
+    background: #00a8e1;
+    border-color: #00a8e1;
+    color: #ffffff;
+}
+
+
+/* Keep images/artwork from being altered by presets */
+
+body.preset-sleeve img,
+body.preset-spotify img,
+body.preset-amazonMusic img {
+    image-rendering: auto;
+}
+
+
+/* Do not let presets interfere with hidden elements */
+
+body.preset-sleeve [hidden],
+body.preset-spotify [hidden],
+body.preset-amazonMusic [hidden] {
+    display: none !important;
+}
