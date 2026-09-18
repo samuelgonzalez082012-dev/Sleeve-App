@@ -3205,41 +3205,98 @@ startAudioOutputMonitoring();
 
   const LYRIC_TIME_TAG_RE = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 
-  // Auto-fetch lyrics from API if not already cached
+   // Auto-fetch lyrics from API if not already cached
   async function autoFetchLyrics(track) {
-    if (!track || track.lyrics) return; // Skip if lyrics already exist
-    if (lyricsFetchAttempts.get(track.id)) return; // Skip if already attempted
-    
-    // Mark as attempted so we don't try again
+    if (!track || track.lyrics) return;
+    if (lyricsFetchAttempts.get(track.id)) return;
+
+    const artist = String(track.artist || '').trim();
+    const originalTitle = String(track.title || '').trim();
+
+    if (!artist || !originalTitle) {
+      console.debug('Lyrics auto-fetch skipped: missing artist or title');
+      return;
+    }
+
+    // Remove common track-number prefixes:
+    // "01. Song", "01 - Song", "01 – Song", "01 Song", etc.
+    const cleanedTitle = originalTitle
+      .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
+      .replace(/^\s*\d{1,3}\s+/i, '')
+      .trim();
+
+    // Try the original title first, then progressively cleaned versions.
+    const titleVariants = [...new Set([
+      originalTitle,
+      cleanedTitle
+    ].filter(Boolean))];
+
+    // Mark as attempted only after we know there is something to search for.
     lyricsFetchAttempts.set(track.id, true);
 
-    const artist = (track.artist || '').trim();
-    const title = (track.title || '').trim();
-    
-    if (!artist || !title) return; // Need both to search
+    console.debug('Lyrics auto-fetch:', {
+      artist,
+      originalTitle,
+      titleVariants
+    });
 
-    try {
-      // Try LyricOvh API (free, no auth required)
-      const response = await fetch(
-        `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
-        { signal: AbortSignal.timeout(5000) }
-      );
+    for (const title of titleVariants) {
+      try {
+        const url =
+          `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
 
-      if (!response.ok) return;
+        console.debug('Lyrics lookup:', url);
 
-      const data = await response.json();
-      if (data.lyrics) {
-        track.lyrics = data.lyrics;
-        dbPut(track);
-        // Refresh lyrics display if this is the current track
-        if (currentIndex !== -1 && playlist[currentIndex].id === track.id) {
+        const response = await fetch(url, {
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (!response.ok) {
+          console.debug(
+            `Lyrics lookup failed for "${title}": HTTP ${response.status}`
+          );
+          continue;
+        }
+
+        const data = await response.json();
+
+        if (!data || !data.lyrics || !String(data.lyrics).trim()) {
+          console.debug(`Lyrics lookup returned no lyrics for "${title}"`);
+          continue;
+        }
+
+        // Store the fetched lyrics on the actual track object.
+        track.lyrics = String(data.lyrics).trim();
+
+        // Persist them so they survive closing/reopening Sleeve.
+        await dbPut(track);
+
+        console.debug(
+          `Lyrics found for "${artist} - ${title}" and saved successfully.`
+        );
+
+        // Refresh the existing lyrics panel if this is still
+        // the currently playing track.
+        if (
+          currentIndex !== -1 &&
+          playlist[currentIndex] &&
+          playlist[currentIndex].id === track.id
+        ) {
           renderLyricsPanel();
         }
+
+        return;
+      } catch (err) {
+        console.debug(
+          `Lyrics lookup error for "${title}":`,
+          err?.message || err
+        );
       }
-    } catch (err) {
-      // Silently fail — API errors, timeouts, etc. just mean no lyrics available
-      console.debug('Lyrics auto-fetch failed:', err.message);
     }
+
+    console.debug(
+      `No lyrics found for "${artist} - ${originalTitle}"`
+    );
   }
 
   function parseLyrics(raw){
