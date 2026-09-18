@@ -3178,6 +3178,7 @@ startAudioOutputMonitoring();
   const lyricsToggleBtn = document.getElementById('lyricsToggleBtn');
   const lyricsPanel = document.getElementById('lyricsPanel');
   const lyricsPanelLines = document.getElementById('lyricsPanelLines');
+  let lyricsFetchAttempts = new Map(); // Track which tracks we've already tried to fetch for
 
   const lyricsModalOverlay = document.getElementById('lyricsModalOverlay');
   const lyricsModal = document.getElementById('lyricsModal');
@@ -3203,6 +3204,43 @@ startAudioOutputMonitoring();
   let currentActiveLine = -1;
 
   const LYRIC_TIME_TAG_RE = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
+
+  // Auto-fetch lyrics from API if not already cached
+  async function autoFetchLyrics(track) {
+    if (!track || track.lyrics) return; // Skip if lyrics already exist
+    if (lyricsFetchAttempts.get(track.id)) return; // Skip if already attempted
+    
+    // Mark as attempted so we don't try again
+    lyricsFetchAttempts.set(track.id, true);
+
+    const artist = (track.artist || '').trim();
+    const title = (track.title || '').trim();
+    
+    if (!artist || !title) return; // Need both to search
+
+    try {
+      // Try LyricOvh API (free, no auth required)
+      const response = await fetch(
+        `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`,
+        { signal: AbortSignal.timeout(5000) }
+      );
+
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (data.lyrics) {
+        track.lyrics = data.lyrics;
+        dbPut(track);
+        // Refresh lyrics display if this is the current track
+        if (currentIndex !== -1 && playlist[currentIndex].id === track.id) {
+          renderLyricsPanel();
+        }
+      }
+    } catch (err) {
+      // Silently fail — API errors, timeouts, etc. just mean no lyrics available
+      console.debug('Lyrics auto-fetch failed:', err.message);
+    }
+  }
 
   function parseLyrics(raw){
     if (!raw) return { timed: false, lines: [] };
@@ -5251,6 +5289,9 @@ startAudioOutputMonitoring();
     updateNowPlayingText(track, index);
     savePlaybackState();
     scheduleRender(searchInput.value);
+
+    // Auto-fetch lyrics if missing (non-blocking)
+    autoFetchLyrics(track);
 
     if (track.kind === 'flac'){
       // If this FLAC has already been converted+split before, load the
