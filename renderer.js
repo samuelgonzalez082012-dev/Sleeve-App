@@ -1062,7 +1062,8 @@ stemAudio.drums.addEventListener('ended', () => {
   let trackWriteFlushPromise = null;
 
   function queueTrackWrite(track){
-    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null });
+    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null, musicBrainzReleaseId: track.musicBrainzReleaseId || null,
+ });
     if (!trackWriteTimer) trackWriteTimer = setTimeout(flushTrackWrites, 100);
   }
 
@@ -2688,6 +2689,7 @@ startAudioOutputMonitoring();
         genre: null,
         trackNum: null,
         duration: null,
+        musicBrainzReleaseId: null,
         manualMetadata: {},
         playCount: 0,
         lastPlayedAt: null,
@@ -2704,13 +2706,16 @@ startAudioOutputMonitoring();
     let cursor = 0;
     const scanBatch = () => {
       const end = Math.min(cursor + 12, newTracks.length);
-      for (; cursor < end; cursor++){
-        readTags(newTracks[cursor]);
-        // autoFetchAlbumArt is also called from inside readTags/autoFetchMetadata
-        // once we have more context, but fire an early attempt for tracks that
-        // already have artist+album in their file tags.
-        setTimeout(() => autoFetchAlbumArt(newTracks[cursor < newTracks.length ? cursor : newTracks.length - 1]), 800 + cursor * 200);
-      }
+     for (; cursor < end; cursor++){
+  const track = newTracks[cursor];
+
+  readTags(track);
+
+  setTimeout(() => {
+    autoFetchAlbumArt(track);
+  }, 800 + cursor * 200);
+}
+
       if (cursor < newTracks.length) setTimeout(scanBatch, 0);
     };
     scanBatch();
@@ -2781,6 +2786,86 @@ startAudioOutputMonitoring();
   // Fires after readTags when artist/album/year are still missing.
   // Non-blocking, never overwrites manual overrides or tags already found.
   const metadataFetchAttempts = new Map();
+// MusicBrainz requests must be throttled to <= 1 request/second.
+const musicBrainzQueue = [];
+let musicBrainzProcessing = false;
+
+function queueMusicBrainzRequest(requestFn) {
+  return new Promise((resolve, reject) => {
+    musicBrainzQueue.push({
+      requestFn,
+      resolve,
+      reject
+    });
+
+    processMusicBrainzQueue();
+  });
+}
+
+async function processMusicBrainzQueue() {
+  if (musicBrainzProcessing) return;
+
+  musicBrainzProcessing = true;
+
+  while (musicBrainzQueue.length) {
+    const job = musicBrainzQueue.shift();
+
+    try {
+      const result = await job.requestFn();
+      job.resolve(result);
+    } catch (err) {
+      job.reject(err);
+    }
+
+    // MusicBrainz requires clients to stay at or below
+    // one request per second.
+    if (musicBrainzQueue.length) {
+      await new Promise(resolve => setTimeout(resolve, 1100));
+    }
+  }
+
+  musicBrainzProcessing = false;
+}
+// MusicBrainz API queue.
+// MusicBrainz asks clients to stay at or below 1 request/second.
+const musicBrainzQueue = [];
+let musicBrainzProcessing = false;
+
+function queueMusicBrainzRequest(requestFn) {
+  return new Promise((resolve, reject) => {
+    musicBrainzQueue.push({
+      requestFn,
+      resolve,
+      reject
+    });
+
+    processMusicBrainzQueue();
+  });
+}
+
+async function processMusicBrainzQueue() {
+  if (musicBrainzProcessing) return;
+
+  musicBrainzProcessing = true;
+
+  while (musicBrainzQueue.length > 0) {
+    const job = musicBrainzQueue.shift();
+
+    try {
+      const result = await job.requestFn();
+      job.resolve(result);
+    } catch (err) {
+      job.reject(err);
+    }
+
+    // Keep MusicBrainz requests at least ~1 second apart.
+    if (musicBrainzQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 1100));
+    }
+  }
+
+  musicBrainzProcessing = false;
+}
 
   async function autoFetchMetadata(track){
     if (!track || track.kind === 'video') return;
@@ -2848,12 +2933,14 @@ startAudioOutputMonitoring();
 
       // Release (album), year, and additional tags come from the first release
       const release = recording?.releases?.[0];
-      if (release){
-        if (!m.album && !track.album){
-          const mbAlbum = (release.title || '').trim();
-          if (mbAlbum){ track.album = mbAlbum; changed = true; }
-        }
-        if (!m.year && !track.year){
+
+if (release){
+  if (release.id && !track.musicBrainzReleaseId){
+    track.musicBrainzReleaseId = release.id;
+  }
+
+  if (!m.album && !track.album){
+
           const dateStr = release.date || release['release-events']?.[0]?.date || '';
           const mbYear = (dateStr.match(/(\d{4})/) || [])[1] || null;
           if (mbYear){ track.year = mbYear; changed = true; }
@@ -2899,102 +2986,246 @@ startAudioOutputMonitoring();
   // thumbs already appear (cards, sidebar, now-playing, mini player).
   const albumArtFetchAttempts = new Map();
 
-  async function autoFetchAlbumArt(track) {
-    const artist = track.artist?.trim();
-    const title = track.title?.trim();
+async function autoFetchAlbumArt(track) {
+  if (!track || track.kind === 'video') return;
 
-    if (!artist || !title) return;
+  const artist = String(track.artist || '').trim();
+  const title = String(track.title || '').trim();
 
-    // Don't overwrite existing artwork
-    if (track.thumb || track.albumArt) return;
+  if (!artist || !title) return;
 
-    // 1. Try iTunes
+  // Don't fetch again if artwork already exists.
+  if (track.thumb || track.thumbUrl) return;
+
+  // Prevent multiple simultaneous/repeated attempts for the same track.
+  if (albumArtFetchAttempts.get(track.id)) return;
+  albumArtFetchAttempts.set(track.id, true);
+
+  // Normalize text for matching API results.
+  const normalize = (value) => String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .trim();
+
+  const normalizedArtist = normalize(artist);
+  const normalizedTitle = normalize(title);
+
+  // Turn a remote artwork URL into the Blob format Sleeve expects.
+  async function saveArtworkFromUrl(url) {
+    if (!url) return false;
+
     try {
-        const query = encodeURIComponent(`${artist} ${title}`);
-        const response = await fetch(
-            `https://itunes.apple.com/search?term=${query}&entity=song&limit=5`
-        );
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(10000)
+      });
 
-        if (response.ok) {
-            const data = await response.json();
+      if (!response.ok) return false;
 
-            const result = data.results?.find(item => {
-                const resultArtist = item.artistName?.toLowerCase() || "";
-                const resultTitle = item.trackName?.toLowerCase() || "";
+      const blob = await response.blob();
 
-                return (
-                    resultArtist.includes(artist.toLowerCase()) &&
-                    resultTitle.includes(title.toLowerCase())
-                );
-            });
+      if (!blob || !blob.type.startsWith('image/')) {
+        return false;
+      }
 
-            if (result?.artworkUrl100) {
-                const artworkUrl = result.artworkUrl100.replace(
-                    "100x100",
-                    "600x600"
-                );
+      const thumbBlob = await makeThumbBlob(blob);
 
-                track.albumArt = artworkUrl;
-                track.thumb = artworkUrl;
+      if (!thumbBlob) return false;
 
-                return;
-            }
-        }
-    } catch (err) {
-        console.warn("iTunes artwork lookup failed:", err);
-    }
-
-    // 2. Try Deezer
-    try {
-        const query =
-            `artist:"${artist}" track:"${title}"`;
-
-        const response = await fetch(
-            `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=5`
-        );
-
-        if (response.ok) {
-            const data = await response.json();
-
-            const result = data.data?.[0];
-
-            if (result?.album?.cover_big) {
-                track.albumArt = result.album.cover_big;
-                track.thumb = result.album.cover_big;
-
-                return;
-            }
-        }
-    } catch (err) {
-        console.warn("Deezer artwork lookup failed:", err);
-    }
-
-    // 3. Finally try Cover Art Archive
-    if (track.musicBrainzReleaseId) {
+      if (track.thumbUrl) {
         try {
-            const response = await fetch(
-                `https://coverartarchive.org/release/${track.musicBrainzReleaseId}`
-            );
+          URL.revokeObjectURL(track.thumbUrl);
+        } catch (e) {}
+      }
 
-            if (response.ok) {
-                const data = await response.json();
+      track.thumb = thumbBlob;
+      track.thumbUrl = URL.createObjectURL(thumbBlob);
+      track.thumbKind = 'image';
 
-                const front = data.images?.find(image => image.front);
+      await dbPut(track);
 
-                if (front?.thumbnails?.["500"]) {
-                    track.albumArt = front.thumbnails["500"];
-                    track.thumb = front.thumbnails["500"];
+      if (
+        currentIndex !== -1 &&
+        playlist[currentIndex]?.id === track.id
+      ) {
+        updateNowPlayingArt(track);
+      }
 
-                    return;
-                }
-            }
-        } catch (err) {
-            console.warn("Cover Art Archive lookup failed:", err);
-        }
+      scheduleRender(searchInput.value);
+
+      return true;
+    } catch (err) {
+      console.debug(
+        `[Sleeve] Artwork download failed for "${track.title}":`,
+        err?.message || err
+      );
+
+      return false;
     }
+  }
 
-    console.log(`No artwork found for ${artist} - ${title}`);
+  // ---------------------------------------------------------
+  // 1. iTunes
+  // ---------------------------------------------------------
+  try {
+    const query = encodeURIComponent(`${artist} ${title}`);
+
+    const response = await fetch(
+      `https://itunes.apple.com/search?term=${query}&entity=song&limit=10`,
+      {
+        signal: AbortSignal.timeout(10000)
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      const results = Array.isArray(data.results) ? data.results : [];
+
+      const exactMatch = results.find(item => {
+        const itemArtist = normalize(item.artistName);
+        const itemTitle = normalize(item.trackName);
+
+        return (
+          itemArtist === normalizedArtist &&
+          itemTitle === normalizedTitle
+        );
+      });
+
+      const closeMatch = results.find(item => {
+        const itemArtist = normalize(item.artistName);
+        const itemTitle = normalize(item.trackName);
+
+        return (
+          (itemArtist.includes(normalizedArtist) ||
+           normalizedArtist.includes(itemArtist)) &&
+          (itemTitle.includes(normalizedTitle) ||
+           normalizedTitle.includes(itemTitle))
+        );
+      });
+
+      const result = exactMatch || closeMatch;
+
+      if (result?.artworkUrl100) {
+        const artworkUrl = result.artworkUrl100
+          .replace('100x100', '600x600');
+
+        if (await saveArtworkFromUrl(artworkUrl)) {
+          console.debug(
+            `[Sleeve] Artwork found via iTunes: ${artist} - ${title}`
+          );
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.debug(
+      `[Sleeve] iTunes artwork lookup failed for "${track.title}":`,
+      err?.message || err
+    );
+  }
+
+  // ---------------------------------------------------------
+  // 2. Deezer
+  // ---------------------------------------------------------
+  try {
+    const query = encodeURIComponent(
+      `artist:"${artist}" track:"${title}"`
+    );
+
+    const response = await fetch(
+      `https://api.deezer.com/search?q=${query}&limit=10`,
+      {
+        signal: AbortSignal.timeout(10000)
+      }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      const results = Array.isArray(data.data) ? data.data : [];
+
+      const exactMatch = results.find(item => {
+        const itemArtist = normalize(item.artist?.name);
+        const itemTitle = normalize(item.title);
+
+        return (
+          itemArtist === normalizedArtist &&
+          itemTitle === normalizedTitle
+        );
+      });
+
+      const closeMatch = results.find(item => {
+        const itemArtist = normalize(item.artist?.name);
+        const itemTitle = normalize(item.title);
+
+        return (
+          (itemArtist.includes(normalizedArtist) ||
+           normalizedArtist.includes(itemArtist)) &&
+          (itemTitle.includes(normalizedTitle) ||
+           normalizedTitle.includes(itemTitle))
+        );
+      });
+
+      const result = exactMatch || closeMatch;
+
+      if (result?.album?.cover_big) {
+        if (await saveArtworkFromUrl(result.album.cover_big)) {
+          console.debug(
+            `[Sleeve] Artwork found via Deezer: ${artist} - ${title}`
+          );
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    console.debug(
+      `[Sleeve] Deezer artwork lookup failed for "${track.title}":`,
+      err?.message || err
+    );
+  }
+
+  // ---------------------------------------------------------
+  // 3. Cover Art Archive / MusicBrainz
+  // ---------------------------------------------------------
+  if (track.musicBrainzReleaseId) {
+    try {
+      const response = await fetch(
+        `https://coverartarchive.org/release/${track.musicBrainzReleaseId}`,
+        {
+          signal: AbortSignal.timeout(10000)
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+
+        const front = data.images?.find(image => image.front);
+
+        const artworkUrl =
+          front?.thumbnails?.['500'] ||
+          front?.thumbnails?.['250'] ||
+          front?.image;
+
+        if (artworkUrl) {
+          if (await saveArtworkFromUrl(artworkUrl)) {
+            console.debug(
+              `[Sleeve] Artwork found via Cover Art Archive: ${artist} - ${title}`
+            );
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.debug(
+        `[Sleeve] Cover Art Archive lookup failed for "${track.title}":`,
+        err?.message || err
+      );
+    }
+  }
+
+  console.debug(
+    `[Sleeve] No artwork found for ${artist} - ${title}`
+  );
 }
+
 
 
   // Reads native audio duration without a full decode; cheap probe used
