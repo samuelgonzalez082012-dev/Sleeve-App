@@ -619,6 +619,47 @@
     </div>
   </aside>
 
+  <!-- Selection toolbar (appears when tracks are multi-selected) -->
+  <div class="selection-toolbar" id="selectionToolbar" style="display:none;" role="toolbar" aria-label="Batch actions">
+    <span class="selection-count" id="selectionCount">0 selected</span>
+    <button class="selection-btn" type="button" id="batchEditBtn">Edit metadata</button>
+    <button class="selection-btn selection-btn-danger" type="button" id="batchDeleteBtn">Delete</button>
+    <button class="selection-btn" type="button" id="selectionClearBtn">✕ Clear</button>
+  </div>
+
+  <!-- Batch metadata editor modal -->
+  <div class="metadata-editor-backdrop" id="batchMetadataBackdrop" role="dialog" aria-modal="true" aria-labelledby="batchMetadataTitle" style="display:none;">
+    <div class="metadata-editor">
+      <h2 id="batchMetadataTitle">Edit metadata for <span id="batchMetadataCount">0</span> tracks</h2>
+      <p class="metadata-editor-sub">Leave a field blank to leave it unchanged on all selected tracks.</p>
+      <div class="metadata-grid">
+        <div class="metadata-field full">
+          <label for="batchArtist">Artist</label>
+          <input id="batchArtist" type="text" autocomplete="off" placeholder="Leave blank to keep each track's current value">
+        </div>
+        <div class="metadata-field full">
+          <label for="batchAlbum">Album</label>
+          <input id="batchAlbum" type="text" autocomplete="off" placeholder="Leave blank to keep each track's current value">
+        </div>
+        <div class="metadata-field">
+          <label for="batchGenre">Genre</label>
+          <input id="batchGenre" type="text" autocomplete="off" placeholder="(unchanged)">
+        </div>
+        <div class="metadata-field">
+          <label for="batchYear">Year</label>
+          <input id="batchYear" type="text" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="YYYY">
+        </div>
+      </div>
+      <div class="metadata-lock-note">
+        Only non-blank fields will be applied. These values override the tags read from the files.
+      </div>
+      <div class="metadata-editor-actions">
+        <button type="button" id="batchMetadataCancelBtn">Cancel</button>
+        <button type="button" class="metadata-save" id="batchMetadataSaveBtn">Apply to all selected</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Manual metadata editor -->
   <div class="metadata-editor-backdrop" id="metadataEditorBackdrop" role="dialog" aria-modal="true" aria-labelledby="metadataEditorTitle">
     <div class="metadata-editor">

@@ -2704,11 +2704,18 @@ startAudioOutputMonitoring();
     let cursor = 0;
     const scanBatch = () => {
       const end = Math.min(cursor + 12, newTracks.length);
-      for (; cursor < end; cursor++) readTags(newTracks[cursor]);
+      for (; cursor < end; cursor++){
+        readTags(newTracks[cursor]);
+        // autoFetchAlbumArt is also called from inside readTags/autoFetchMetadata
+        // once we have more context, but fire an early attempt for tracks that
+        // already have artist+album in their file tags.
+        setTimeout(() => autoFetchAlbumArt(newTracks[cursor < newTracks.length ? cursor : newTracks.length - 1]), 800 + cursor * 200);
+      }
       if (cursor < newTracks.length) setTimeout(scanBatch, 0);
     };
     scanBatch();
     if (currentIndex === -1 && playlist.length > 0) loadTrack(0, false);
+    scheduleDupeCheck();
   }
 
   // ---------- Artist/album tag reading ----------
@@ -2727,6 +2734,25 @@ startAudioOutputMonitoring();
         const year = (yearRaw.match(/\d{4}/) || [])[0] || null;
         const trackRaw = (tags.track || '').toString().trim();
         const trackNum = trackRaw ? (parseInt(trackRaw, 10) || null) : null;
+        // Also try to extract embedded cover art from the file tags
+        const picture = tags.picture;
+        if (picture && !track.thumb && !track.thumbUrl){
+          try {
+            const byteArray = new Uint8Array(picture.data);
+            const mimeType = picture.format || 'image/jpeg';
+            const blob = new Blob([byteArray], { type: mimeType });
+            makeThumbBlob(blob).then(thumbBlob => {
+              if (!track.thumb && !track.thumbUrl){
+                track.thumb = thumbBlob;
+                track.thumbUrl = URL.createObjectURL(thumbBlob);
+                track.thumbKind = 'image';
+                dbPut(track);
+                if (currentIndex !== -1 && playlist[currentIndex].id === track.id) updateNowPlayingArt(track);
+                scheduleRender(searchInput.value);
+              }
+            }).catch(() => {});
+          } catch(e) {}
+        }
         let changed = false;
         const manual = track.manualMetadata || {};
         if (!manual.artist && artist && artist !== track.artist){ track.artist = artist; changed = true; }
@@ -2740,10 +2766,236 @@ startAudioOutputMonitoring();
             scheduleRender(searchInput.value);
           }
         }
+        // After file tags are read, if core fields are still missing, try MusicBrainz
+        const stillMissingCore = !track.artist || !track.album || !track.year;
+        if (stillMissingCore) autoFetchMetadata(track);
       },
-      onError: () => { /* file has no readable tags — leave artist/album unset */ }
+      onError: () => {
+        // File has no readable tags — try MusicBrainz using the filename as a hint
+        autoFetchMetadata(track);
+      }
     });
   }
+
+  // ---------- MusicBrainz metadata auto-fetch ----------
+  // Fires after readTags when artist/album/year are still missing.
+  // Non-blocking, never overwrites manual overrides or tags already found.
+  const metadataFetchAttempts = new Map();
+
+  async function autoFetchMetadata(track){
+    if (!track || track.kind === 'video') return;
+    if (metadataFetchAttempts.get(track.id)) return;
+    metadataFetchAttempts.set(track.id, true);
+
+    // Build the search query from whatever we have.
+    // Prefer artist+title when both exist; fall back to just the title.
+    const titleRaw = String(track.title || '').trim();
+    const artistRaw = String(track.artist || '').trim();
+
+    // Clean filename-derived titles the same way lyrics fetcher does.
+    const cleanedTitle = titleRaw
+      .replace(/^\s*\(\s*(?:19|20)\d{2}\s*\)\s*/i, '')
+      .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
+      .replace(/^\s*\d{1,3}\s+/i, '')
+      .replace(/\s*\(\s*(?:19|20)\d{2}\s*\)\s*$/i, '')
+      .replace(/\s*[\[(]\s*clean(?:\s+version)?\s*[\])]\s*$/i, '')
+      .trim();
+
+    if (!cleanedTitle) return;
+
+    const manual = track.manualMetadata || {};
+
+    // Nothing actually missing that we can fill in
+    const needsArtist  = !manual.artist  && !track.artist;
+    const needsAlbum   = !manual.album   && !track.album;
+    const needsYear    = !manual.year    && !track.year;
+    const needsGenre   = !manual.genre   && !track.genre;
+    if (!needsArtist && !needsAlbum && !needsYear && !needsGenre) return;
+
+    try {
+      // MusicBrainz recording search — rate-limited to 1 req/sec by the API;
+      // jitter is fine since this is best-effort background enrichment.
+      await new Promise(r => setTimeout(r, Math.random() * 400 + 100));
+
+      const query = artistRaw
+        ? `recording:"${encodeURIComponent(cleanedTitle)}" AND artist:"${encodeURIComponent(artistRaw)}"`
+        : `recording:"${encodeURIComponent(cleanedTitle)}"`;
+
+      const url = `https://musicbrainz.org/ws/2/recording/?query=${query}&limit=1&fmt=json`;
+
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Sleeve/1.0 (music player app)'
+        }
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const recording = data?.recordings?.[0];
+      if (!recording) return;
+
+      let changed = false;
+      const m = track.manualMetadata || {};
+
+      // Artist
+      if (!m.artist && !track.artist){
+        const mbArtist = recording['artist-credit']?.[0]?.artist?.name?.trim();
+        if (mbArtist){ track.artist = mbArtist; changed = true; }
+      }
+
+      // Release (album), year, and additional tags come from the first release
+      const release = recording?.releases?.[0];
+      if (release){
+        if (!m.album && !track.album){
+          const mbAlbum = (release.title || '').trim();
+          if (mbAlbum){ track.album = mbAlbum; changed = true; }
+        }
+        if (!m.year && !track.year){
+          const dateStr = release.date || release['release-events']?.[0]?.date || '';
+          const mbYear = (dateStr.match(/(\d{4})/) || [])[1] || null;
+          if (mbYear){ track.year = mbYear; changed = true; }
+        }
+      }
+
+      // Genre / tags — MusicBrainz returns tag objects with vote counts
+      if (!m.genre && !track.genre){
+        const tags = recording.tags || [];
+        if (tags.length){
+          const top = tags.sort((a, b) => (b.count || 0) - (a.count || 0))[0];
+          const mbGenre = (top?.name || '').trim();
+          if (mbGenre){ track.genre = mbGenre; changed = true; }
+        }
+      }
+
+      if (changed){
+        dbPut(track);
+        console.debug(`[Sleeve] MusicBrainz enriched "${track.title}":`, {
+          artist: track.artist, album: track.album, year: track.year, genre: track.genre
+        });
+        const v = currentView.type;
+        if (v === 'artists' || v === 'artistAlbums' || v === 'album' || v === 'home'){
+          scheduleRender(searchInput.value);
+        }
+        // If this is the track currently loaded, refresh the now-playing display
+        if (currentIndex !== -1 && playlist[currentIndex].id === track.id){
+          updateNowPlayingText(playlist[currentIndex], currentIndex);
+        }
+        // Also try to fetch cover art now that we may have an album name
+        if (!track.thumb && !track.thumbUrl) autoFetchAlbumArt(track);
+      }
+    } catch(err){
+      console.debug(`[Sleeve] MusicBrainz lookup failed for "${track.title}":`, err?.message || err);
+    }
+  }
+
+  // ---------- Cover Art Archive album art auto-fetch ----------
+  // Called after readTags / MusicBrainz enrichment when a track still has
+  // no per-track thumbnail.  Uses the MusicBrainz recording search to find
+  // a release MBID, then fetches the front cover from the Cover Art Archive.
+  // Stores the result as the track's own thumbUrl so it shows up everywhere
+  // thumbs already appear (cards, sidebar, now-playing, mini player).
+  const albumArtFetchAttempts = new Map();
+
+  async function autoFetchAlbumArt(track) {
+    const artist = track.artist?.trim();
+    const title = track.title?.trim();
+
+    if (!artist || !title) return;
+
+    // Don't overwrite existing artwork
+    if (track.thumb || track.albumArt) return;
+
+    // 1. Try iTunes
+    try {
+        const query = encodeURIComponent(`${artist} ${title}`);
+        const response = await fetch(
+            `https://itunes.apple.com/search?term=${query}&entity=song&limit=5`
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+
+            const result = data.results?.find(item => {
+                const resultArtist = item.artistName?.toLowerCase() || "";
+                const resultTitle = item.trackName?.toLowerCase() || "";
+
+                return (
+                    resultArtist.includes(artist.toLowerCase()) &&
+                    resultTitle.includes(title.toLowerCase())
+                );
+            });
+
+            if (result?.artworkUrl100) {
+                const artworkUrl = result.artworkUrl100.replace(
+                    "100x100",
+                    "600x600"
+                );
+
+                track.albumArt = artworkUrl;
+                track.thumb = artworkUrl;
+
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn("iTunes artwork lookup failed:", err);
+    }
+
+    // 2. Try Deezer
+    try {
+        const query =
+            `artist:"${artist}" track:"${title}"`;
+
+        const response = await fetch(
+            `https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=5`
+        );
+
+        if (response.ok) {
+            const data = await response.json();
+
+            const result = data.data?.[0];
+
+            if (result?.album?.cover_big) {
+                track.albumArt = result.album.cover_big;
+                track.thumb = result.album.cover_big;
+
+                return;
+            }
+        }
+    } catch (err) {
+        console.warn("Deezer artwork lookup failed:", err);
+    }
+
+    // 3. Finally try Cover Art Archive
+    if (track.musicBrainzReleaseId) {
+        try {
+            const response = await fetch(
+                `https://coverartarchive.org/release/${track.musicBrainzReleaseId}`
+            );
+
+            if (response.ok) {
+                const data = await response.json();
+
+                const front = data.images?.find(image => image.front);
+
+                if (front?.thumbnails?.["500"]) {
+                    track.albumArt = front.thumbnails["500"];
+                    track.thumb = front.thumbnails["500"];
+
+                    return;
+                }
+            }
+        } catch (err) {
+            console.warn("Cover Art Archive lookup failed:", err);
+        }
+    }
+
+    console.log(`No artwork found for ${artist} - ${title}`);
+}
+
 
   // Reads native audio duration without a full decode; cheap probe used
   // to fill in run times on the detailed album page.
@@ -2909,6 +3161,362 @@ startAudioOutputMonitoring();
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') metadataSaveBtn.click();
       if (e.key === 'Escape') closeMetadataEditor();
+    });
+  });
+
+  // ---------- Duplicate detection ----------
+  // Groups tracks by normalised "artist · title" key.  Exact file duplicates
+  // (same name, zero-byte difference) and fuzzy near-matches (same key after
+  // stripping punctuation + casing) both count.
+  function findDuplicates(){
+    const groups = new Map();
+    playlist.forEach(t => {
+      if (t.kind === 'video') return;
+      const artist = (t.artist || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      const title  = (t.title  || '').trim().toLowerCase()
+        .replace(/^\d{1,3}[\s.\-_]+/, '')    // strip leading track numbers
+        .replace(/[^a-z0-9]/g, '');
+      const key = artist + '\u241F' + title;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(t);
+    });
+    return Array.from(groups.values()).filter(g => g.length > 1);
+  }
+
+  function renderDuplicateBanner(){
+    const existing = document.getElementById('dupeBanner');
+    if (existing) existing.remove();
+
+    const dupeGroups = findDuplicates();
+    if (!dupeGroups.length) return;
+
+    const total = dupeGroups.reduce((n, g) => n + g.length - 1, 0); // how many extras
+    const banner = document.createElement('div');
+    banner.id = 'dupeBanner';
+    banner.className = 'dupe-banner';
+    banner.innerHTML = `
+      <span class="dupe-banner-icon">⚠</span>
+      <span class="dupe-banner-text">${total} possible duplicate${total === 1 ? '' : 's'} found</span>
+      <button class="dupe-banner-btn" type="button" id="dupeReviewBtn">Review</button>
+      <button class="dupe-banner-dismiss" type="button" id="dupeDismissBtn" title="Dismiss">✕</button>
+    `;
+    // Insert above the card grid
+    const mainContent = cardGrid?.parentElement;
+    if (mainContent) mainContent.insertBefore(banner, cardGrid);
+
+    document.getElementById('dupeReviewBtn').addEventListener('click', openDuplicateModal);
+    document.getElementById('dupeDismissBtn').addEventListener('click', () => banner.remove());
+  }
+
+  function openDuplicateModal(){
+    const dupeGroups = findDuplicates();
+    if (!dupeGroups.length) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay dupe-modal-overlay';
+    overlay.id = 'dupeModal';
+
+    const box = document.createElement('div');
+    box.className = 'modal-box dupe-modal-box';
+    box.innerHTML = `
+      <div class="dupe-modal-header">
+        <h3>Duplicate tracks</h3>
+        <button class="dupe-modal-close modal-btn" type="button" id="dupeModalClose">✕</button>
+      </div>
+      <p class="dupe-modal-sub">Keep the version you want and delete the rest. Sleeve won't delete anything until you confirm.</p>
+      <div class="dupe-group-list" id="dupeGroupList"></div>
+      <div class="modal-actions">
+        <button class="modal-btn" type="button" id="dupeModalDone">Done</button>
+      </div>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const list = box.querySelector('#dupeGroupList');
+
+    dupeGroups.forEach((group, gi) => {
+      const section = document.createElement('div');
+      section.className = 'dupe-group';
+
+      const label = document.createElement('div');
+      label.className = 'dupe-group-label';
+      label.textContent = `Group ${gi + 1} — ${group.length} copies`;
+      section.appendChild(label);
+
+      group.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'dupe-row';
+        const art = t.thumbUrl
+          ? `<img src="${t.thumbUrl}" class="dupe-row-art" alt="">`
+          : `<div class="dupe-row-art dupe-row-art-empty">♪</div>`;
+        const meta = [t.artist, t.album, t.year].filter(Boolean).join(' · ') || 'No metadata';
+        row.innerHTML = `
+          ${art}
+          <div class="dupe-row-meta">
+            <div class="dupe-row-title">${escapeHtml(t.title)}</div>
+            <div class="dupe-row-sub">${escapeHtml(meta)}</div>
+          </div>
+          <div class="dupe-row-actions">
+            <button class="dupe-keep-btn modal-btn modal-btn-primary" type="button" data-track-id="${t.id}">Keep</button>
+            <button class="dupe-delete-btn modal-btn" type="button" data-track-id="${t.id}">Delete</button>
+          </div>
+        `;
+        section.appendChild(row);
+      });
+
+      list.appendChild(section);
+    });
+
+    function close(){
+      overlay.remove();
+      renderDuplicateBanner();
+    }
+
+    box.querySelector('#dupeModalClose').addEventListener('click', close);
+    box.querySelector('#dupeModalDone').addEventListener('click', close);
+    overlay.addEventListener('mousedown', e => { if (e.target === overlay) close(); });
+
+    box.addEventListener('click', e => {
+      const keepBtn   = e.target.closest('.dupe-keep-btn');
+      const deleteBtn = e.target.closest('.dupe-delete-btn');
+      if (!keepBtn && !deleteBtn) return;
+
+      const trackId = parseInt((keepBtn || deleteBtn).dataset.trackId, 10);
+      const track   = playlist.find(t => t.id === trackId);
+      if (!track) return;
+
+      if (deleteBtn){
+        // Find which group this track belongs to, then delete it
+        const group = findDuplicates().find(g => g.some(t => t.id === trackId));
+        if (!group) return;
+        // Remove the row from the modal immediately (no confirm since they're in the dupe UI)
+        const row = deleteBtn.closest('.dupe-row');
+        if (row) row.remove();
+        // Actually delete the track
+        const idx = playlist.findIndex(t => t.id === trackId);
+        if (idx !== -1){
+          const wasCurrent = idx === currentIndex;
+          if (wasCurrent) stopEverything();
+          try{ URL.revokeObjectURL(track.url); }catch(e){}
+          playlist.splice(idx, 1);
+          dbDeleteTrack(trackId);
+          playlists.forEach(pl => {
+            if (pl.trackIds.includes(trackId)){
+              pl.trackIds = pl.trackIds.filter(id => id !== trackId);
+              dbPutPlaylist(pl);
+            }
+          });
+          if (wasCurrent){ currentIndex = -1; }
+          else if (idx < currentIndex){ currentIndex -= 1; }
+          scheduleRender(searchInput.value);
+        }
+        // Check if only one track remains in the group section — collapse the header
+        const section = deleteBtn.closest('.dupe-group');
+        if (section){
+          const remaining = section.querySelectorAll('.dupe-row');
+          if (remaining.length === 0) section.remove();
+          else if (remaining.length === 1){
+            const lbl = section.querySelector('.dupe-group-label');
+            if (lbl) lbl.textContent = lbl.textContent.replace(/\d+ copies/, '1 copy — resolved');
+          }
+        }
+      } else if (keepBtn){
+        // "Keep" = delete all other tracks in this group
+        const groups = findDuplicates();
+        const group = groups.find(g => g.some(t => t.id === trackId));
+        if (!group) return;
+        group.forEach(t => {
+          if (t.id === trackId) return; // keep this one
+          const section = keepBtn.closest('.dupe-group');
+          if (section){
+            const rows = section.querySelectorAll('.dupe-row');
+            rows.forEach(r => {
+              const btn = r.querySelector('[data-track-id]');
+              if (btn && parseInt(btn.dataset.trackId, 10) === t.id) r.remove();
+            });
+          }
+          const idx = playlist.findIndex(tr => tr.id === t.id);
+          if (idx === -1) return;
+          const wasCurrent = idx === currentIndex;
+          if (wasCurrent) stopEverything();
+          try{ URL.revokeObjectURL(t.url); }catch(e){}
+          playlist.splice(idx, 1);
+          dbDeleteTrack(t.id);
+          playlists.forEach(pl => {
+            if (pl.trackIds.includes(t.id)){
+              pl.trackIds = pl.trackIds.filter(id => id !== t.id);
+              dbPutPlaylist(pl);
+            }
+          });
+          if (wasCurrent){ currentIndex = -1; }
+          else if (idx < currentIndex){ currentIndex -= 1; }
+        });
+        scheduleRender(searchInput.value);
+        const section = keepBtn.closest('.dupe-group');
+        if (section){
+          const lbl = section.querySelector('.dupe-group-label');
+          if (lbl) lbl.textContent = lbl.textContent.replace(/\d+ copies/, '1 copy — resolved');
+        }
+      }
+
+      // If no duplicate groups remain, close the modal
+      if (findDuplicates().length === 0) close();
+    });
+  }
+
+  // Run duplicate check after library loads / after files are added.
+  // Debounced so a batch import only triggers once.
+  let dupeCheckTimer = null;
+  function scheduleDupeCheck(){
+    clearTimeout(dupeCheckTimer);
+    dupeCheckTimer = setTimeout(() => {
+      if (currentView.type === 'home') renderDuplicateBanner();
+    }, 2000);
+  }
+
+  // ---------- Batch multi-select ----------
+  // Tracks which track IDs are currently selected.
+  // Shift-clicking a card/row or clicking the checkbox selects it.
+  const selectedTrackIds = new Set();
+  let lastSelectedIndex = -1;
+
+  const selectionToolbar = document.getElementById('selectionToolbar');
+  const selectionCount   = document.getElementById('selectionCount');
+  const batchEditBtn     = document.getElementById('batchEditBtn');
+  const batchDeleteBtn   = document.getElementById('batchDeleteBtn');
+  const selectionClearBtn = document.getElementById('selectionClearBtn');
+
+  function updateSelectionToolbar(){
+    const n = selectedTrackIds.size;
+    selectionToolbar.style.display = n > 0 ? 'flex' : 'none';
+    selectionCount.textContent = `${n} selected`;
+    // Highlight selected cards and list items
+    document.querySelectorAll('.card[data-track-id], .track-item[data-track-id]').forEach(el => {
+      const id = parseInt(el.dataset.trackId, 10);
+      el.classList.toggle('batch-selected', selectedTrackIds.has(id));
+    });
+  }
+
+  function clearSelection(){
+    selectedTrackIds.clear();
+    lastSelectedIndex = -1;
+    updateSelectionToolbar();
+  }
+
+  function toggleTrackSelected(trackId, shiftHeld, clickedVisibleIndex, visibleIds){
+    if (shiftHeld && lastSelectedIndex !== -1 && visibleIds){
+      const from = Math.min(lastSelectedIndex, clickedVisibleIndex);
+      const to   = Math.max(lastSelectedIndex, clickedVisibleIndex);
+      for (let i = from; i <= to; i++){
+        if (visibleIds[i] != null) selectedTrackIds.add(visibleIds[i]);
+      }
+    } else {
+      if (selectedTrackIds.has(trackId)) selectedTrackIds.delete(trackId);
+      else selectedTrackIds.add(trackId);
+    }
+    lastSelectedIndex = clickedVisibleIndex;
+    updateSelectionToolbar();
+  }
+
+  selectionClearBtn?.addEventListener('click', clearSelection);
+
+  batchDeleteBtn?.addEventListener('click', () => {
+    if (!selectedTrackIds.size) return;
+    if (!confirm(`Delete ${selectedTrackIds.size} selected track${selectedTrackIds.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    const ids = Array.from(selectedTrackIds);
+    ids.forEach(id => {
+      const idx = playlist.findIndex(t => t.id === id);
+      if (idx === -1) return;
+      const track = playlist[idx];
+      const wasCurrent = idx === currentIndex;
+      if (wasCurrent) stopEverything();
+      try{ URL.revokeObjectURL(track.url); }catch(e){}
+      playlist.splice(idx, 1);
+      dbDeleteTrack(id);
+      playlists.forEach(pl => {
+        if (pl.trackIds.includes(id)){
+          pl.trackIds = pl.trackIds.filter(tid => tid !== id);
+          dbPutPlaylist(pl);
+        }
+      });
+      if (wasCurrent) currentIndex = -1;
+      else if (idx < currentIndex) currentIndex -= 1;
+    });
+    clearSelection();
+    scheduleRender(searchInput.value);
+  });
+
+  batchEditBtn?.addEventListener('click', openBatchMetadataEditor);
+
+  // ---------- Batch metadata editor ----------
+  const batchMetadataBackdrop = document.getElementById('batchMetadataBackdrop');
+  const batchMetadataCount    = document.getElementById('batchMetadataCount');
+  const batchArtist  = document.getElementById('batchArtist');
+  const batchAlbum   = document.getElementById('batchAlbum');
+  const batchGenre   = document.getElementById('batchGenre');
+  const batchYear    = document.getElementById('batchYear');
+
+  function openBatchMetadataEditor(){
+    if (!selectedTrackIds.size) return;
+    batchMetadataCount.textContent = selectedTrackIds.size;
+    batchArtist.value = '';
+    batchAlbum.value  = '';
+    batchGenre.value  = '';
+    batchYear.value   = '';
+    batchMetadataBackdrop.style.display = 'flex';
+    setTimeout(() => batchArtist.focus(), 0);
+  }
+
+  function closeBatchMetadataEditor(){
+    batchMetadataBackdrop.style.display = 'none';
+  }
+
+  document.getElementById('batchMetadataCancelBtn')?.addEventListener('click', closeBatchMetadataEditor);
+  batchMetadataBackdrop?.addEventListener('click', e => {
+    if (e.target === batchMetadataBackdrop) closeBatchMetadataEditor();
+  });
+
+  document.getElementById('batchMetadataSaveBtn')?.addEventListener('click', () => {
+    const year = batchYear.value.trim();
+    if (year && !/^\d{4}$/.test(year)){
+      alert('Year must be exactly four digits, such as 2026.');
+      batchYear.focus();
+      return;
+    }
+    const values = {
+      artist: batchArtist.value.trim(),
+      album:  batchAlbum.value.trim(),
+      genre:  batchGenre.value.trim(),
+      year:   year
+    };
+    const hasAnyValue = Object.values(values).some(v => v);
+    if (!hasAnyValue){ closeBatchMetadataEditor(); return; }
+
+    selectedTrackIds.forEach(id => {
+      const track = playlist.find(t => t.id === id);
+      if (!track) return;
+      track.manualMetadata = track.manualMetadata || {};
+      Object.keys(values).forEach(key => {
+        if (values[key]){
+          track[key] = values[key];
+          track.manualMetadata[key] = true;
+        }
+      });
+      dbPut(track);
+    });
+
+    closeBatchMetadataEditor();
+    clearSelection();
+    scheduleRender(searchInput.value);
+    if (currentIndex !== -1 && selectedTrackIds.has(playlist[currentIndex]?.id)){
+      updateNowPlayingText(playlist[currentIndex], currentIndex);
+    }
+  });
+
+  [batchArtist, batchAlbum, batchGenre, batchYear].forEach(input => {
+    input?.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  document.getElementById('batchMetadataSaveBtn').click();
+      if (e.key === 'Escape') closeBatchMetadataEditor();
     });
   });
 
@@ -3205,99 +3813,165 @@ startAudioOutputMonitoring();
 
   const LYRIC_TIME_TAG_RE = /\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]/g;
 
-   // Auto-fetch lyrics from API if not already cached
-  async function autoFetchLyrics(track) {
-    if (!track || track.lyrics) return;
-    if (lyricsFetchAttempts.get(track.id)) return;
+   // Auto-fetch lyrics from LRCLIB if not already cached.
+// Prefers synced LRC lyrics, then falls back to plain lyrics.
+async function autoFetchLyrics(track) {
+  if (!track || track.lyrics) return;
+  if (lyricsFetchAttempts.get(track.id)) return;
 
-    const artist = String(track.artist || '').trim();
-    const originalTitle = String(track.title || '').trim();
+  const artist = String(track.artist || '').trim();
+  const originalTitle = String(track.title || '').trim();
+  const album = String(track.album || '').trim();
 
-    if (!artist || !originalTitle) {
-      console.debug('Lyrics auto-fetch skipped: missing artist or title');
-      return;
-    }
-
-    // Remove common track-number prefixes:
-    // "01. Song", "01 - Song", "01 – Song", "01 Song", etc.
-    const cleanedTitle = originalTitle
-      .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
-      .replace(/^\s*\d{1,3}\s+/i, '')
-      .trim();
-
-    // Try the original title first, then progressively cleaned versions.
-    const titleVariants = [...new Set([
-      originalTitle,
-      cleanedTitle
-    ].filter(Boolean))];
-
-    // Mark as attempted only after we know there is something to search for.
-    lyricsFetchAttempts.set(track.id, true);
-
-    console.debug('Lyrics auto-fetch:', {
-      artist,
-      originalTitle,
-      titleVariants
-    });
-
-    for (const title of titleVariants) {
-      try {
-        const url =
-          `https://api.lyrics.ovh/v1/${encodeURIComponent(artist)}/${encodeURIComponent(title)}`;
-
-        console.debug('Lyrics lookup:', url);
-
-        const response = await fetch(url, {
-          signal: AbortSignal.timeout(5000)
-        });
-
-        if (!response.ok) {
-          console.debug(
-            `Lyrics lookup failed for "${title}": HTTP ${response.status}`
-          );
-          continue;
-        }
-
-        const data = await response.json();
-
-        if (!data || !data.lyrics || !String(data.lyrics).trim()) {
-          console.debug(`Lyrics lookup returned no lyrics for "${title}"`);
-          continue;
-        }
-
-        // Store the fetched lyrics on the actual track object.
-        track.lyrics = String(data.lyrics).trim();
-
-        // Persist them so they survive closing/reopening Sleeve.
-        await dbPut(track);
-
-        console.debug(
-          `Lyrics found for "${artist} - ${title}" and saved successfully.`
-        );
-
-        // Refresh the existing lyrics panel if this is still
-        // the currently playing track.
-        if (
-          currentIndex !== -1 &&
-          playlist[currentIndex] &&
-          playlist[currentIndex].id === track.id
-        ) {
-          renderLyricsPanel();
-        }
-
-        return;
-      } catch (err) {
-        console.debug(
-          `Lyrics lookup error for "${title}":`,
-          err?.message || err
-        );
-      }
-    }
-
-    console.debug(
-      `No lyrics found for "${artist} - ${originalTitle}"`
-    );
+  if (!artist || !originalTitle) {
+    console.debug('Lyrics auto-fetch skipped: missing artist or title');
+    return;
   }
+
+ 
+const cleanedTitle = originalTitle
+  // Remove year at the beginning:
+  // "(2004) 02 69 Tea" -> "02 69 Tea"
+  .replace(/^\s*\(\s*(?:19|20)\d{2}\s*\)\s*/i, '')
+
+  // Remove track number at the beginning:
+  // "02 69 Tea" -> "69 Tea"
+  // "02. 69 Tea" -> "69 Tea"
+  // "02 - 69 Tea" -> "69 Tea"
+  .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
+  .replace(/^\s*\d{1,3}\s+/i, '')
+
+  // Remove year at the end:
+  // "69 Tea (2004)" -> "69 Tea"
+  .replace(/\s*\(\s*(?:19|20)\d{2}\s*\)\s*$/i, '')
+
+  // Remove clean tags:
+  // "69 Tea (Clean)" -> "69 Tea"
+  .replace(/\s*[\[(]\s*clean(?:\s+version)?\s*[\])]\s*$/i, '')
+
+  .trim();
+
+const titleVariants = [...new Set([
+  originalTitle,
+  cleanedTitle
+].filter(Boolean))];
+
+  // Only mark this track as attempted once we have
+  // enough information to actually perform a lookup.
+  lyricsFetchAttempts.set(track.id, true);
+
+  console.debug('Lyrics auto-fetch:', {
+    artist,
+    originalTitle,
+    titleVariants,
+    album,
+    duration: track.duration
+  });
+
+  for (const title of titleVariants) {
+    try {
+      const params = new URLSearchParams({
+        track_name: title,
+        artist_name: artist
+      });
+
+      if (album) {
+        params.set('album_name', album);
+      }
+
+      // LRCLIB expects duration in seconds.
+      // Only include it if the track has a sensible numeric duration.
+      const duration = Number(track.duration);
+
+      if (Number.isFinite(duration) && duration > 0) {
+        params.set('duration', String(Math.round(duration)));
+      }
+
+      const url = `https://lrclib.net/api/get?${params.toString()}`;
+
+      console.debug('Lyrics lookup:', url);
+
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(7000),
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        console.debug(
+          `Lyrics lookup failed for "${title}": HTTP ${response.status}`
+        );
+        continue;
+      }
+
+      const data = await response.json();
+
+      if (!data) {
+        console.debug(
+          `Lyrics lookup returned no data for "${title}"`
+        );
+        continue;
+      }
+
+      // Prefer synchronized lyrics because your existing
+      // parseLyrics() already understands LRC timestamps.
+      const syncedLyrics =
+        typeof data.syncedLyrics === 'string'
+          ? data.syncedLyrics.trim()
+          : '';
+
+      const plainLyrics =
+        typeof data.plainLyrics === 'string'
+          ? data.plainLyrics.trim()
+          : '';
+
+      const lyricsToSave = syncedLyrics || plainLyrics;
+
+      if (!lyricsToSave) {
+        console.debug(
+          `Lyrics lookup returned no usable lyrics for "${title}"`
+        );
+        continue;
+      }
+
+      // Store the fetched lyrics on the existing track object.
+      // We do NOT modify the IndexedDB structure.
+      track.lyrics = lyricsToSave;
+
+      // Use Sleeve's existing persistence system.
+      // queueTrackWrite() already stores track.lyrics.
+      await dbPut(track);
+
+      console.debug(
+        `Lyrics found for "${artist} - ${title}"` +
+        `${syncedLyrics ? ' (synced LRC)' : ' (plain lyrics)'}` +
+        ' and queued for saving.'
+      );
+
+      // Refresh the lyrics panel if this is still
+      // the currently playing track.
+      if (
+        currentIndex !== -1 &&
+        playlist[currentIndex] &&
+        playlist[currentIndex].id === track.id
+      ) {
+        renderLyricsPanel();
+      }
+
+      return;
+    } catch (err) {
+      console.debug(
+        `Lyrics lookup error for "${title}":`,
+        err?.message || err
+      );
+    }
+  }
+
+  console.debug(
+    `No lyrics found for "${artist} - ${originalTitle}"`
+  );
+}
 
   function parseLyrics(raw){
     if (!raw) return { timed: false, lines: [] };
@@ -4055,6 +4729,7 @@ startAudioOutputMonitoring();
   }
 
   navHome.addEventListener('click', () => {
+    clearSelection();
     currentView = { type: 'home' };
     scheduleRender(searchInput.value);
   });
@@ -4909,8 +5584,13 @@ startAudioOutputMonitoring();
         const thumbHtml = t.thumbUrl
           ? `${t.thumbKind === 'video' ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>` : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`}`
           : (albumArtEntry ? albumArtMarkup(albumArtEntry, t.title) : iconFor(t.kind));
+        const isSelRow = selectedTrackIds.has(t.id);
+        if (isSelRow) item.classList.add('batch-selected');
         item.innerHTML = `
           ${handleHtml}
+          <label class="track-select-check" title="Select track" onclick="event.stopPropagation()">
+            <input type="checkbox" class="track-select-input"${isSelRow ? ' checked' : ''}>
+          </label>
           <div class="track-thumb" title="Set thumbnail">${thumbHtml}</div>
           <div class="track-meta">
             <div class="track-title" title="Double-click to rename">${escapeHtml(t.title)}</div>
@@ -4918,7 +5598,21 @@ startAudioOutputMonitoring();
           </div>
           <button class="track-row-more" type="button" title="More options">…</button>
           `;
-        item.addEventListener('click', () => playTrackAt(i, true));
+        item.addEventListener('click', (e) => {
+          if (e.ctrlKey || e.metaKey || e.target.closest('.track-select-check')){
+            e.preventDefault();
+            const visibleItems = Array.from(trackListSidebar.querySelectorAll('.track-item[data-track-id]'));
+            const visibleIds   = visibleItems.map(el => parseInt(el.dataset.trackId, 10));
+            const clickedVis   = visibleItems.indexOf(item);
+            toggleTrackSelected(t.id, e.shiftKey, clickedVis, visibleIds);
+            const chk = item.querySelector('.track-select-input');
+            if (chk) chk.checked = selectedTrackIds.has(t.id);
+            item.classList.toggle('batch-selected', selectedTrackIds.has(t.id));
+            return;
+          }
+          if (e.target.closest('.track-select-check')) return;
+          playTrackAt(i, true);
+        });
         item.querySelector('.track-thumb').addEventListener('click', (e) => {
           if (e.target.closest('.track-thumb-clear')) return;
           e.stopPropagation();
@@ -5008,11 +5702,16 @@ startAudioOutputMonitoring();
       const thumbClearHtml = t.thumbUrl
         ? `<button class="card-thumb-clear-btn" type="button" title="Remove thumbnail">&times;</button>`
         : '';
+      const isSelected = selectedTrackIds.has(t.id);
+      if (isSelected) card.classList.add('batch-selected');
       card.innerHTML = `
         <div class="card-art">
           ${cardArtInner}
           <div class="card-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         </div>
+        <label class="card-select-check" title="Select track" onclick="event.stopPropagation()">
+          <input type="checkbox" class="card-select-input"${isSelected ? ' checked' : ''}>
+        </label>
         ${cardHandleHtml}
         <button class="card-add-btn" type="button" title="Add to playlist">+</button>
         <button class="queue-add-btn" type="button" title="Add to queue">☷</button>
@@ -5024,7 +5723,24 @@ startAudioOutputMonitoring();
         <div class="card-sub">${t.kind === 'video' ? 'Video' : (t.kind === 'flac' ? 'FLAC audio' : 'Audio')}</div>
         ${statusHtml}
       `;
-      card.addEventListener('click', () => playTrackAt(i, true, queueContextIds));
+      // Ctrl/Cmd+click or checkbox toggles selection; plain click plays
+      card.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.metaKey || e.target.closest('.card-select-check')){
+          e.preventDefault();
+          // Gather visible track IDs for shift-select range
+          const visibleCards = Array.from(cardGrid.querySelectorAll('.card[data-track-id]'));
+          const visibleIds   = visibleCards.map(c => parseInt(c.dataset.trackId, 10));
+          const clickedVis   = visibleCards.indexOf(card);
+          toggleTrackSelected(t.id, e.shiftKey, clickedVis, visibleIds);
+          // Update this card's checkbox
+          const chk = card.querySelector('.card-select-input');
+          if (chk) chk.checked = selectedTrackIds.has(t.id);
+          card.classList.toggle('batch-selected', selectedTrackIds.has(t.id));
+          return;
+        }
+        if (e.target.closest('.card-select-check')) return;
+        playTrackAt(i, true, queueContextIds);
+      });
       card.querySelector('.card-add-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         openPlaylistMenu(t.id, e.currentTarget);
@@ -5866,6 +6582,7 @@ seekBar.addEventListener('change', () => {
 
     scheduleRender();
     if (playlist.length > 0) loadTrack(0, false);
+    scheduleDupeCheck();
   })();
 ;
 console.log("SLEEVE RENDERER LOADED");

@@ -1543,3 +1543,241 @@
   font-size:10.5px;
   line-height:1.55;
 }
+/* ============================================================
+   Feature: MusicBrainz metadata enrichment + Cover Art Archive
+   (no UI additions — runs silently in background)
+   ============================================================ */
+
+/* ============================================================
+   Feature: Duplicate detection banner + modal
+   ============================================================ */
+.dupe-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(240, 180, 40, 0.12);
+  border: 1px solid rgba(240, 180, 40, 0.28);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin: 0 0 14px 0;
+  font-size: 13px;
+  color: var(--text, #f4f7fb);
+  animation: slideDown 0.2s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+.dupe-banner-icon {
+  font-size: 16px;
+  color: #f0b428;
+  flex-shrink: 0;
+}
+.dupe-banner-text { flex: 1; }
+.dupe-banner-btn {
+  background: rgba(240, 180, 40, 0.22);
+  border: 1px solid rgba(240, 180, 40, 0.4);
+  color: #f0b428;
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.dupe-banner-btn:hover { background: rgba(240, 180, 40, 0.35); }
+.dupe-banner-dismiss {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.45);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.12s;
+}
+.dupe-banner-dismiss:hover { color: rgba(255,255,255,0.85); }
+
+/* Duplicate review modal */
+.dupe-modal-overlay .modal-box { max-width: 600px; }
+.dupe-modal-box { max-height: 80vh; display: flex; flex-direction: column; }
+.dupe-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.dupe-modal-header h3 { margin: 0; font-size: 17px; }
+.dupe-modal-close {
+  background: none !important;
+  border: none !important;
+  font-size: 18px;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.dupe-modal-sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  margin: 0 0 14px 0;
+}
+.dupe-group-list {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.dupe-group { display: flex; flex-direction: column; gap: 6px; }
+.dupe-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.4);
+  padding: 0 2px;
+}
+.dupe-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 9px;
+  padding: 9px 12px;
+}
+.dupe-row-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.dupe-row-art-empty {
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: rgba(255,255,255,0.3);
+}
+.dupe-row-meta { flex: 1; min-width: 0; }
+.dupe-row-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dupe-row-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.dupe-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.dupe-keep-btn   { background: rgba(var(--accent-rgb, 23,171,232), 0.18) !important; color: var(--accent-bright, #17abe8) !important; border-color: rgba(var(--accent-rgb, 23,171,232), 0.3) !important; }
+.dupe-delete-btn { background: rgba(200,60,60,0.14) !important; color: #f07878 !important; border-color: rgba(200,60,60,0.3) !important; }
+
+/* ============================================================
+   Feature: Batch multi-select + batch metadata editor
+   ============================================================ */
+
+/* Selection toolbar — docked to the top of the main content area */
+.selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(var(--accent-rgb, 23,171,232), 0.14);
+  border: 1px solid rgba(var(--accent-rgb, 23,171,232), 0.28);
+  border-radius: 10px;
+  padding: 9px 14px;
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--text, #f4f7fb);
+  animation: slideDown 0.15s ease;
+}
+.selection-count {
+  flex: 1;
+  font-weight: 600;
+  color: var(--accent-bright, #17abe8);
+}
+.selection-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--text, #f4f7fb);
+  border-radius: 7px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.selection-btn:hover { background: rgba(255,255,255,0.16); }
+.selection-btn-danger {
+  background: rgba(200,60,60,0.14);
+  border-color: rgba(200,60,60,0.3);
+  color: #f07878;
+}
+.selection-btn-danger:hover { background: rgba(200,60,60,0.26); }
+
+/* Checkboxes on cards */
+.card-select-check {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.12s;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.card:hover .card-select-check,
+.card.batch-selected .card-select-check { opacity: 1; }
+.card-select-input {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--accent-bright, #17abe8);
+}
+
+/* Highlighted selected cards */
+.card.batch-selected {
+  outline: 2px solid var(--accent-bright, #17abe8);
+  outline-offset: -2px;
+}
+.card.batch-selected .card-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--accent-rgb, 23,171,232), 0.15);
+  pointer-events: none;
+}
+
+/* Checkboxes on sidebar list rows */
+.track-select-check {
+  opacity: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity 0.1s;
+  display: flex;
+  align-items: center;
+  padding: 0 2px;
+}
+.track-item:hover .track-select-check,
+.track-item.batch-selected .track-select-check { opacity: 1; }
+.track-select-input {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent-bright, #17abe8);
+}
+.track-item.batch-selected {
+  background: rgba(var(--accent-rgb, 23,171,232), 0.1);
+  border-left: 2px solid var(--accent-bright, #17abe8);
+}
