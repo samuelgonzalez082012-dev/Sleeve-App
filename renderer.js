@@ -3492,101 +3492,94 @@ async function fetchCoverArtArchiveAlbumArtwork(track) {
   }
 }
 
-async function autoFetchAlbumArt(track) {
+async function fetchCoverArtArchiveAlbumArtwork(track) {
   if (!track || track.kind === 'video') {
-    return;
+    return false;
   }
 
-  const artist = String(
-    track.artist || ''
+  const releaseId = String(
+    track.musicBrainzReleaseId || ''
   ).trim();
 
-  const album = String(
-    track.album || ''
-  ).trim();
-
-  if (!artist || !album) {
-    return;
+  if (!releaseId) {
+    return false;
   }
 
-  const albumKey = getAlbumArtworkKey(track);
-
-  if (!albumKey) {
-    return;
-  }
-
-  // IMPORTANT:
-  // Only perform one artwork lookup per album.
-  if (albumArtFetchAttempts.get(albumKey)) {
-    return;
-  }
-
-  // First check whether another song from this album
-  // already has artwork.
-  if (await applyCachedAlbumArtwork(track)) {
-    albumArtFetchAttempts.set(
-      albumKey,
-      true
-    );
-
-    return;
-  }
-
-  albumArtFetchAttempts.set(
-    albumKey,
-    true
-  );
+  const url =
+    `https://coverartarchive.org/release/${encodeURIComponent(releaseId)}`;
 
   try {
-    // If this particular track already knows its
-    // MusicBrainz release, use it immediately.
-    if (track.musicBrainzReleaseId) {
-      const found =
-        await fetchCoverArtArchiveAlbumArtwork(track);
-
-      if (found) {
-        console.debug(
-          `[Sleeve] Album artwork found: ` +
-          `${artist} - ${album}`
-        );
-
-        return;
+    const response = await fetch(url, {
+      headers: {
+        'Accept': 'application/json'
       }
+    });
+
+    // A release can legitimately have no Cover Art Archive entry.
+    // Do not treat this as a fatal error.
+    if (response.status === 404) {
+      console.debug(
+        `[Sleeve] No Cover Art Archive artwork for release ${releaseId}`
+      );
+
+      return false;
     }
 
-    // Otherwise let MusicBrainz identify the album.
-    await autoFetchMetadata(track);
+    if (!response.ok) {
+      console.debug(
+        `[Sleeve] Cover Art Archive returned ${response.status} for release ${releaseId}`
+      );
 
-    if (
-      track.musicBrainzReleaseId &&
-      !track.thumb &&
-      !track.thumbUrl
-    ) {
-      const found =
-        await fetchCoverArtArchiveAlbumArtwork(track);
-
-      if (found) {
-        console.debug(
-          `[Sleeve] Album artwork found after MusicBrainz lookup: ` +
-          `${artist} - ${album}`
-        );
-
-        return;
-      }
+      return false;
     }
 
-    // MusicBrainz didn't provide artwork.
-    console.debug(
-      `[Sleeve] No artwork found for album: ` +
-      `${artist} - ${album}`
+    const data = await response.json();
+
+    if (!Array.isArray(data.images) || !data.images.length) {
+      return false;
+    }
+
+    // Prefer a front cover.
+    const image =
+      data.images.find(img => img?.front === true) ||
+      data.images[0];
+
+    if (!image) {
+      return false;
+    }
+
+    // Prefer the smaller image first. If it isn't available,
+    // fall back to the larger versions.
+    const artworkUrl =
+      image.thumbnails?.['500'] ||
+      image.thumbnails?.['1200'] ||
+      image.image;
+
+    if (!artworkUrl) {
+      return false;
+    }
+
+    const found = await saveAlbumArtworkFromUrl(
+      track,
+      artworkUrl
     );
+
+    if (found) {
+      console.debug(
+        `[Sleeve] Cover Art Archive artwork found for album: ` +
+        `${track.artist || 'Unknown Artist'} - ${track.album || 'Unknown Album'}`
+      );
+    }
+
+    return found;
 
   } catch (err) {
     console.debug(
-      `[Sleeve] Album artwork lookup failed for ` +
-      `${artist} - ${album}:`,
+      `[Sleeve] Cover Art Archive request failed for release ${releaseId}:`,
       err?.message || err
     );
+
+    return false;
   }
 }
 
@@ -4410,162 +4403,122 @@ async function autoFetchAlbumArt(track) {
 
    // Auto-fetch lyrics from LRCLIB if not already cached.
 // Prefers synced LRC lyrics, then falls back to plain lyrics.
-async function autoFetchLyrics(track) {
-  if (!track || track.lyrics) return;
-  if (lyricsFetchAttempts.get(track.id)) return;
-
-  const artist = String(track.artist || '').trim();
-  const originalTitle = String(track.title || '').trim();
-  const album = String(track.album || '').trim();
-
-  if (!artist || !originalTitle) {
-    console.debug('Lyrics auto-fetch skipped: missing artist or title');
+async function autoFetchAlbumArt(track) {
+  if (!track || track.kind === 'video') {
     return;
   }
 
- 
-const cleanedTitle = originalTitle
-  // Remove year at the beginning:
-  // "(2004) 02 69 Tea" -> "02 69 Tea"
-  .replace(/^\s*\(\s*(?:19|20)\d{2}\s*\)\s*/i, '')
+  const artist = String(track.artist || '').trim();
+  const album = String(track.album || '').trim();
 
-  // Remove track number at the beginning:
-  // "02 69 Tea" -> "69 Tea"
-  // "02. 69 Tea" -> "69 Tea"
-  // "02 - 69 Tea" -> "69 Tea"
-  .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
-  .replace(/^\s*\d{1,3}\s+/i, '')
-
-  // Remove year at the end:
-  // "69 Tea (2004)" -> "69 Tea"
-  .replace(/\s*\(\s*(?:19|20)\d{2}\s*\)\s*$/i, '')
-
-  // Remove clean tags:
-  // "69 Tea (Clean)" -> "69 Tea"
-  .replace(/\s*[\[(]\s*clean(?:\s+version)?\s*[\])]\s*$/i, '')
-
-  .trim();
-
-const titleVariants = [...new Set([
-  originalTitle,
-  cleanedTitle
-].filter(Boolean))];
-
-  // Only mark this track as attempted once we have
-  // enough information to actually perform a lookup.
-  lyricsFetchAttempts.set(track.id, true);
-
-  console.debug('Lyrics auto-fetch:', {
-    artist,
-    originalTitle,
-    titleVariants,
-    album,
-    duration: track.duration
-  });
-
-  for (const title of titleVariants) {
-    try {
-      const params = new URLSearchParams({
-        track_name: title,
-        artist_name: artist
-      });
-
-      if (album) {
-        params.set('album_name', album);
-      }
-
-      // LRCLIB expects duration in seconds.
-      // Only include it if the track has a sensible numeric duration.
-      const duration = Number(track.duration);
-
-      if (Number.isFinite(duration) && duration > 0) {
-        params.set('duration', String(Math.round(duration)));
-      }
-
-      const url = `https://lrclib.net/api/get?${params.toString()}`;
-
-      console.debug('Lyrics lookup:', url);
-
-      const response = await fetch(url, {
-        signal: AbortSignal.timeout(7000),
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        console.debug(
-          `Lyrics lookup failed for "${title}": HTTP ${response.status}`
-        );
-        continue;
-      }
-
-      const data = await response.json();
-
-      if (!data) {
-        console.debug(
-          `Lyrics lookup returned no data for "${title}"`
-        );
-        continue;
-      }
-
-      // Prefer synchronized lyrics because your existing
-      // parseLyrics() already understands LRC timestamps.
-      const syncedLyrics =
-        typeof data.syncedLyrics === 'string'
-          ? data.syncedLyrics.trim()
-          : '';
-
-      const plainLyrics =
-        typeof data.plainLyrics === 'string'
-          ? data.plainLyrics.trim()
-          : '';
-
-      const lyricsToSave = syncedLyrics || plainLyrics;
-
-      if (!lyricsToSave) {
-        console.debug(
-          `Lyrics lookup returned no usable lyrics for "${title}"`
-        );
-        continue;
-      }
-
-      // Store the fetched lyrics on the existing track object.
-      // We do NOT modify the IndexedDB structure.
-      track.lyrics = lyricsToSave;
-
-      // Use Sleeve's existing persistence system.
-      // queueTrackWrite() already stores track.lyrics.
-      await dbPut(track);
-
-      console.debug(
-        `Lyrics found for "${artist} - ${title}"` +
-        `${syncedLyrics ? ' (synced LRC)' : ' (plain lyrics)'}` +
-        ' and queued for saving.'
-      );
-
-      // Refresh the lyrics panel if this is still
-      // the currently playing track.
-      if (
-        currentIndex !== -1 &&
-        playlist[currentIndex] &&
-        playlist[currentIndex].id === track.id
-      ) {
-        renderLyricsPanel();
-      }
-
-      return;
-    } catch (err) {
-      console.debug(
-        `Lyrics lookup error for "${title}":`,
-        err?.message || err
-      );
-    }
+  if (!artist || !album) {
+    return;
   }
 
-  console.debug(
-    `No lyrics found for "${artist} - ${originalTitle}"`
-  );
+  const albumKey = getAlbumArtworkKey(track);
+
+  if (!albumKey) {
+    return;
+  }
+
+  // Only perform one artwork lookup for each album.
+  if (albumArtFetchAttempts.get(albumKey)) {
+    return;
+  }
+
+  // First check the persistent album artwork cache.
+  if (await applyCachedAlbumArtwork(track)) {
+    albumArtFetchAttempts.set(albumKey, true);
+
+    console.debug(
+      `[Sleeve] Reused cached artwork for album: ${artist} - ${album}`
+    );
+
+    return;
+  }
+
+  // Mark the ALBUM as being processed before any await.
+  // This prevents multiple songs from the same album from
+  // starting simultaneous artwork searches.
+  albumArtFetchAttempts.set(albumKey, true);
+
+  try {
+    // ---------------------------------------------------------
+    // STEP 1:
+    // Try the MusicBrainz release ID we already have.
+    // ---------------------------------------------------------
+
+    if (track.musicBrainzReleaseId) {
+      const found =
+        await fetchCoverArtArchiveAlbumArtwork(track);
+
+      if (found) {
+        return;
+      }
+    }
+
+    // ---------------------------------------------------------
+    // STEP 2:
+    // If we don't have a release ID yet, search MusicBrainz.
+    //
+    // IMPORTANT:
+    // Use the recording search directly instead of calling
+    // autoFetchMetadata(), because autoFetchMetadata() has its
+    // own per-track attempt guard.
+    // ---------------------------------------------------------
+
+    if (!track.musicBrainzReleaseId) {
+      try {
+        const recording =
+          await musicBrainzRecordingSearch(track);
+
+        if (recording) {
+          const release =
+            chooseBestMusicBrainzRecording(recording);
+
+          if (release?.id) {
+            track.musicBrainzReleaseId = release.id;
+
+            await dbPut(track);
+
+            const found =
+              await fetchCoverArtArchiveAlbumArtwork(track);
+
+            if (found) {
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.debug(
+          `[Sleeve] MusicBrainz artwork lookup failed for ${artist} - ${album}:`,
+          err?.message || err
+        );
+      }
+    }
+
+    // ---------------------------------------------------------
+    // STEP 3:
+    // Check the cache one more time.
+    //
+    // Another track from the same album may have found artwork
+    // while this lookup was running.
+    // ---------------------------------------------------------
+
+    if (await applyCachedAlbumArtwork(track)) {
+      return;
+    }
+
+    console.debug(
+      `[Sleeve] No artwork found for album: ${artist} - ${album}`
+    );
+
+  } catch (err) {
+    console.debug(
+      `[Sleeve] Album artwork lookup failed for ${artist} - ${album}:`,
+      err?.message || err
+    );
+  }
 }
 
   function parseLyrics(raw){
@@ -6664,7 +6617,7 @@ const titleVariants = [...new Set([
     if (track.kind === 'flac'){
       // If this FLAC has already been converted+split before, load the
       // saved stems instead of falling back to raw wasm playback. This
-      // check previously lived further down inside the "else" branch of
+      // check previously li ved further down inside the "else" branch of
       // this very if-statement, so it could never actually run for a
       // FLAC track and the stem mixer never came back after reopening
       // the app on a FLAC file that had already been split.
