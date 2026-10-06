@@ -1062,8 +1062,7 @@ stemAudio.drums.addEventListener('ended', () => {
   let trackWriteFlushPromise = null;
 
   function queueTrackWrite(track){
-    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null, musicBrainzReleaseId: track.musicBrainzReleaseId || null,
- });
+    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null });
     if (!trackWriteTimer) trackWriteTimer = setTimeout(flushTrackWrites, 100);
   }
 
@@ -2689,7 +2688,6 @@ startAudioOutputMonitoring();
         genre: null,
         trackNum: null,
         duration: null,
-        musicBrainzReleaseId: null,
         manualMetadata: {},
         playCount: 0,
         lastPlayedAt: null,
@@ -2706,21 +2704,11 @@ startAudioOutputMonitoring();
     let cursor = 0;
     const scanBatch = () => {
       const end = Math.min(cursor + 12, newTracks.length);
-     for (; cursor < end; cursor++){
-  const track = newTracks[cursor];
-
-  readTags(track);
-
-  setTimeout(() => {
-    autoFetchAlbumArt(track);
-  }, 800 + cursor * 200);
-}
-
+      for (; cursor < end; cursor++) readTags(newTracks[cursor]);
       if (cursor < newTracks.length) setTimeout(scanBatch, 0);
     };
     scanBatch();
     if (currentIndex === -1 && playlist.length > 0) loadTrack(0, false);
-    scheduleDupeCheck();
   }
 
   // ---------- Artist/album tag reading ----------
@@ -2739,25 +2727,6 @@ startAudioOutputMonitoring();
         const year = (yearRaw.match(/\d{4}/) || [])[0] || null;
         const trackRaw = (tags.track || '').toString().trim();
         const trackNum = trackRaw ? (parseInt(trackRaw, 10) || null) : null;
-        // Also try to extract embedded cover art from the file tags
-        const picture = tags.picture;
-        if (picture && !track.thumb && !track.thumbUrl){
-          try {
-            const byteArray = new Uint8Array(picture.data);
-            const mimeType = picture.format || 'image/jpeg';
-            const blob = new Blob([byteArray], { type: mimeType });
-            makeThumbBlob(blob).then(thumbBlob => {
-              if (!track.thumb && !track.thumbUrl){
-                track.thumb = thumbBlob;
-                track.thumbUrl = URL.createObjectURL(thumbBlob);
-                track.thumbKind = 'image';
-                dbPut(track);
-                if (currentIndex !== -1 && playlist[currentIndex].id === track.id) updateNowPlayingArt(track);
-                scheduleRender(searchInput.value);
-              }
-            }).catch(() => {});
-          } catch(e) {}
-        }
         let changed = false;
         const manual = track.manualMetadata || {};
         if (!manual.artist && artist && artist !== track.artist){ track.artist = artist; changed = true; }
@@ -2771,819 +2740,10 @@ startAudioOutputMonitoring();
             scheduleRender(searchInput.value);
           }
         }
-        // After file tags are read, if core fields are still missing, try MusicBrainz
-        const stillMissingCore = !track.artist || !track.album || !track.year;
-        if (stillMissingCore) autoFetchMetadata(track);
       },
-      onError: () => {
-        // File has no readable tags — try MusicBrainz using the filename as a hint
-        autoFetchMetadata(track);
-      }
+      onError: () => { /* file has no readable tags — leave artist/album unset */ }
     });
   }
-
-  // ---------- MusicBrainz metadata auto-fetch ----------
-  // Fires after readTags when artist/album/year are still missing.
-  // Non-blocking, never overwrites manual overrides or tags already found.
- // ---------- MusicBrainz auto-fetch ----------
-
-const metadataFetchAttempts = new Map();
-
-
-// MusicBrainz asks clients to stay at or below 1 request per second.
-// Everything goes through this queue so importing a large library does
-// not hammer MusicBrainz.
-const musicBrainzQueue = [];
-let musicBrainzProcessing = false;
-
-function queueMusicBrainzRequest(requestFn) {
-  return new Promise((resolve, reject) => {
-    musicBrainzQueue.push({
-      requestFn,
-      resolve,
-      reject
-    });
-
-    processMusicBrainzQueue();
-  });
-}
-
-async function processMusicBrainzQueue() {
-  if (musicBrainzProcessing) return;
-
-  musicBrainzProcessing = true;
-
-  while (musicBrainzQueue.length > 0) {
-    const job = musicBrainzQueue.shift();
-
-    try {
-      const result = await job.requestFn();
-      job.resolve(result);
-    } catch (err) {
-      job.reject(err);
-    }
-
-    // Keep requests safely spaced apart.
-    if (musicBrainzQueue.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 1100));
-    }
-  }
-
-  musicBrainzProcessing = false;
-}
-
-
-// Cleans titles that commonly come from filenames.
-//
-// Examples:
-//
-// "(2004) 02 69 Tea"        -> "69 Tea"
-// "02 - Duality"            -> "Duality"
-// "02. Duality"             -> "Duality"
-// "69 Tea"                  -> "69 Tea"
-// "Duality (2004)"          -> "Duality"
-// "Duality (Clean)"         -> "Duality"
-//
-// IMPORTANT:
-// We only remove a number when it actually looks like a track number.
-// A title such as "69 Tea" is preserved.
-function cleanMusicBrainzTitle(title) {
-  let value = String(title || '').trim();
-
-  // Remove a year at the beginning.
-  value = value.replace(
-    /^\s*\(\s*(?:19|20)\d{2}\s*\)\s*/i,
-    ''
-  );
-
-  // Remove a leading track number ONLY when it has a separator.
-  //
-  // 02 - Song
-  // 02. Song
-  // 02) Song
-  //
-  // This is deliberately NOT:
-  //
-  // /^\d+\s+/
-  //
-  // because that would incorrectly turn "69 Tea" into "Tea".
-  value = value.replace(
-    /^\s*\d{1,3}\s*[-–—.)_:]\s*/,
-    ''
-  );
-
-  // Handle filenames such as:
-  //
-  // "02 69 Tea"
-  //
-  // but don't strip:
-  //
-  // "69 Tea"
-  //
-  // We only do this when there is a strong indication that the first
-  // number is a track number.
-  const doubleNumberMatch = value.match(
-    /^\s*(\d{1,3})\s+(\d{1,3})\s+(.+)$/i
-  );
-
-  if (doubleNumberMatch) {
-    const firstNumber = Number(doubleNumberMatch[1]);
-
-    if (firstNumber >= 1 && firstNumber <= 99) {
-      value = `${doubleNumberMatch[2]} ${doubleNumberMatch[3]}`;
-    }
-  }
-
-  // Remove a year at the end.
-  value = value.replace(
-    /\s*\(\s*(?:19|20)\d{2}\s*\)\s*$/i,
-    ''
-  );
-
-  // Remove clean / clean version tags.
-  value = value.replace(
-    /\s*[\[(]\s*clean(?:\s+version)?\s*[\])]\s*$/i,
-    ''
-  );
-
-  return value.trim();
-}
-
-
-function normalizeMusicBrainzText(value) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\p{L}\p{N}]+/gu, '')
-    .trim();
-}
-
-
-function musicBrainzTitleMatches(a, b) {
-  const left = normalizeMusicBrainzText(a);
-  const right = normalizeMusicBrainzText(b);
-
-  if (!left || !right) return false;
-
-  if (left === right) return true;
-
-  return (
-    left.includes(right) ||
-    right.includes(left)
-  );
-}
-
-
-function getMusicBrainzArtistName(recording) {
-  return (
-    recording?.['artist-credit']
-      ?.map(credit => credit?.name || credit?.artist?.name || '')
-      .filter(Boolean)
-      .join(', ')
-      .trim() || ''
-  );
-}
-
-
-function getMusicBrainzReleaseYear(release) {
-  const date =
-    release?.date ||
-    release?.['release-events']?.[0]?.date ||
-    '';
-
-  return (String(date).match(/\b(19|20)\d{2}\b/) || [])[0] || null;
-}
-
-
-function chooseBestMusicBrainzRecording(recordings, track) {
-  if (!Array.isArray(recordings) || recordings.length === 0) {
-    return null;
-  }
-
-  const artist = normalizeMusicBrainzText(track.artist);
-  const title = normalizeMusicBrainzText(
-    cleanMusicBrainzTitle(track.title)
-  );
-
-  let best = null;
-  let bestScore = -Infinity;
-
-  for (const recording of recordings) {
-    const recordingTitle = normalizeMusicBrainzText(
-      recording?.title
-    );
-
-    const recordingArtist = normalizeMusicBrainzText(
-      getMusicBrainzArtistName(recording)
-    );
-
-    let score = 0;
-
-    // Title is the most important part.
-    if (recordingTitle === title) {
-      score += 100;
-    } else if (musicBrainzTitleMatches(recordingTitle, title)) {
-      score += 50;
-    }
-
-    // Artist match is very important when we already have an artist.
-    if (artist && recordingArtist === artist) {
-      score += 100;
-    } else if (
-      artist &&
-      (
-        recordingArtist.includes(artist) ||
-        artist.includes(recordingArtist)
-      )
-    ) {
-      score += 50;
-    }
-
-    // Prefer recordings that actually have releases.
-    if (Array.isArray(recording.releases) && recording.releases.length) {
-      score += 10;
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      best = recording;
-    }
-  }
-
-  // Don't accept a completely unrelated MusicBrainz result.
-  if (bestScore < 50) {
-    return null;
-  }
-
-  return best;
-}
-
-
-async function musicBrainzRecordingSearch(track) {
-  const cleanedTitle = cleanMusicBrainzTitle(track.title);
-
-  if (!cleanedTitle) return null;
-
-  const artist = String(track.artist || '').trim();
-
-  const searches = [];
-
-  // First choice: artist + recording title.
-  if (artist) {
-    searches.push(
-      `recording:"${cleanedTitle}" AND artist:"${artist}"`
-    );
-  }
-
-  // Fallback: title only.
-  searches.push(
-    `recording:"${cleanedTitle}"`
-  );
-
-  for (const searchQuery of searches) {
-    try {
-      const url =
-        `https://musicbrainz.org/ws/2/recording/` +
-        `?query=${encodeURIComponent(searchQuery)}` +
-        `&limit=10` +
-        `&fmt=json`;
-
-      const response = await queueMusicBrainzRequest(() =>
-        fetch(url, {
-          signal: AbortSignal.timeout(10000),
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Sleeve/1.0 (music player app)'
-          }
-        })
-      );
-
-      if (!response.ok) {
-        console.debug(
-          `[Sleeve] MusicBrainz HTTP ${response.status} for "${cleanedTitle}"`
-        );
-        continue;
-      }
-
-      const data = await response.json();
-
-      const recording = chooseBestMusicBrainzRecording(
-        data?.recordings || [],
-        track
-      );
-
-      if (recording) {
-        return recording;
-      }
-    } catch (err) {
-      console.debug(
-        `[Sleeve] MusicBrainz search failed for "${cleanedTitle}":`,
-        err?.message || err
-      );
-    }
-  }
-
-  return null;
-}
-
-
-async function autoFetchMetadata(track) {
-  if (!track || track.kind === 'video') return;
-
-  if (metadataFetchAttempts.get(track.id)) return;
-
-  const title = String(track.title || '').trim();
-
-  if (!title) return;
-
-  const manual = track.manualMetadata || {};
-
-  const needsArtist =
-    !manual.artist &&
-    !track.artist;
-
-  const needsAlbum =
-    !manual.album &&
-    !track.album;
-
-  const needsYear =
-    !manual.year &&
-    !track.year;
-
-  const needsGenre =
-    !manual.genre &&
-    !track.genre;
-
-  const needsMusicBrainzId =
-    !track.musicBrainzReleaseId;
-
-  if (
-    !needsArtist &&
-    !needsAlbum &&
-    !needsYear &&
-    !needsGenre &&
-    !needsMusicBrainzId
-  ) {
-    return;
-  }
-
-  metadataFetchAttempts.set(track.id, true);
-
-  try {
-    const recording = await musicBrainzRecordingSearch(track);
-
-    if (!recording) {
-      console.debug(
-        `[Sleeve] No MusicBrainz match for "${track.title}"`
-      );
-      return;
-    }
-
-    let changed = false;
-
-    // ---------------------------------------------------------
-    // Artist
-    // ---------------------------------------------------------
-
-    if (!manual.artist && !track.artist) {
-      const artistName = getMusicBrainzArtistName(recording);
-
-      if (artistName) {
-        track.artist = artistName;
-        changed = true;
-      }
-    }
-
-    // ---------------------------------------------------------
-    // Album / release
-    // ---------------------------------------------------------
-
-    const releases = Array.isArray(recording.releases)
-      ? recording.releases
-      : [];
-
-    // Prefer a release with an actual title and date.
-    const release =
-      releases.find(r => r?.title && r?.date) ||
-      releases.find(r => r?.title) ||
-      releases[0] ||
-      null;
-
-    if (release) {
-      // SAVE THE RELEASE MBID.
-      //
-      // This is important because Cover Art Archive uses the
-      // release MBID to find the artwork.
-      if (
-        release.id &&
-        track.musicBrainzReleaseId !== release.id
-      ) {
-        track.musicBrainzReleaseId = release.id;
-        changed = true;
-      }
-
-      // Album
-      if (!manual.album && !track.album && release.title) {
-        track.album = String(release.title).trim();
-
-        if (track.album) {
-          changed = true;
-        }
-      }
-
-      // Year
-      if (!manual.year && !track.year) {
-        const year = getMusicBrainzReleaseYear(release);
-
-        if (year) {
-          track.year = year;
-          changed = true;
-        }
-      }
-    }
-
-    // ---------------------------------------------------------
-    // Genre
-    // ---------------------------------------------------------
-
-    if (!manual.genre && !track.genre) {
-      const tags = Array.isArray(recording.tags)
-        ? recording.tags.slice()
-        : [];
-
-      tags.sort(
-        (a, b) =>
-          Number(b?.count || 0) -
-          Number(a?.count || 0)
-      );
-
-      const genre = String(tags[0]?.name || '').trim();
-
-      if (genre) {
-        track.genre = genre;
-        changed = true;
-      }
-    }
-
-    // ---------------------------------------------------------
-    // Save metadata
-    // ---------------------------------------------------------
-
-    if (changed) {
-      await dbPut(track);
-
-      console.debug(
-        `[Sleeve] MusicBrainz enriched "${track.title}":`,
-        {
-          artist: track.artist,
-          album: track.album,
-          year: track.year,
-          genre: track.genre,
-          musicBrainzReleaseId: track.musicBrainzReleaseId
-        }
-      );
-
-      if (
-        currentView.type === 'artists' ||
-        currentView.type === 'artistAlbums' ||
-        currentView.type === 'album' ||
-        currentView.type === 'home'
-      ) {
-        scheduleRender(searchInput.value);
-      }
-
-      if (
-        currentIndex !== -1 &&
-        playlist[currentIndex]?.id === track.id
-      ) {
-        updateNowPlayingText(track, currentIndex);
-      }
-    }
-
-    // ALWAYS attempt artwork after MusicBrainz succeeds,
-    // even if only the MBID changed.
-    if (
-      !track.thumb &&
-      !track.thumbUrl &&
-      track.musicBrainzReleaseId
-    ) {
-      autoFetchAlbumArt(track);
-    }
-
-  } catch (err) {
-    console.debug(
-      `[Sleeve] MusicBrainz enrichment failed for "${track.title}":`,
-      err?.message || err
-    );
-  }
-}
-  // ---------- Cover Art Archive album art auto-fetch ----------
-  // Called after readTags / MusicBrainz enrichment when a track still has
-  // no per-track thumbnail.  Uses the MusicBrainz recording search to find
-  // a release MBID, then fetches the front cover from the Cover Art Archive.
-  // Stores the result as the track's own thumbUrl so it shows up everywhere
-  // thumbs already appear (cards, sidebar, now-playing, mini player).
-// ---------- Album-level artwork auto-fetch ----------
-
-const albumArtFetchAttempts = new Map();
-
-function getAlbumArtworkKey(track) {
-  const artist = normalizeMusicBrainzText(track?.artist || '');
-  const album = normalizeMusicBrainzText(track?.album || '');
-
-  if (!artist || !album) return null;
-
-  return `${artist}\u241F${album}`;
-}
-
-async function applyArtworkToAlbum(track, blob) {
-  if (!track || !blob) return false;
-
-  const albumKey = getAlbumArtworkKey(track);
-
-  if (!albumKey) return false;
-
-  const tracksInAlbum = playlist.filter(other => {
-    if (!other || other.kind === 'video') return false;
-
-    return getAlbumArtworkKey(other) === albumKey;
-  });
-
-  if (!tracksInAlbum.length) {
-    tracksInAlbum.push(track);
-  }
-
-  for (const albumTrack of tracksInAlbum) {
-    try {
-      if (albumTrack.thumbUrl) {
-        try {
-          URL.revokeObjectURL(albumTrack.thumbUrl);
-        } catch (e) {}
-      }
-
-      albumTrack.thumb = blob;
-      albumTrack.thumbUrl = URL.createObjectURL(blob);
-      albumTrack.thumbKind = 'image';
-
-      await dbPut(albumTrack);
-    } catch (err) {
-      console.debug(
-        `[Sleeve] Failed applying album artwork to "${albumTrack.title}":`,
-        err?.message || err
-      );
-    }
-  }
-
-  // Keep a persistent album-level copy too.
-  try {
-    await dbPutAlbumThumb(
-      albumKey,
-      blob,
-      'image'
-    );
-  } catch (err) {
-    console.debug(
-      '[Sleeve] Failed saving album artwork:',
-      err?.message || err
-    );
-  }
-
-  scheduleRender(searchInput.value);
-
-  if (
-    currentIndex !== -1 &&
-    playlist[currentIndex]?.id
-  ) {
-    updateNowPlayingArt(
-      playlist[currentIndex]
-    );
-  }
-
-  return true;
-}
-
-async function applyCachedAlbumArtwork(track) {
-  const albumKey = getAlbumArtworkKey(track);
-
-  if (!albumKey) return false;
-
-  const cached = albumThumbs.get(albumKey);
-
-  if (!cached?.blob) {
-    return false;
-  }
-
-  return applyArtworkToAlbum(
-    track,
-    cached.blob
-  );
-}
-
-async function saveAlbumArtworkFromUrl(track, artworkUrl) {
-  if (!track || !artworkUrl) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(
-      artworkUrl,
-      {
-        signal: AbortSignal.timeout(10000)
-      }
-    );
-
-    if (!response.ok) {
-      return false;
-    }
-
-    const blob = await response.blob();
-
-    if (
-      !blob ||
-      !String(blob.type || '').startsWith('image/')
-    ) {
-      return false;
-    }
-
-    const thumbBlob = await makeThumbBlob(blob);
-
-    if (!thumbBlob) {
-      return false;
-    }
-
-    return applyArtworkToAlbum(
-      track,
-      thumbBlob
-    );
-
-  } catch (err) {
-    console.debug(
-      `[Sleeve] Album artwork download failed for "${track.album}":`,
-      err?.message || err
-    );
-
-    return false;
-  }
-}
-
-async function fetchCoverArtArchiveAlbumArtwork(track) {
-  if (!track?.musicBrainzReleaseId) {
-    return false;
-  }
-
-  try {
-    const url =
-      `https://coverartarchive.org/release/` +
-      encodeURIComponent(
-        track.musicBrainzReleaseId
-      );
-
-    const response = await fetch(
-      url,
-      {
-        signal: AbortSignal.timeout(10000),
-        headers: {
-          'Accept': 'application/json'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      return false;
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data?.images)) {
-      return false;
-    }
-
-    const front =
-      data.images.find(image => image?.front) ||
-      data.images[0];
-
-    if (!front) {
-      return false;
-    }
-
-    const artworkUrl =
-      front?.thumbnails?.['500'] ||
-      front?.thumbnails?.['1200'] ||
-      front?.image ||
-      null;
-
-    if (!artworkUrl) {
-      return false;
-    }
-
-    return saveAlbumArtworkFromUrl(
-      track,
-      artworkUrl
-    );
-
-  } catch (err) {
-    console.debug(
-      `[Sleeve] Cover Art Archive failed for album "${track.album}":`,
-      err?.message || err
-    );
-
-    return false;
-  }
-}
-
-async function fetchCoverArtArchiveAlbumArtwork(track) {
-  if (!track || track.kind === 'video') {
-    return false;
-  }
-
-  const releaseId = String(
-    track.musicBrainzReleaseId || ''
-  ).trim();
-
-  if (!releaseId) {
-    return false;
-  }
-
-  const url =
-    `https://coverartarchive.org/release/${encodeURIComponent(releaseId)}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-
-    // A release can legitimately have no Cover Art Archive entry.
-    // Do not treat this as a fatal error.
-    if (response.status === 404) {
-      console.debug(
-        `[Sleeve] No Cover Art Archive artwork for release ${releaseId}`
-      );
-
-      return false;
-    }
-
-    if (!response.ok) {
-      console.debug(
-        `[Sleeve] Cover Art Archive returned ${response.status} for release ${releaseId}`
-      );
-
-      return false;
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data.images) || !data.images.length) {
-      return false;
-    }
-
-    // Prefer a front cover.
-    const image =
-      data.images.find(img => img?.front === true) ||
-      data.images[0];
-
-    if (!image) {
-      return false;
-    }
-
-    // Prefer the smaller image first. If it isn't available,
-    // fall back to the larger versions.
-    const artworkUrl =
-      image.thumbnails?.['500'] ||
-      image.thumbnails?.['1200'] ||
-      image.image;
-
-    if (!artworkUrl) {
-      return false;
-    }
-
-    const found = await saveAlbumArtworkFromUrl(
-      track,
-      artworkUrl
-    );
-
-    if (found) {
-      console.debug(
-        `[Sleeve] Cover Art Archive artwork found for album: ` +
-        `${track.artist || 'Unknown Artist'} - ${track.album || 'Unknown Album'}`
-      );
-    }
-
-    return found;
-
-  } catch (err) {
-    console.debug(
-      `[Sleeve] Cover Art Archive request failed for release ${releaseId}:`,
-      err?.message || err
-    );
-
-    return false;
-  }
-}
-
-
 
   // Reads native audio duration without a full decode; cheap probe used
   // to fill in run times on the detailed album page.
@@ -3749,362 +2909,6 @@ async function fetchCoverArtArchiveAlbumArtwork(track) {
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') metadataSaveBtn.click();
       if (e.key === 'Escape') closeMetadataEditor();
-    });
-  });
-
-  // ---------- Duplicate detection ----------
-  // Groups tracks by normalised "artist · title" key.  Exact file duplicates
-  // (same name, zero-byte difference) and fuzzy near-matches (same key after
-  // stripping punctuation + casing) both count.
-  function findDuplicates(){
-    const groups = new Map();
-    playlist.forEach(t => {
-      if (t.kind === 'video') return;
-      const artist = (t.artist || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      const title  = (t.title  || '').trim().toLowerCase()
-        .replace(/^\d{1,3}[\s.\-_]+/, '')    // strip leading track numbers
-        .replace(/[^a-z0-9]/g, '');
-      const key = artist + '\u241F' + title;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(t);
-    });
-    return Array.from(groups.values()).filter(g => g.length > 1);
-  }
-
-  function renderDuplicateBanner(){
-    const existing = document.getElementById('dupeBanner');
-    if (existing) existing.remove();
-
-    const dupeGroups = findDuplicates();
-    if (!dupeGroups.length) return;
-
-    const total = dupeGroups.reduce((n, g) => n + g.length - 1, 0); // how many extras
-    const banner = document.createElement('div');
-    banner.id = 'dupeBanner';
-    banner.className = 'dupe-banner';
-    banner.innerHTML = `
-      <span class="dupe-banner-icon">⚠</span>
-      <span class="dupe-banner-text">${total} possible duplicate${total === 1 ? '' : 's'} found</span>
-      <button class="dupe-banner-btn" type="button" id="dupeReviewBtn">Review</button>
-      <button class="dupe-banner-dismiss" type="button" id="dupeDismissBtn" title="Dismiss">✕</button>
-    `;
-    // Insert above the card grid
-    const mainContent = cardGrid?.parentElement;
-    if (mainContent) mainContent.insertBefore(banner, cardGrid);
-
-    document.getElementById('dupeReviewBtn').addEventListener('click', openDuplicateModal);
-    document.getElementById('dupeDismissBtn').addEventListener('click', () => banner.remove());
-  }
-
-  function openDuplicateModal(){
-    const dupeGroups = findDuplicates();
-    if (!dupeGroups.length) return;
-
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay dupe-modal-overlay';
-    overlay.id = 'dupeModal';
-
-    const box = document.createElement('div');
-    box.className = 'modal-box dupe-modal-box';
-    box.innerHTML = `
-      <div class="dupe-modal-header">
-        <h3>Duplicate tracks</h3>
-        <button class="dupe-modal-close modal-btn" type="button" id="dupeModalClose">✕</button>
-      </div>
-      <p class="dupe-modal-sub">Keep the version you want and delete the rest. Sleeve won't delete anything until you confirm.</p>
-      <div class="dupe-group-list" id="dupeGroupList"></div>
-      <div class="modal-actions">
-        <button class="modal-btn" type="button" id="dupeModalDone">Done</button>
-      </div>
-    `;
-    overlay.appendChild(box);
-    document.body.appendChild(overlay);
-
-    const list = box.querySelector('#dupeGroupList');
-
-    dupeGroups.forEach((group, gi) => {
-      const section = document.createElement('div');
-      section.className = 'dupe-group';
-
-      const label = document.createElement('div');
-      label.className = 'dupe-group-label';
-      label.textContent = `Group ${gi + 1} — ${group.length} copies`;
-      section.appendChild(label);
-
-      group.forEach(t => {
-        const row = document.createElement('div');
-        row.className = 'dupe-row';
-        const art = t.thumbUrl
-          ? `<img src="${t.thumbUrl}" class="dupe-row-art" alt="">`
-          : `<div class="dupe-row-art dupe-row-art-empty">♪</div>`;
-        const meta = [t.artist, t.album, t.year].filter(Boolean).join(' · ') || 'No metadata';
-        row.innerHTML = `
-          ${art}
-          <div class="dupe-row-meta">
-            <div class="dupe-row-title">${escapeHtml(t.title)}</div>
-            <div class="dupe-row-sub">${escapeHtml(meta)}</div>
-          </div>
-          <div class="dupe-row-actions">
-            <button class="dupe-keep-btn modal-btn modal-btn-primary" type="button" data-track-id="${t.id}">Keep</button>
-            <button class="dupe-delete-btn modal-btn" type="button" data-track-id="${t.id}">Delete</button>
-          </div>
-        `;
-        section.appendChild(row);
-      });
-
-      list.appendChild(section);
-    });
-
-    function close(){
-      overlay.remove();
-      renderDuplicateBanner();
-    }
-
-    box.querySelector('#dupeModalClose').addEventListener('click', close);
-    box.querySelector('#dupeModalDone').addEventListener('click', close);
-    overlay.addEventListener('mousedown', e => { if (e.target === overlay) close(); });
-
-    box.addEventListener('click', e => {
-      const keepBtn   = e.target.closest('.dupe-keep-btn');
-      const deleteBtn = e.target.closest('.dupe-delete-btn');
-      if (!keepBtn && !deleteBtn) return;
-
-      const trackId = parseInt((keepBtn || deleteBtn).dataset.trackId, 10);
-      const track   = playlist.find(t => t.id === trackId);
-      if (!track) return;
-
-      if (deleteBtn){
-        // Find which group this track belongs to, then delete it
-        const group = findDuplicates().find(g => g.some(t => t.id === trackId));
-        if (!group) return;
-        // Remove the row from the modal immediately (no confirm since they're in the dupe UI)
-        const row = deleteBtn.closest('.dupe-row');
-        if (row) row.remove();
-        // Actually delete the track
-        const idx = playlist.findIndex(t => t.id === trackId);
-        if (idx !== -1){
-          const wasCurrent = idx === currentIndex;
-          if (wasCurrent) stopEverything();
-          try{ URL.revokeObjectURL(track.url); }catch(e){}
-          playlist.splice(idx, 1);
-          dbDeleteTrack(trackId);
-          playlists.forEach(pl => {
-            if (pl.trackIds.includes(trackId)){
-              pl.trackIds = pl.trackIds.filter(id => id !== trackId);
-              dbPutPlaylist(pl);
-            }
-          });
-          if (wasCurrent){ currentIndex = -1; }
-          else if (idx < currentIndex){ currentIndex -= 1; }
-          scheduleRender(searchInput.value);
-        }
-        // Check if only one track remains in the group section — collapse the header
-        const section = deleteBtn.closest('.dupe-group');
-        if (section){
-          const remaining = section.querySelectorAll('.dupe-row');
-          if (remaining.length === 0) section.remove();
-          else if (remaining.length === 1){
-            const lbl = section.querySelector('.dupe-group-label');
-            if (lbl) lbl.textContent = lbl.textContent.replace(/\d+ copies/, '1 copy — resolved');
-          }
-        }
-      } else if (keepBtn){
-        // "Keep" = delete all other tracks in this group
-        const groups = findDuplicates();
-        const group = groups.find(g => g.some(t => t.id === trackId));
-        if (!group) return;
-        group.forEach(t => {
-          if (t.id === trackId) return; // keep this one
-          const section = keepBtn.closest('.dupe-group');
-          if (section){
-            const rows = section.querySelectorAll('.dupe-row');
-            rows.forEach(r => {
-              const btn = r.querySelector('[data-track-id]');
-              if (btn && parseInt(btn.dataset.trackId, 10) === t.id) r.remove();
-            });
-          }
-          const idx = playlist.findIndex(tr => tr.id === t.id);
-          if (idx === -1) return;
-          const wasCurrent = idx === currentIndex;
-          if (wasCurrent) stopEverything();
-          try{ URL.revokeObjectURL(t.url); }catch(e){}
-          playlist.splice(idx, 1);
-          dbDeleteTrack(t.id);
-          playlists.forEach(pl => {
-            if (pl.trackIds.includes(t.id)){
-              pl.trackIds = pl.trackIds.filter(id => id !== t.id);
-              dbPutPlaylist(pl);
-            }
-          });
-          if (wasCurrent){ currentIndex = -1; }
-          else if (idx < currentIndex){ currentIndex -= 1; }
-        });
-        scheduleRender(searchInput.value);
-        const section = keepBtn.closest('.dupe-group');
-        if (section){
-          const lbl = section.querySelector('.dupe-group-label');
-          if (lbl) lbl.textContent = lbl.textContent.replace(/\d+ copies/, '1 copy — resolved');
-        }
-      }
-
-      // If no duplicate groups remain, close the modal
-      if (findDuplicates().length === 0) close();
-    });
-  }
-
-  // Run duplicate check after library loads / after files are added.
-  // Debounced so a batch import only triggers once.
-  let dupeCheckTimer = null;
-  function scheduleDupeCheck(){
-    clearTimeout(dupeCheckTimer);
-    dupeCheckTimer = setTimeout(() => {
-      if (currentView.type === 'home') renderDuplicateBanner();
-    }, 2000);
-  }
-
-  // ---------- Batch multi-select ----------
-  // Tracks which track IDs are currently selected.
-  // Shift-clicking a card/row or clicking the checkbox selects it.
-  const selectedTrackIds = new Set();
-  let lastSelectedIndex = -1;
-
-  const selectionToolbar = document.getElementById('selectionToolbar');
-  const selectionCount   = document.getElementById('selectionCount');
-  const batchEditBtn     = document.getElementById('batchEditBtn');
-  const batchDeleteBtn   = document.getElementById('batchDeleteBtn');
-  const selectionClearBtn = document.getElementById('selectionClearBtn');
-
-  function updateSelectionToolbar(){
-    const n = selectedTrackIds.size;
-    selectionToolbar.style.display = n > 0 ? 'flex' : 'none';
-    selectionCount.textContent = `${n} selected`;
-    // Highlight selected cards and list items
-    document.querySelectorAll('.card[data-track-id], .track-item[data-track-id]').forEach(el => {
-      const id = parseInt(el.dataset.trackId, 10);
-      el.classList.toggle('batch-selected', selectedTrackIds.has(id));
-    });
-  }
-
-  function clearSelection(){
-    selectedTrackIds.clear();
-    lastSelectedIndex = -1;
-    updateSelectionToolbar();
-  }
-
-  function toggleTrackSelected(trackId, shiftHeld, clickedVisibleIndex, visibleIds){
-    if (shiftHeld && lastSelectedIndex !== -1 && visibleIds){
-      const from = Math.min(lastSelectedIndex, clickedVisibleIndex);
-      const to   = Math.max(lastSelectedIndex, clickedVisibleIndex);
-      for (let i = from; i <= to; i++){
-        if (visibleIds[i] != null) selectedTrackIds.add(visibleIds[i]);
-      }
-    } else {
-      if (selectedTrackIds.has(trackId)) selectedTrackIds.delete(trackId);
-      else selectedTrackIds.add(trackId);
-    }
-    lastSelectedIndex = clickedVisibleIndex;
-    updateSelectionToolbar();
-  }
-
-  selectionClearBtn?.addEventListener('click', clearSelection);
-
-  batchDeleteBtn?.addEventListener('click', () => {
-    if (!selectedTrackIds.size) return;
-    if (!confirm(`Delete ${selectedTrackIds.size} selected track${selectedTrackIds.size === 1 ? '' : 's'}? This cannot be undone.`)) return;
-    const ids = Array.from(selectedTrackIds);
-    ids.forEach(id => {
-      const idx = playlist.findIndex(t => t.id === id);
-      if (idx === -1) return;
-      const track = playlist[idx];
-      const wasCurrent = idx === currentIndex;
-      if (wasCurrent) stopEverything();
-      try{ URL.revokeObjectURL(track.url); }catch(e){}
-      playlist.splice(idx, 1);
-      dbDeleteTrack(id);
-      playlists.forEach(pl => {
-        if (pl.trackIds.includes(id)){
-          pl.trackIds = pl.trackIds.filter(tid => tid !== id);
-          dbPutPlaylist(pl);
-        }
-      });
-      if (wasCurrent) currentIndex = -1;
-      else if (idx < currentIndex) currentIndex -= 1;
-    });
-    clearSelection();
-    scheduleRender(searchInput.value);
-  });
-
-  batchEditBtn?.addEventListener('click', openBatchMetadataEditor);
-
-  // ---------- Batch metadata editor ----------
-  const batchMetadataBackdrop = document.getElementById('batchMetadataBackdrop');
-  const batchMetadataCount    = document.getElementById('batchMetadataCount');
-  const batchArtist  = document.getElementById('batchArtist');
-  const batchAlbum   = document.getElementById('batchAlbum');
-  const batchGenre   = document.getElementById('batchGenre');
-  const batchYear    = document.getElementById('batchYear');
-
-  function openBatchMetadataEditor(){
-    if (!selectedTrackIds.size) return;
-    batchMetadataCount.textContent = selectedTrackIds.size;
-    batchArtist.value = '';
-    batchAlbum.value  = '';
-    batchGenre.value  = '';
-    batchYear.value   = '';
-    batchMetadataBackdrop.style.display = 'flex';
-    setTimeout(() => batchArtist.focus(), 0);
-  }
-
-  function closeBatchMetadataEditor(){
-    batchMetadataBackdrop.style.display = 'none';
-  }
-
-  document.getElementById('batchMetadataCancelBtn')?.addEventListener('click', closeBatchMetadataEditor);
-  batchMetadataBackdrop?.addEventListener('click', e => {
-    if (e.target === batchMetadataBackdrop) closeBatchMetadataEditor();
-  });
-
-  document.getElementById('batchMetadataSaveBtn')?.addEventListener('click', () => {
-    const year = batchYear.value.trim();
-    if (year && !/^\d{4}$/.test(year)){
-      alert('Year must be exactly four digits, such as 2026.');
-      batchYear.focus();
-      return;
-    }
-    const values = {
-      artist: batchArtist.value.trim(),
-      album:  batchAlbum.value.trim(),
-      genre:  batchGenre.value.trim(),
-      year:   year
-    };
-    const hasAnyValue = Object.values(values).some(v => v);
-    if (!hasAnyValue){ closeBatchMetadataEditor(); return; }
-
-    selectedTrackIds.forEach(id => {
-      const track = playlist.find(t => t.id === id);
-      if (!track) return;
-      track.manualMetadata = track.manualMetadata || {};
-      Object.keys(values).forEach(key => {
-        if (values[key]){
-          track[key] = values[key];
-          track.manualMetadata[key] = true;
-        }
-      });
-      dbPut(track);
-    });
-
-    closeBatchMetadataEditor();
-    clearSelection();
-    scheduleRender(searchInput.value);
-    if (currentIndex !== -1 && selectedTrackIds.has(playlist[currentIndex]?.id)){
-      updateNowPlayingText(playlist[currentIndex], currentIndex);
-    }
-  });
-
-  [batchArtist, batchAlbum, batchGenre, batchYear].forEach(input => {
-    input?.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  document.getElementById('batchMetadataSaveBtn').click();
-      if (e.key === 'Escape') closeBatchMetadataEditor();
     });
   });
 
@@ -4403,122 +3207,162 @@ async function fetchCoverArtArchiveAlbumArtwork(track) {
 
    // Auto-fetch lyrics from LRCLIB if not already cached.
 // Prefers synced LRC lyrics, then falls back to plain lyrics.
-async function autoFetchAlbumArt(track) {
-  if (!track || track.kind === 'video') {
-    return;
-  }
+async function autoFetchLyrics(track) {
+  if (!track || track.lyrics) return;
+  if (lyricsFetchAttempts.get(track.id)) return;
 
   const artist = String(track.artist || '').trim();
+  const originalTitle = String(track.title || '').trim();
   const album = String(track.album || '').trim();
 
-  if (!artist || !album) {
+  if (!artist || !originalTitle) {
+    console.debug('Lyrics auto-fetch skipped: missing artist or title');
     return;
   }
 
-  const albumKey = getAlbumArtworkKey(track);
+ 
+const cleanedTitle = originalTitle
+  // Remove year at the beginning:
+  // "(2004) 02 69 Tea" -> "02 69 Tea"
+  .replace(/^\s*\(\s*(?:19|20)\d{2}\s*\)\s*/i, '')
 
-  if (!albumKey) {
-    return;
-  }
+  // Remove track number at the beginning:
+  // "02 69 Tea" -> "69 Tea"
+  // "02. 69 Tea" -> "69 Tea"
+  // "02 - 69 Tea" -> "69 Tea"
+  .replace(/^\s*\d{1,3}\s*[-–—.)_:]+\s*/i, '')
+  .replace(/^\s*\d{1,3}\s+/i, '')
 
-  // Only perform one artwork lookup for each album.
-  if (albumArtFetchAttempts.get(albumKey)) {
-    return;
-  }
+  // Remove year at the end:
+  // "69 Tea (2004)" -> "69 Tea"
+  .replace(/\s*\(\s*(?:19|20)\d{2}\s*\)\s*$/i, '')
 
-  // First check the persistent album artwork cache.
-  if (await applyCachedAlbumArtwork(track)) {
-    albumArtFetchAttempts.set(albumKey, true);
+  // Remove clean tags:
+  // "69 Tea (Clean)" -> "69 Tea"
+  .replace(/\s*[\[(]\s*clean(?:\s+version)?\s*[\])]\s*$/i, '')
 
-    console.debug(
-      `[Sleeve] Reused cached artwork for album: ${artist} - ${album}`
-    );
+  .trim();
 
-    return;
-  }
+const titleVariants = [...new Set([
+  originalTitle,
+  cleanedTitle
+].filter(Boolean))];
 
-  // Mark the ALBUM as being processed before any await.
-  // This prevents multiple songs from the same album from
-  // starting simultaneous artwork searches.
-  albumArtFetchAttempts.set(albumKey, true);
+  // Only mark this track as attempted once we have
+  // enough information to actually perform a lookup.
+  lyricsFetchAttempts.set(track.id, true);
 
-  try {
-    // ---------------------------------------------------------
-    // STEP 1:
-    // Try the MusicBrainz release ID we already have.
-    // ---------------------------------------------------------
+  console.debug('Lyrics auto-fetch:', {
+    artist,
+    originalTitle,
+    titleVariants,
+    album,
+    duration: track.duration
+  });
 
-    if (track.musicBrainzReleaseId) {
-      const found =
-        await fetchCoverArtArchiveAlbumArtwork(track);
+  for (const title of titleVariants) {
+    try {
+      const params = new URLSearchParams({
+        track_name: title,
+        artist_name: artist
+      });
 
-      if (found) {
-        return;
+      if (album) {
+        params.set('album_name', album);
       }
-    }
 
-    // ---------------------------------------------------------
-    // STEP 2:
-    // If we don't have a release ID yet, search MusicBrainz.
-    //
-    // IMPORTANT:
-    // Use the recording search directly instead of calling
-    // autoFetchMetadata(), because autoFetchMetadata() has its
-    // own per-track attempt guard.
-    // ---------------------------------------------------------
+      // LRCLIB expects duration in seconds.
+      // Only include it if the track has a sensible numeric duration.
+      const duration = Number(track.duration);
 
-    if (!track.musicBrainzReleaseId) {
-      try {
-        const recording =
-          await musicBrainzRecordingSearch(track);
+      if (Number.isFinite(duration) && duration > 0) {
+        params.set('duration', String(Math.round(duration)));
+      }
 
-        if (recording) {
-          const release =
-            chooseBestMusicBrainzRecording(recording);
+      const url = `https://lrclib.net/api/get?${params.toString()}`;
 
-          if (release?.id) {
-            track.musicBrainzReleaseId = release.id;
+      console.debug('Lyrics lookup:', url);
 
-            await dbPut(track);
-
-            const found =
-              await fetchCoverArtArchiveAlbumArtwork(track);
-
-            if (found) {
-              return;
-            }
-          }
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(7000),
+        headers: {
+          'Accept': 'application/json'
         }
-      } catch (err) {
+      });
+
+      if (!response.ok) {
         console.debug(
-          `[Sleeve] MusicBrainz artwork lookup failed for ${artist} - ${album}:`,
-          err?.message || err
+          `Lyrics lookup failed for "${title}": HTTP ${response.status}`
         );
+        continue;
       }
-    }
 
-    // ---------------------------------------------------------
-    // STEP 3:
-    // Check the cache one more time.
-    //
-    // Another track from the same album may have found artwork
-    // while this lookup was running.
-    // ---------------------------------------------------------
+      const data = await response.json();
 
-    if (await applyCachedAlbumArtwork(track)) {
+      if (!data) {
+        console.debug(
+          `Lyrics lookup returned no data for "${title}"`
+        );
+        continue;
+      }
+
+      // Prefer synchronized lyrics because your existing
+      // parseLyrics() already understands LRC timestamps.
+      const syncedLyrics =
+        typeof data.syncedLyrics === 'string'
+          ? data.syncedLyrics.trim()
+          : '';
+
+      const plainLyrics =
+        typeof data.plainLyrics === 'string'
+          ? data.plainLyrics.trim()
+          : '';
+
+      const lyricsToSave = syncedLyrics || plainLyrics;
+
+      if (!lyricsToSave) {
+        console.debug(
+          `Lyrics lookup returned no usable lyrics for "${title}"`
+        );
+        continue;
+      }
+
+      // Store the fetched lyrics on the existing track object.
+      // We do NOT modify the IndexedDB structure.
+      track.lyrics = lyricsToSave;
+
+      // Use Sleeve's existing persistence system.
+      // queueTrackWrite() already stores track.lyrics.
+      await dbPut(track);
+
+      console.debug(
+        `Lyrics found for "${artist} - ${title}"` +
+        `${syncedLyrics ? ' (synced LRC)' : ' (plain lyrics)'}` +
+        ' and queued for saving.'
+      );
+
+      // Refresh the lyrics panel if this is still
+      // the currently playing track.
+      if (
+        currentIndex !== -1 &&
+        playlist[currentIndex] &&
+        playlist[currentIndex].id === track.id
+      ) {
+        renderLyricsPanel();
+      }
+
       return;
+    } catch (err) {
+      console.debug(
+        `Lyrics lookup error for "${title}":`,
+        err?.message || err
+      );
     }
-
-    console.debug(
-      `[Sleeve] No artwork found for album: ${artist} - ${album}`
-    );
-
-  } catch (err) {
-    console.debug(
-      `[Sleeve] Album artwork lookup failed for ${artist} - ${album}:`,
-      err?.message || err
-    );
   }
+
+  console.debug(
+    `No lyrics found for "${artist} - ${originalTitle}"`
+  );
 }
 
   function parseLyrics(raw){
@@ -5277,7 +4121,6 @@ async function autoFetchAlbumArt(track) {
   }
 
   navHome.addEventListener('click', () => {
-    clearSelection();
     currentView = { type: 'home' };
     scheduleRender(searchInput.value);
   });
@@ -6132,13 +4975,8 @@ async function autoFetchAlbumArt(track) {
         const thumbHtml = t.thumbUrl
           ? `${t.thumbKind === 'video' ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>` : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`}`
           : (albumArtEntry ? albumArtMarkup(albumArtEntry, t.title) : iconFor(t.kind));
-        const isSelRow = selectedTrackIds.has(t.id);
-        if (isSelRow) item.classList.add('batch-selected');
         item.innerHTML = `
           ${handleHtml}
-          <label class="track-select-check" title="Select track" onclick="event.stopPropagation()">
-            <input type="checkbox" class="track-select-input"${isSelRow ? ' checked' : ''}>
-          </label>
           <div class="track-thumb" title="Set thumbnail">${thumbHtml}</div>
           <div class="track-meta">
             <div class="track-title" title="Double-click to rename">${escapeHtml(t.title)}</div>
@@ -6146,21 +4984,7 @@ async function autoFetchAlbumArt(track) {
           </div>
           <button class="track-row-more" type="button" title="More options">…</button>
           `;
-        item.addEventListener('click', (e) => {
-          if (e.ctrlKey || e.metaKey || e.target.closest('.track-select-check')){
-            e.preventDefault();
-            const visibleItems = Array.from(trackListSidebar.querySelectorAll('.track-item[data-track-id]'));
-            const visibleIds   = visibleItems.map(el => parseInt(el.dataset.trackId, 10));
-            const clickedVis   = visibleItems.indexOf(item);
-            toggleTrackSelected(t.id, e.shiftKey, clickedVis, visibleIds);
-            const chk = item.querySelector('.track-select-input');
-            if (chk) chk.checked = selectedTrackIds.has(t.id);
-            item.classList.toggle('batch-selected', selectedTrackIds.has(t.id));
-            return;
-          }
-          if (e.target.closest('.track-select-check')) return;
-          playTrackAt(i, true);
-        });
+        item.addEventListener('click', () => playTrackAt(i, true));
         item.querySelector('.track-thumb').addEventListener('click', (e) => {
           if (e.target.closest('.track-thumb-clear')) return;
           e.stopPropagation();
@@ -6250,16 +5074,11 @@ async function autoFetchAlbumArt(track) {
       const thumbClearHtml = t.thumbUrl
         ? `<button class="card-thumb-clear-btn" type="button" title="Remove thumbnail">&times;</button>`
         : '';
-      const isSelected = selectedTrackIds.has(t.id);
-      if (isSelected) card.classList.add('batch-selected');
       card.innerHTML = `
         <div class="card-art">
           ${cardArtInner}
           <div class="card-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         </div>
-        <label class="card-select-check" title="Select track" onclick="event.stopPropagation()">
-          <input type="checkbox" class="card-select-input"${isSelected ? ' checked' : ''}>
-        </label>
         ${cardHandleHtml}
         <button class="card-add-btn" type="button" title="Add to playlist">+</button>
         <button class="queue-add-btn" type="button" title="Add to queue">☷</button>
@@ -6271,24 +5090,7 @@ async function autoFetchAlbumArt(track) {
         <div class="card-sub">${t.kind === 'video' ? 'Video' : (t.kind === 'flac' ? 'FLAC audio' : 'Audio')}</div>
         ${statusHtml}
       `;
-      // Ctrl/Cmd+click or checkbox toggles selection; plain click plays
-      card.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.metaKey || e.target.closest('.card-select-check')){
-          e.preventDefault();
-          // Gather visible track IDs for shift-select range
-          const visibleCards = Array.from(cardGrid.querySelectorAll('.card[data-track-id]'));
-          const visibleIds   = visibleCards.map(c => parseInt(c.dataset.trackId, 10));
-          const clickedVis   = visibleCards.indexOf(card);
-          toggleTrackSelected(t.id, e.shiftKey, clickedVis, visibleIds);
-          // Update this card's checkbox
-          const chk = card.querySelector('.card-select-input');
-          if (chk) chk.checked = selectedTrackIds.has(t.id);
-          card.classList.toggle('batch-selected', selectedTrackIds.has(t.id));
-          return;
-        }
-        if (e.target.closest('.card-select-check')) return;
-        playTrackAt(i, true, queueContextIds);
-      });
+      card.addEventListener('click', () => playTrackAt(i, true, queueContextIds));
       card.querySelector('.card-add-btn').addEventListener('click', (e) => {
         e.stopPropagation();
         openPlaylistMenu(t.id, e.currentTarget);
@@ -6617,7 +5419,7 @@ async function autoFetchAlbumArt(track) {
     if (track.kind === 'flac'){
       // If this FLAC has already been converted+split before, load the
       // saved stems instead of falling back to raw wasm playback. This
-      // check previously li ved further down inside the "else" branch of
+      // check previously lived further down inside the "else" branch of
       // this very if-statement, so it could never actually run for a
       // FLAC track and the stem mixer never came back after reopening
       // the app on a FLAC file that had already been split.
@@ -7099,8 +5901,7 @@ seekBar.addEventListener('change', () => {
         const url = URL.createObjectURL(rec.file);
         const thumbUrl = rec.thumb ? URL.createObjectURL(rec.thumb) : null;
         const thumbKind = rec.thumbKind || (rec.thumb && rec.thumb.type && rec.thumb.type.startsWith('video/') ? 'video' : (rec.thumb ? 'image' : null));
-        const track = { id: rec.id, file: rec.file, url, title: rec.title, kind: rec.kind, error: false, loading: false, wasmBuffer: null, thumb: rec.thumb || null, thumbUrl, thumbKind, lyrics: rec.lyrics || null, artist: rec.artist || null, album: rec.album || null, year: rec.year || null, genre: rec.genre || null, trackNum: rec.trackNum || null, duration: rec.duration || null, manualMetadata: rec.manualMetadata || {}, playCount: rec.playCount || 0, lastPlayedAt: rec.lastPlayedAt || null, addedAt: rec.addedAt || Date.now(), sourcePath: rec.sourcePath || rec.file?.webkitRelativePath || rec.file?.path || rec.file?.name || '', stems: rec.stems || null,
-musicBrainzReleaseId: rec.musicBrainzReleaseId || null };
+        const track = { id: rec.id, file: rec.file, url, title: rec.title, kind: rec.kind, error: false, loading: false, wasmBuffer: null, thumb: rec.thumb || null, thumbUrl, thumbKind, lyrics: rec.lyrics || null, artist: rec.artist || null, album: rec.album || null, year: rec.year || null, genre: rec.genre || null, trackNum: rec.trackNum || null, duration: rec.duration || null, manualMetadata: rec.manualMetadata || {}, playCount: rec.playCount || 0, lastPlayedAt: rec.lastPlayedAt || null, addedAt: rec.addedAt || Date.now(), sourcePath: rec.sourcePath || rec.file?.webkitRelativePath || rec.file?.path || rec.file?.name || '', stems: rec.stems || null };
         playlist.push(track);
         nextId = Math.max(nextId, rec.id + 1);
         // Backfill file tags without replacing any manual Sleeve overrides.
@@ -7131,7 +5932,6 @@ musicBrainzReleaseId: rec.musicBrainzReleaseId || null };
 
     scheduleRender();
     if (playlist.length > 0) loadTrack(0, false);
-    scheduleDupeCheck();
   })();
 ;
 console.log("SLEEVE RENDERER LOADED");

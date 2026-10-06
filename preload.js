@@ -9,6 +9,8 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getMediaFileUrl: (filePath) =>
+  ipcRenderer.invoke('media:file-url', filePath),
   splitStems: (filePath) => ipcRenderer.invoke('stems:split', filePath),
   onStemsProgress: (callback) => {
     const listener = (_event, payload) => callback(payload)
