@@ -1781,3 +1781,38 @@
   background: rgba(var(--accent-rgb, 23,171,232), 0.1);
   border-left: 2px solid var(--accent-bright, #17abe8);
 }
+
+/* Sleeve duplicate review feature */
+.dupe-banner[hidden], .dupe-modal-overlay[hidden] { display:none !important; }
+.dupe-modal-overlay { position:fixed; inset:0; z-index:10000; display:flex; align-items:center; justify-content:center; padding:20px; background:rgba(0,0,0,.68); }
+.dupe-modal-box { width:min(640px,100%); max-height:82vh; display:flex; flex-direction:column; padding:22px; border:1px solid var(--line-bright); border-radius:14px; background:var(--bg-elevated,#16233a); box-shadow:0 24px 70px rgba(0,0,0,.55); }
+.dupe-group-list { overflow:auto; min-height:0; display:flex; flex-direction:column; gap:12px; }
+.dupe-group { border:1px solid var(--line-bright); border-radius:10px; padding:12px; }
+.dupe-group h4 { margin:0 0 8px; font-size:14px; }
+.dupe-track-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px 0; border-top:1px solid var(--line); }
+.dupe-track-details { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.dupe-track-details strong,.dupe-track-details small { overflow-wrap:anywhere; }
+.dupe-track-details small { color:var(--text-dim,#93a0b8); font-size:11px; }
+.dupe-track-actions { flex-shrink:0; }
+.dupe-keep-label { color:var(--text-dim,#93a0b8); font-size:12px; }
+.dupe-remove-btn,.dupe-ignore-btn { border:1px solid var(--line-bright); border-radius:7px; padding:6px 9px; background:rgba(255,255,255,.05); color:var(--text,#eef1f6); cursor:pointer; font-size:12px; }
+.dupe-remove-btn:hover,.dupe-ignore-btn:hover { background:rgba(255,255,255,.1); }
+.dupe-ignore-btn { margin-top:8px; }
+
+
+/* Delete every copy in a duplicate group */
+.dupe-delete-all-btn {
+  margin: 8px 8px 0 0;
+  border-color: rgba(209, 104, 104, 0.6);
+  color: var(--error, #d16868);
+}
+
+.dupe-delete-all-btn:hover {
+  background: rgba(209, 104, 104, 0.15);
+  border-color: var(--error, #d16868);
+}
+
+.dupe-delete-all-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

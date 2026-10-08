@@ -1,0 +1,57 @@
+  // SLEEVE_DUPLICATE_DETECTION_INTEGRATED
+  const ignoredDuplicateKeys = new Set();
+  let duplicateGroupsCache = [];
+  let duplicateScanQueued = false;
+  function refreshDuplicateDetection(){
+    if (!window.SleeveDuplicateDetection) return;
+    duplicateGroupsCache = window.SleeveDuplicateDetection.findDuplicateGroups(playlist, ignoredDuplicateKeys);
+    const banner = document.getElementById('dupeBanner');
+    const label = document.getElementById('dupeBannerText');
+    if (!banner || !label) return;
+    const copies = duplicateGroupsCache.reduce((n, group) => n + group.tracks.length - 1, 0);
+    banner.hidden = duplicateGroupsCache.length === 0;
+    label.textContent = duplicateGroupsCache.length ? duplicateGroupsCache.length + ' possible duplicate group' + (duplicateGroupsCache.length === 1 ? '' : 's') + ' — ' + copies + ' extra cop' + (copies === 1 ? 'y' : 'ies') + ' found. Review before removing anything.' : '';
+  }
+  function scheduleDuplicateScan(){
+    if (duplicateScanQueued) return;
+    duplicateScanQueued = true;
+    requestAnimationFrame(() => { duplicateScanQueued = false; refreshDuplicateDetection(); });
+  }
+  function openDuplicateReview(){
+    const overlay = document.getElementById('dupeModalOverlay');
+    const list = document.getElementById('dupeGroupList');
+    if (!overlay || !list) return;
+    list.replaceChildren();
+    if (!duplicateGroupsCache.length) { const p=document.createElement('p'); p.textContent='No possible duplicates found.'; list.appendChild(p); }
+    duplicateGroupsCache.forEach(group => {
+      const section=document.createElement('section'); section.className='dupe-group';
+      const heading=document.createElement('h4'); heading.textContent=group.title + (group.artist ? ' — ' + group.artist : ''); section.appendChild(heading);
+      group.tracks.forEach((track,index) => {
+        const row=document.createElement('div'); row.className='dupe-track-row';
+        const details=document.createElement('div'); details.className='dupe-track-details';
+        const title=document.createElement('strong'); title.textContent=track.title || track.file && track.file.name || 'Untitled'; details.appendChild(title);
+        const meta=document.createElement('small'); meta.textContent=[track.artist,track.album,track.sourcePath].filter(Boolean).join(' • ') || 'No artist or path metadata'; details.appendChild(meta); row.appendChild(details);
+        const actions=document.createElement('div'); actions.className='dupe-track-actions';
+        if (index===0) { const keep=document.createElement('span'); keep.className='dupe-keep-label'; keep.textContent='Keep'; actions.appendChild(keep); }
+        else {
+          const remove=document.createElement('button'); remove.type='button'; remove.className='dupe-remove-btn'; remove.textContent='Remove copy';
+          remove.addEventListener('click', async () => {
+            if (typeof removeTrackFromLibrary !== 'function') { alert('Removal is not available in this view.'); return; }
+            await removeTrackFromLibrary(track.id);
+            refreshDuplicateDetection(); openDuplicateReview();
+          });
+          actions.appendChild(remove);
+        }
+        row.appendChild(actions); section.appendChild(row);
+      });
+      const ignore=document.createElement('button'); ignore.type='button'; ignore.className='dupe-ignore-btn'; ignore.textContent='Ignore this group';
+      ignore.addEventListener('click', () => { ignoredDuplicateKeys.add(group.key); refreshDuplicateDetection(); openDuplicateReview(); });
+      section.appendChild(ignore); list.appendChild(section);
+    });
+    overlay.hidden=false; overlay.setAttribute('aria-hidden','false');
+  }
+  function closeDuplicateReview(){ const overlay=document.getElementById('dupeModalOverlay'); if(overlay){overlay.hidden=true;overlay.setAttribute('aria-hidden','true');} }
+  document.getElementById('dupeReviewBtn')?.addEventListener('click', openDuplicateReview);
+  document.getElementById('dupeBannerDismiss')?.addEventListener('click', () => { const b=document.getElementById('dupeBanner'); if(b) b.hidden=true; });
+  document.getElementById('dupeModalClose')?.addEventListener('click', closeDuplicateReview);
+  document.getElementById('dupeModalOverlay')?.addEventListener('click', event => { if(event.target.id==='dupeModalOverlay') closeDuplicateReview(); });

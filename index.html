@@ -96,6 +96,11 @@
       </div>
 
       <div class="main-content">
+        <div class="dupe-banner" id="dupeBanner" role="status" aria-live="polite" hidden>
+          <span class="dupe-banner-icon" aria-hidden="true">⚠</span><span class="dupe-banner-text" id="dupeBannerText"></span>
+          <button class="dupe-banner-btn" id="dupeReviewBtn" type="button">Review</button>
+          <button class="dupe-banner-dismiss" id="dupeBannerDismiss" type="button" aria-label="Dismiss duplicate notice">×</button>
+        </div>
         <h2 id="greeting">Your shelf</h2>
         <div class="subhead" id="subhead">Add audio or video files from your computer to start playing</div>
         <button class="back-link" id="viewBackBtn" type="button" style="display:none;">
@@ -694,6 +699,14 @@
     </div>
   </div>
  
+<script src="./duplicate-detection.js"></script>
 <script src="./renderer.js"></script>
+<div class="dupe-modal-overlay" id="dupeModalOverlay" role="dialog" aria-modal="true" aria-labelledby="dupeModalTitle" aria-hidden="true" hidden>
+  <div class="dupe-modal-box">
+    <div class="dupe-modal-header"><h3 id="dupeModalTitle">Review possible duplicates</h3><button class="dupe-modal-close" id="dupeModalClose" type="button" aria-label="Close">×</button></div>
+    <p class="dupe-modal-sub">Sleeve compares track metadata and file size. Review each group before removing anything.</p>
+    <div class="dupe-group-list" id="dupeGroupList"></div>
+  </div>
+</div>
 </body>
 </html>

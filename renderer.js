@@ -2736,6 +2736,7 @@ startAudioOutputMonitoring();
         if (trackNum != null && trackNum !== track.trackNum){ track.trackNum = trackNum; changed = true; }
         if (changed){
           dbPut(track);
+          scheduleDuplicateScan();
           if (currentView.type === 'artists' || currentView.type === 'artistAlbums' || currentView.type === 'album'){
             scheduleRender(searchInput.value);
           }
@@ -4423,8 +4424,14 @@ const titleVariants = [...new Set([
     alert(`Source:\n${p}\n\nIn a browser, the original folder cannot be opened directly. Electron can reveal it when the app exposes a file-location API.`);
   }
   async function removeTrackFromLibrary(id){
-    const t=playlist.find(x=>x.id===id); if(!t)return;
-    if(!confirm(`Remove "${t.title}" from your library?`))return;
+    const t = playlist.find(x => x.id === id);
+if (!t) return false;
+    if (
+  !options.skipConfirm &&
+  !confirm(`Remove "${t.title}" from your library?`)
+) {
+  return false;
+}
     if(currentIndex===playlist.indexOf(t)) stopEverything();
     playlists.forEach(pl=>{pl.trackIds=pl.trackIds.filter(x=>x!==id);dbPutPlaylist(pl);});
     queueIds=queueIds.filter(x=>x!==id); activeQueueIds=(activeQueueIds||[]).filter(x=>x!==id); manualQueueIds=manualQueueIds.filter(x=>x!==id);
@@ -4718,7 +4725,305 @@ const titleVariants = [...new Set([
   let pendingRenderQuery = null;
   let pendingSkipSidebar = true;
 
+    // SLEEVE_DUPLICATE_DETECTION_INTEGRATED
+  const ignoredDuplicateKeys = new Set();
+  let duplicateGroupsCache = [];
+  let duplicateScanQueued = false;
+  function refreshDuplicateDetection(){
+    if (!window.SleeveDuplicateDetection) return;
+    duplicateGroupsCache = window.SleeveDuplicateDetection.findDuplicateGroups(playlist, ignoredDuplicateKeys);
+    const banner = document.getElementById('dupeBanner');
+    const label = document.getElementById('dupeBannerText');
+    if (!banner || !label) return;
+    const copies = duplicateGroupsCache.reduce((n, group) => n + group.tracks.length - 1, 0);
+    banner.hidden = duplicateGroupsCache.length === 0;
+    label.textContent = duplicateGroupsCache.length ? duplicateGroupsCache.length + ' possible duplicate group' + (duplicateGroupsCache.length === 1 ? '' : 's') + ' — ' + copies + ' extra cop' + (copies === 1 ? 'y' : 'ies') + ' found. Review before removing anything.' : '';
+  }
+  function scheduleDuplicateScan(){
+    if (duplicateScanQueued) return;
+    duplicateScanQueued = true;
+    requestAnimationFrame(() => { duplicateScanQueued = false; refreshDuplicateDetection(); });
+  }
+
+  
+async function deleteAllDetectedDuplicateCopies(button) {
+  // Re-check every group against the current library.
+  const deleteIds = new Set();
+  let groupsToClean = 0;
+
+  for (const group of duplicateGroupsCache) {
+    const currentTracks = group.tracks.filter(
+      candidate => playlist.some(track => track.id === candidate.id)
+    );
+
+    if (currentTracks.length < 2) continue;
+
+    groupsToClean++;
+
+    // Keep the first track in each group; remove all the rest.
+    for (const track of currentTracks.slice(1)) {
+      deleteIds.add(track.id);
+    }
+  }
+
+  const ids = [...deleteIds];
+
+  if (ids.length === 0) {
+    refreshDuplicateDetection();
+    openDuplicateReview();
+    return;
+  }
+
+  if (!confirm(
+    `Remove ${ids.length} extra duplicate copies across ` +
+    `${groupsToClean} groups?\n\n` +
+    `Sleeve will keep one copy per group. Original music files ` +
+    `on your computer will NOT be deleted.`
+  )) {
+    return;
+  }
+
+  button.disabled = true;
+  const previousLabel = button.textContent;
+  button.textContent = 'Removing duplicates…';
+
+  const idsToRemove = new Set(ids);
+  const currentTrackId =
+    currentIndex >= 0 && playlist[currentIndex]
+      ? playlist[currentIndex].id
+      : null;
+
+  try {
+    const db = await openDB();
+
+    if (!db) {
+      throw new Error('Sleeve could not open its library database.');
+    }
+
+    // Finish queued saves first, so they cannot overwrite these deletions.
+    while (pendingTrackWrites.size > 0 || trackWriteFlushPromise) {
+      if (trackWriteTimer) {
+        clearTimeout(trackWriteTimer);
+        trackWriteTimer = null;
+      }
+
+      await flushTrackWrites();
+
+      if (trackWriteFlushPromise) {
+        await trackWriteFlushPromise;
+      }
+    }
+
+    // Delete every extra copy in one IndexedDB transaction.
+    await new Promise((resolve, reject) => {
+      let tx;
+
+      try {
+        tx = db.transaction(STORE, 'readwrite');
+        const store = tx.objectStore(STORE);
+
+        for (const id of ids) {
+          store.delete(id);
+        }
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => {
+          reject(tx.error || new Error('The database transaction failed.'));
+        };
+        tx.onabort = () => {
+          reject(tx.error || new Error('The database transaction was aborted.'));
+        };
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    // Prevent queued track saves from restoring deleted records.
+    for (const id of ids) {
+      pendingTrackWrites.delete(id);
+    }
+
+    if (trackWriteTimer && pendingTrackWrites.size === 0) {
+      clearTimeout(trackWriteTimer);
+      trackWriteTimer = null;
+    }
+
+    // Stop playback only if the current track is being removed.
+    if (currentTrackId !== null && idsToRemove.has(currentTrackId)) {
+      stopEverything();
+    }
+
+    // Remove extra copies from the live library.
+    playlist = playlist.filter(
+      track => !idsToRemove.has(track.id)
+    );
+
+    // Remove deleted IDs from saved playlists.
+    playlists.forEach(pl => {
+      pl.trackIds = (Array.isArray(pl.trackIds) ? pl.trackIds : [])
+        .filter(id => !idsToRemove.has(id));
+
+      dbPutPlaylist(pl);
+    });
+
+    // Clean up playback queues.
+    queueIds = queueIds.filter(id => !idsToRemove.has(id));
+
+    if (activeQueueIds !== null) {
+      activeQueueIds = activeQueueIds.filter(
+        id => !idsToRemove.has(id)
+      );
+    }
+
+    manualQueueIds = manualQueueIds.filter(
+      id => !idsToRemove.has(id)
+    );
+
+    // Preserve the current track's position if it was kept.
+    currentIndex = currentTrackId === null || idsToRemove.has(currentTrackId)
+      ? -1
+      : playlist.findIndex(track => track.id === currentTrackId);
+
+    refreshDuplicateDetection();
+    scheduleRender(searchInput.value);
+    renderQueue();
+    openDuplicateReview();
+
+    alert(
+      `Removed ${ids.length} extra copies across ${groupsToClean} groups. ` +
+      `One copy per group was kept. Your music files were not deleted.`
+    );
+  } catch (error) {
+    console.error('[Sleeve] Delete all duplicates failed:', error);
+
+    button.disabled = false;
+    button.textContent = previousLabel;
+
+    alert(
+      'Sleeve could not remove all duplicates. ' +
+      'Check the developer console for the error before trying again.'
+    );
+  }
+}
+  function openDuplicateReview(){
+    const overlay = document.getElementById('dupeModalOverlay');
+    const list = document.getElementById('dupeGroupList');
+    if (!overlay || !list) return;
+    
+    
+    const extraCopyCount = duplicateGroupsCache.reduce(
+      (total, group) => total + Math.max(0, group.tracks.length - 1),
+      0
+    );
+
+    const bulkDeleteButton = document.createElement('button');
+    bulkDeleteButton.type = 'button';
+    bulkDeleteButton.className = 'dupe-remove-btn dupe-delete-all-btn';
+    bulkDeleteButton.textContent =
+      extraCopyCount > 0
+        ? `Delete All Duplicates (${extraCopyCount} extra copies)`
+        : 'No duplicate copies to delete';
+    bulkDeleteButton.disabled = extraCopyCount === 0;
+
+    bulkDeleteButton.addEventListener('click', () => {
+      deleteAllDetectedDuplicateCopies(bulkDeleteButton);
+    });
+
+    list.appendChild(bulkDeleteButton);
+    if (!duplicateGroupsCache.length) { const p=document.createElement('p'); p.textContent='No possible duplicates found.'; list.appendChild(p); }
+    duplicateGroupsCache.forEach(group => {
+      const section=document.createElement('section'); section.className='dupe-group';
+      const heading=document.createElement('h4'); heading.textContent=group.title + (group.artist ? ' — ' + group.artist : ''); section.appendChild(heading);
+      group.tracks.forEach((track,index) => {
+        const row=document.createElement('div'); row.className='dupe-track-row';
+        const details=document.createElement('div'); details.className='dupe-track-details';
+        const title=document.createElement('strong'); title.textContent=track.title || track.file && track.file.name || 'Untitled'; details.appendChild(title);
+        const meta=document.createElement('small'); meta.textContent=[track.artist,track.album,track.sourcePath].filter(Boolean).join(' • ') || 'No artist or path metadata'; details.appendChild(meta); row.appendChild(details);
+        const actions=document.createElement('div'); actions.className='dupe-track-actions';
+        if (index===0) { const keep=document.createElement('span'); keep.className='dupe-keep-label'; keep.textContent='Keep'; actions.appendChild(keep); }
+        else {
+          const remove=document.createElement('button'); remove.type='button'; remove.className='dupe-remove-btn'; remove.textContent='Remove copy';
+          remove.addEventListener('click', async () => {
+            if (typeof removeTrackFromLibrary !== 'function') { alert('Removal is not available in this view.'); return; }
+            await removeTrackFromLibrary(track.id);
+            refreshDuplicateDetection(); openDuplicateReview();
+          });
+          actions.appendChild(remove);
+        }
+        row.appendChild(actions); section.appendChild(row);
+      });
+      
+      // Delete every track in this duplicate group.
+      const deleteAll = document.createElement('button');
+      deleteAll.type = 'button';
+      deleteAll.className = 'dupe-remove-btn dupe-delete-all-btn';
+      deleteAll.textContent = 'Delete all copies';
+      deleteAll.title =
+        'Remove every track in this group from Sleeve, not from disk';
+
+      deleteAll.addEventListener('click', async () => {
+        const duplicateIds = group.tracks.map(track => track.id);
+
+        if (duplicateIds.length === 0) return;
+
+        const confirmed = confirm(
+          `Delete all ${duplicateIds.length} copies of "${group.title}" ` +
+          `from Sleeve's library? This will NOT delete the music files ` +
+          `from your computer.`
+        );
+
+        if (!confirmed) return;
+
+        deleteAll.disabled = true;
+
+        try {
+          // Stop playback first if the current track is being removed.
+          const currentTrack =
+            currentIndex >= 0 ? playlist[currentIndex] : null;
+
+          if (currentTrack && duplicateIds.includes(currentTrack.id)) {
+            stopEverything();
+          }
+
+          // Skip individual confirmations; the group was confirmed above.
+          for (const id of duplicateIds) {
+            await removeTrackFromLibrary(id, { skipConfirm: true });
+          }
+
+          // Refresh the banner and rebuild the review list.
+          refreshDuplicateDetection();
+          openDuplicateReview();
+        } catch (error) {
+          console.error(
+            '[Sleeve] Failed to delete all duplicate copies:',
+            error
+          );
+
+          refreshDuplicateDetection();
+          deleteAll.disabled = false;
+
+          alert(
+            'Sleeve could not finish removing every copy. ' +
+            'Please review the group again.'
+          );
+        }
+      });
+
+      section.appendChild(deleteAll);
+      const ignore=document.createElement('button'); ignore.type='button'; ignore.className='dupe-ignore-btn'; ignore.textContent='Ignore this group';
+      ignore.addEventListener('click', () => { ignoredDuplicateKeys.add(group.key); refreshDuplicateDetection(); openDuplicateReview(); });
+      section.appendChild(ignore); list.appendChild(section);
+    });
+    overlay.hidden=false; overlay.setAttribute('aria-hidden','false');
+  }
+  function closeDuplicateReview(){ const overlay=document.getElementById('dupeModalOverlay'); if(overlay){overlay.hidden=true;overlay.setAttribute('aria-hidden','true');} }
+  document.getElementById('dupeReviewBtn')?.addEventListener('click', openDuplicateReview);
+  document.getElementById('dupeBannerDismiss')?.addEventListener('click', () => { const b=document.getElementById('dupeBanner'); if(b) b.hidden=true; });
+  document.getElementById('dupeModalClose')?.addEventListener('click', closeDuplicateReview);
+  document.getElementById('dupeModalOverlay')?.addEventListener('click', event => { if(event.target.id==='dupeModalOverlay') closeDuplicateReview(); });
+
   function scheduleRender(query, opts){
+    scheduleDuplicateScan();
     pendingRenderQuery = query == null ? searchInput.value : query;
     const wantsSkipSidebar = !!(opts && opts.skipSidebar);
     if (!renderFramePending){
