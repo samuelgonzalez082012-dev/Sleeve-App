@@ -1,0 +1,35 @@
+/* Sleeve spotDL integration styles. Kept separate from Sleeve's existing CSS. */
+.sdl-launch-button { display:flex; align-items:center; justify-content:flex-start; gap:10px; }
+.sdl-launch-button svg { width:18px; height:18px; flex:0 0 18px; }
+.sdl-overlay { position:fixed; inset:0; z-index:10050; display:flex; align-items:center; justify-content:center; padding:24px; overflow-y:auto; background:rgba(5,8,15,.72); backdrop-filter:blur(8px); }
+.sdl-dialog { width:min(620px,100%); max-height:min(88vh,860px); overflow-y:auto; padding:24px; border:1px solid rgba(150,165,190,.24); border-radius:18px; color:var(--text-primary,#f4f6fb); background:var(--panel-bg,#141923); box-shadow:0 24px 80px rgba(0,0,0,.45); }
+.sdl-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:14px; }
+.sdl-header h2 { margin:4px 0 0; font-size:24px; line-height:1.2; }
+.sdl-eyebrow { color:var(--accent,#8ba8ff); font-size:11px; font-weight:750; letter-spacing:.14em; }
+.sdl-icon-button { flex:0 0 auto; width:34px; height:34px; border:1px solid rgba(150,165,190,.22); border-radius:9px; color:inherit; background:transparent; font-size:24px; cursor:pointer; }
+.sdl-description { color:var(--text-secondary,#b2bac9); font-size:13px; line-height:1.55; margin:0 0 20px; }
+.sdl-label { display:block; margin-bottom:7px; font-size:12px; font-weight:700; }
+.sdl-url-input { display:block; width:100%; box-sizing:border-box; min-height:43px; border:1px solid rgba(150,165,190,.32); border-radius:10px; padding:11px 12px; color:inherit; background:rgba(0,0,0,.17); outline:none; }
+.sdl-url-input:focus { border-color:var(--accent,#8ba8ff); box-shadow:0 0 0 3px rgba(139,168,255,.14); }
+.sdl-helper { margin-top:8px; color:var(--text-secondary,#aab2c1); font-size:11px; line-height:1.45; }
+.sdl-status { margin-top:17px; padding:11px 12px; border:1px solid rgba(150,165,190,.2); border-radius:10px; background:rgba(150,165,190,.07); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.sdl-status[data-kind="success"] { border-color:rgba(77,190,132,.32); }
+.sdl-status[data-kind="warning"] { border-color:rgba(232,177,67,.35); }
+.sdl-status[data-kind="error"] { border-color:rgba(230,97,97,.4); }
+.sdl-setup { margin-top:12px; padding:14px; border:1px solid rgba(232,177,67,.25); border-radius:10px; background:rgba(232,177,67,.06); font-size:12px; line-height:1.5; }
+.sdl-setup-title,.sdl-complete-title { font-weight:750; margin-bottom:6px; }
+.sdl-setup p,.sdl-complete p { margin:6px 0 10px; color:var(--text-secondary,#bac2d0); }
+.sdl-setup code { display:block; padding:10px; border-radius:8px; overflow-wrap:anywhere; background:rgba(0,0,0,.2); font-size:11px; line-height:1.8; }
+.sdl-setup a { color:var(--accent,#9bb5ff); }
+.sdl-log { max-height:155px; overflow:auto; margin-top:12px; padding:9px 11px; border-radius:9px; background:rgba(0,0,0,.22); font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:10px; line-height:1.55; color:#c8d0df; overflow-wrap:anywhere; }
+.sdl-log:empty { display:none; }
+.sdl-log-line + .sdl-log-line { margin-top:3px; }
+.sdl-complete { margin-top:12px; padding:13px; border:1px solid rgba(77,190,132,.28); border-radius:10px; background:rgba(77,190,132,.06); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.sdl-actions { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-top:20px; }
+.sdl-actions-secondary { justify-content:flex-start; margin-top:12px; }
+.sdl-button { min-height:37px; padding:8px 13px; border:1px solid transparent; border-radius:9px; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.sdl-button:disabled { opacity:.5; cursor:not-allowed; }
+.sdl-primary-button { color:#fff; background:var(--accent,#4569c9); }
+.sdl-secondary-button { color:inherit; background:rgba(150,165,190,.09); border-color:rgba(150,165,190,.22); }
+.sdl-button[hidden],.sdl-setup[hidden],.sdl-complete[hidden] { display:none !important; }
+@media (max-width:560px) { .sdl-overlay { padding:10px; } .sdl-dialog { padding:17px; border-radius:14px; } .sdl-header h2 { font-size:21px; } .sdl-actions { justify-content:stretch; } .sdl-actions .sdl-button { flex:1 1 125px; } }

@@ -1,0 +1,72 @@
+/**
+ * The preload script runs before `index.html` is loaded
+ * in the renderer. It has access to web APIs as well as
+ * Electron's renderer process modules and some polyfilled
+ * Node.js functions.
+ *
+ * https://www.electronjs.org/docs/latest/tutorial/sandbox
+ */
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
+
+contextBridge.exposeInMainWorld('electronAPI', {
+  getMediaFileUrl: (filePath) =>
+  ipcRenderer.invoke('media:file-url', filePath),
+  splitStems: (filePath) => ipcRenderer.invoke('stems:split', filePath),
+  onStemsProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('stems:progress', listener)
+    return () => ipcRenderer.removeListener('stems:progress', listener)
+  },
+  checkStemEngine: () => ipcRenderer.invoke('stems:check-engine'),
+  convertToMp3: (filePath) => ipcRenderer.invoke('stems:convert-to-mp3', filePath),
+  findExistingStems: (filePath) => ipcRenderer.invoke('stems:find-existing', filePath),
+findExistingStemsForSource: (filePath) =>
+  ipcRenderer.invoke('stems:find-existing-for-source', filePath),
+verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
+  showItemInFolder: (path) => ipcRenderer.invoke('shell:show-in-folder', path),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+  // Find Music exposes catalog discovery only; it does not expose arbitrary filesystem or downloader APIs.
+  findMusicParseLink: (url) => ipcRenderer.invoke('find-music:parse-link', url),
+  findMusicSearchRecordings: (payload) => ipcRenderer.invoke('find-music:search-recordings', payload),
+  findMusicOpenUrl: (url) => ipcRenderer.invoke('find-music:open-url', url),
+  // Folder watching is opt-in. Only paths reported from the selected folder can be read for import.
+  findMusicWatchSelectFolder: () => ipcRenderer.invoke('find-music:watch-select-folder'),
+  findMusicWatchStop: () => ipcRenderer.invoke('find-music:watch-stop'),
+  findMusicReadImportFile: (filePath) => ipcRenderer.invoke('find-music:read-import-file', filePath),
+  // Direct Internet Archive downloads and official store browsing stay inside Sleeve.
+  findMusicSearchOpenAudio: (payload) => ipcRenderer.invoke('find-music:search-open-audio', payload),
+  findMusicDownloadOpenAudio: (payload) => ipcRenderer.invoke('find-music:download-open-audio', payload),
+  findMusicReadDownloadedFile: (filePath) => ipcRenderer.invoke('find-music:read-downloaded-file', filePath),
+  findMusicOpenStoreBrowser: (url) => ipcRenderer.invoke('find-music:open-store-browser', url),
+  findMusicOnDownloadCompleted: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:download-completed', listener);
+    return () => ipcRenderer.removeListener('find-music:download-completed', listener);
+  },
+  // Spotify OAuth reuses Sleeve's existing PKCE loopback callback. Tokens stay in memory.
+  spotifyLogin: (authUrl) => ipcRenderer.invoke('spotify:login', authUrl),
+  findMusicSpotifyExchangeCode: (payload) => ipcRenderer.invoke('find-music:spotify-exchange-code', payload),
+  findMusicSpotifyGetPlaylist: (payload) => ipcRenderer.invoke('find-music:spotify-get-playlist', payload),
+  findMusicSpotifyGetAlbum: (payload) => ipcRenderer.invoke('find-music:spotify-get-album', payload),
+  findMusicSpotifyCancel: (requestId) => ipcRenderer.invoke('find-music:spotify-cancel', requestId),
+  findMusicOnSpotifyProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:spotify-progress', listener);
+    return () => ipcRenderer.removeListener('find-music:spotify-progress', listener);
+  },
+  findMusicOnNewFiles: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:watch:new-files', listener);
+    return () => ipcRenderer.removeListener('find-music:watch:new-files', listener);
+  },
+})
+
+window.addEventListener('DOMContentLoaded', () => {
+  const replaceText = (selector, text) => {
+    const element = document.getElementById(selector)
+    if (element) element.innerText = text
+  }
+  for (const type of ['chrome', 'node', 'electron']) {
+    replaceText(`${type}-version`, process.versions[type])
+  }
+})

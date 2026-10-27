@@ -2692,9 +2692,9 @@ startAudioOutputMonitoring();
         playCount: 0,
         lastPlayedAt: null,
         addedAt: Date.now(),
-        sourcePath: window.electronAPI?.getPathForFile
+        sourcePath: file.__sleeveSourcePath || (window.electronAPI?.getPathForFile
           ? window.electronAPI.getPathForFile(file)
-          : (file.webkitRelativePath || file.path || file.name || '')
+          : (file.webkitRelativePath || file.path || file.name || ''))
       };
       playlist.push(track);
       newTracks.push(track);
@@ -2710,6 +2710,26 @@ startAudioOutputMonitoring();
     scanBatch();
     if (currentIndex === -1 && playlist.length > 0) loadTrack(0, false);
   }
+
+  // Receive user-approved audio files from Find Music's watched-download panel.
+  window.addEventListener('sleeve:find-music-import-files', (event) => {
+    const detailFiles = event && event.detail && Array.isArray(event.detail.files) ? event.detail.files : [];
+    const files = detailFiles.filter((file) => typeof File !== 'undefined' && file instanceof File);
+    if (files.length) addFiles(files);
+  });
+
+  // Expose a minimal read-only library snapshot to Find Music for duplicate checks.
+  // This stays inside the renderer; no library records are sent over Electron IPC.
+  window.addEventListener('sleeve:find-music-get-library', (event) => {
+    const callback = event && event.detail && event.detail.callback;
+    if (typeof callback !== 'function') return;
+    try {
+      callback(playlist.map((track) => ({
+        title: String(track.title || ''), artist: String(track.artist || ''), album: String(track.album || ''),
+        duration: Number(track.duration) || null, isrc: String(track.isrc || (track.manualMetadata && track.manualMetadata.isrc) || '')
+      })));
+    } catch (error) { console.warn('Sleeve: could not provide library metadata to Find Music', error); callback([]); }
+  });
 
   // ---------- Artist/album tag reading ----------
   // Reads ID3 (or similar) tags from the file itself so tracks can be

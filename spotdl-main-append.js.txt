@@ -1,0 +1,275 @@
+
+// ---------- spotDL download integration ----------
+// This block uses the existing Electron main-process imports (app, ipcMain,
+// shell, path, fs and spawn). Do not expose child_process to the renderer.
+const SPOTDL_DOWNLOAD_FOLDER_NAME = 'Sleeve Downloads';
+let spotdlResolvedCommand = null;
+let activeSpotdlJob = null;
+
+function getSpotdlDownloadDirectory() {
+  return path.join(app.getPath('music'), SPOTDL_DOWNLOAD_FOLDER_NAME);
+}
+
+function getSpotdlCandidates() {
+  const candidates = [
+    { command: 'spotdl', prefixArgs: [] },
+    { command: 'spotdl.exe', prefixArgs: [] }
+  ];
+  if (process.platform === 'win32') {
+    candidates.push(
+      { command: 'py', prefixArgs: ['-m', 'spotdl'] },
+      { command: 'python', prefixArgs: ['-m', 'spotdl'] },
+      { command: 'python3', prefixArgs: ['-m', 'spotdl'] }
+    );
+  } else {
+    candidates.push(
+      { command: 'python3', prefixArgs: ['-m', 'spotdl'] },
+      { command: 'python', prefixArgs: ['-m', 'spotdl'] }
+    );
+  }
+  return candidates;
+}
+
+function probeSpotdlCandidate(candidate) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+    let child;
+    const finish = (success) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(success ? { ...candidate, version: output.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0] || '' } : null);
+    };
+    const timer = setTimeout(() => {
+      try { if (child) child.kill(); } catch (_) {}
+      finish(false);
+    }, 9000);
+    try {
+      child = spawn(candidate.command, [...candidate.prefixArgs, '--version'], {
+        windowsHide: true,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      child.stdout.on('data', (chunk) => { output += chunk.toString(); });
+      child.stderr.on('data', (chunk) => { output += chunk.toString(); });
+      child.once('error', () => finish(false));
+      child.once('close', (code) => finish(code === 0));
+    } catch (_) {
+      finish(false);
+    }
+  });
+}
+
+async function findSpotdlCommand() {
+  if (spotdlResolvedCommand) return spotdlResolvedCommand;
+  for (const candidate of getSpotdlCandidates()) {
+    const found = await probeSpotdlCandidate(candidate);
+    if (found) {
+      spotdlResolvedCommand = found;
+      return found;
+    }
+  }
+  return null;
+}
+
+function validateSpotdlUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl.length > 2048) return null;
+  try {
+    const parsed = new URL(rawUrl.trim());
+    const allowedHosts = new Set(['open.spotify.com', 'spotify.com', 'www.spotify.com', 'spotify.link']);
+    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname.toLowerCase())) return null;
+    if (!parsed.pathname || parsed.pathname === '/') return null;
+    return parsed.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
+function sendSpotdlProgress(sender, payload) {
+  try {
+    if (sender && !sender.isDestroyed()) sender.send('spotdl:progress', payload);
+  } catch (_) {}
+}
+
+function countSpotdlAudioFiles(root) {
+  const extensions = /\.(mp3|flac|ogg|opus|m4a|wav|aac)$/i;
+  const stack = [root];
+  let count = 0;
+  let visited = 0;
+  const MAX_DIRECTORIES = 10000;
+  while (stack.length && visited < MAX_DIRECTORIES) {
+    const current = stack.pop();
+    visited += 1;
+    let entries;
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (_) { continue; }
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(fullPath);
+      else if (entry.isFile() && extensions.test(entry.name)) count += 1;
+    }
+  }
+  return count;
+}
+
+ipcMain.handle('spotdl:check', async () => {
+  const command = await findSpotdlCommand();
+  const downloadDir = getSpotdlDownloadDirectory();
+  try { fs.mkdirSync(downloadDir, { recursive: true }); } catch (_) {}
+  return {
+    available: Boolean(command),
+    version: command ? command.version : '',
+    downloadDir
+  };
+});
+
+ipcMain.handle('spotdl:start', async (event, rawUrl) => {
+  const spotifyUrl = validateSpotdlUrl(rawUrl);
+  if (!spotifyUrl) return { ok: false, error: 'Enter a valid HTTPS Spotify link.' };
+  if (activeSpotdlJob) return { ok: false, error: 'A spotDL download is already running.' };
+
+  const command = await findSpotdlCommand();
+  if (!command) {
+    return {
+      ok: false,
+      error: 'spotDL was not found. Install it with Python, then reopen Sleeve and try again.'
+    };
+  }
+
+  const downloadDir = getSpotdlDownloadDirectory();
+  try {
+    fs.mkdirSync(downloadDir, { recursive: true });
+  } catch (error) {
+    return { ok: false, error: `Could not create the download folder: ${error.message}` };
+  }
+
+  const outputTemplate = path.join(downloadDir, '{artist} - {title}.{output-ext}');
+  const args = [
+    ...command.prefixArgs,
+    'download',
+    spotifyUrl,
+    '--format', 'mp3',
+    '--output', outputTemplate
+  ];
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let textBuffer = '';
+    const job = { proc: null, sender: event.sender, cancelled: false, resolve: null };
+    activeSpotdlJob = job;
+
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      if (activeSpotdlJob === job) activeSpotdlJob = null;
+      resolve(result);
+    };
+
+    const publishLine = (rawLine) => {
+      const message = String(rawLine || '')
+        .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+        .replace(/\u0000/g, '')
+        .trim();
+      if (!message) return;
+      sendSpotdlProgress(job.sender, { status: 'running', message: message.slice(-280) });
+    };
+
+    const consumeOutput = (chunk) => {
+      textBuffer += chunk.toString();
+      const lines = textBuffer.split(/[\r\n]+/);
+      textBuffer = lines.pop() || '';
+      for (const line of lines) publishLine(line);
+    };
+
+    try {
+      job.proc = spawn(command.command, args, {
+        windowsHide: true,
+        shell: false,
+        detached: process.platform !== 'win32',
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    } catch (error) {
+      finish({ ok: false, error: `Could not start spotDL: ${error.message}` });
+      return;
+    }
+
+    job.proc.stdout.on('data', consumeOutput);
+    job.proc.stderr.on('data', consumeOutput);
+    job.proc.once('error', (error) => {
+      sendSpotdlProgress(job.sender, { status: 'error', message: error.message });
+      finish({ ok: false, error: `Could not start spotDL: ${error.message}` });
+    });
+    job.proc.once('close', (code) => {
+      if (textBuffer.trim()) publishLine(textBuffer);
+      if (job.cancelled) {
+        sendSpotdlProgress(job.sender, { status: 'cancelled', message: 'Download cancelled.' });
+        finish({ ok: false, cancelled: true, downloadDir });
+        return;
+      }
+      if (code === 0) {
+        sendSpotdlProgress(job.sender, { status: 'done', downloadDir, count: countSpotdlAudioFiles(downloadDir) });
+        finish({ ok: true, downloadDir });
+      } else {
+        const message = `spotDL stopped with exit code ${code}. Check the output above; common causes are a network error, an unavailable match, or missing dependencies.`;
+        sendSpotdlProgress(job.sender, { status: 'error', message });
+        finish({ ok: false, error: message, downloadDir });
+      }
+    });
+
+    sendSpotdlProgress(job.sender, { status: 'running', message: 'Starting spotDL…' });
+  });
+});
+
+ipcMain.handle('spotdl:cancel', async () => {
+  const job = activeSpotdlJob;
+  if (!job || !job.proc || !job.proc.pid) return { ok: false, error: 'No active spotDL download.' };
+  job.cancelled = true;
+  sendSpotdlProgress(job.sender, { status: 'cancelling', message: 'Stopping the download…' });
+  try {
+    if (process.platform === 'win32') {
+      const killer = spawn('taskkill', ['/pid', String(job.proc.pid), '/t', '/f'], {
+        windowsHide: true,
+        shell: false,
+        stdio: 'ignore'
+      });
+      killer.unref();
+    } else {
+      try { process.kill(-job.proc.pid, 'SIGTERM'); }
+      catch (_) { job.proc.kill('SIGTERM'); }
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: `Could not stop spotDL: ${error.message}` };
+  }
+});
+
+ipcMain.handle('spotdl:open-folder', async () => {
+  const downloadDir = getSpotdlDownloadDirectory();
+  try {
+    fs.mkdirSync(downloadDir, { recursive: true });
+    const error = await shell.openPath(downloadDir);
+    return error ? { ok: false, error } : { ok: true, downloadDir };
+  } catch (error) {
+    return { ok: false, error: error.message || 'Could not open the download folder.' };
+  }
+});
+
+app.on('before-quit', () => {
+  const job = activeSpotdlJob;
+  if (!job || !job.proc || !job.proc.pid) return;
+  job.cancelled = true;
+  try {
+    if (process.platform === 'win32') {
+      const killer = spawn('taskkill', ['/pid', String(job.proc.pid), '/t', '/f'], {
+        windowsHide: true,
+        shell: false,
+        stdio: 'ignore'
+      });
+      killer.unref();
+    } else {
+      try { process.kill(-job.proc.pid, 'SIGTERM'); }
+      catch (_) { job.proc.kill('SIGTERM'); }
+    }
+  } catch (_) {}
+});
+// ---------- End spotDL download integration ----------

@@ -24,7 +24,57 @@ findExistingStemsForSource: (filePath) =>
   ipcRenderer.invoke('stems:find-existing-for-source', filePath),
 verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
   showItemInFolder: (path) => ipcRenderer.invoke('shell:show-in-folder', path),
-  getPathForFile: (file) => webUtils.getPathForFile(file),
+  checkSpotdl: () => ipcRenderer.invoke('spotdl:check'),
+  startSpotdlDownload: (url) => ipcRenderer.invoke('spotdl:start', url),
+  cancelSpotdlDownload: () => ipcRenderer.invoke('spotdl:cancel'),
+  openSpotdlFolder: () => ipcRenderer.invoke('spotdl:open-folder'),
+  onSpotdlProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('spotdl:progress', listener);
+    return () => ipcRenderer.removeListener('spotdl:progress', listener);
+  },
+    getPathForFile: (file) => webUtils.getPathForFile(file),
+  // Find Music exposes catalog discovery only; it does not expose arbitrary filesystem or downloader APIs.
+  findMusicParseLink: (url) => ipcRenderer.invoke('find-music:parse-link', url),
+  findMusicSearchRecordings: (payload) => ipcRenderer.invoke('find-music:search-recordings', payload),
+  findMusicOpenUrl: (url) => ipcRenderer.invoke('find-music:open-url', url),
+  // Folder watching is opt-in. Only paths reported from the selected folder can be read for import.
+  findMusicWatchSelectFolder: () => ipcRenderer.invoke('find-music:watch-select-folder'),
+  findMusicWatchStop: () => ipcRenderer.invoke('find-music:watch-stop'),
+  findMusicReadImportFile: (filePath) => ipcRenderer.invoke('find-music:read-import-file', filePath),
+  // Direct Internet Archive downloads and official store browsing stay inside Sleeve.
+  findMusicSearchOpenAudio: (payload) => ipcRenderer.invoke('find-music:search-open-audio', payload),
+  findMusicDownloadOpenAudio: (payload) => ipcRenderer.invoke('find-music:download-open-audio', payload),
+  findMusicReadDownloadedFile: (filePath) => ipcRenderer.invoke('find-music:read-downloaded-file', filePath),
+  findMusicResolvePublicLink: (payload) => ipcRenderer.invoke('find-music:resolve-public-link', payload),
+  findMusicGetPublicAlbumTracks: (collectionId) => ipcRenderer.invoke('find-music:get-public-album-tracks', collectionId),
+  // Local FFmpeg conversion operates only on user-selected local media files; it does not fetch YouTube streams.
+  findMusicConvertStatus: () => ipcRenderer.invoke('find-music:convert-status'),
+  findMusicConvertPickSource: () => ipcRenderer.invoke('find-music:convert-pick-source'),
+  findMusicConvertPickFfmpeg: () => ipcRenderer.invoke('find-music:convert-pick-ffmpeg'),
+  findMusicConvertRun: (payload) => ipcRenderer.invoke('find-music:convert-run', payload),
+  findMusicConvertCancel: (jobId) => ipcRenderer.invoke('find-music:convert-cancel', jobId),
+  findMusicConvertReadOutput: (outputToken) => ipcRenderer.invoke('find-music:convert-read-output', outputToken),
+  findMusicConvertRevealOutput: (outputToken) => ipcRenderer.invoke('find-music:convert-reveal-output', outputToken),
+  findMusicConvertOnProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:convert-progress', listener);
+    return () => ipcRenderer.removeListener('find-music:convert-progress', listener);
+  },
+  findMusicResolveDownloadOpenAudio: (payload) => ipcRenderer.invoke('find-music:resolve-download-open-audio', payload),
+  findMusicDownloadOpenAudioCollection: (payload) => ipcRenderer.invoke('find-music:download-open-audio-collection', payload),
+  findMusicCancelOpenAudioCollection: (requestId) => ipcRenderer.invoke('find-music:cancel-open-audio-collection', requestId),
+  findMusicOnOpenAudioCollectionProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:open-audio-collection-progress', listener);
+    return () => ipcRenderer.removeListener('find-music:open-audio-collection-progress', listener);
+  },
+  findMusicOnNewFiles: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('find-music:watch:new-files', listener);
+    return () => ipcRenderer.removeListener('find-music:watch:new-files', listener);
+  },
 })
 
 window.addEventListener('DOMContentLoaded', () => {
