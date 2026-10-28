@@ -523,21 +523,21 @@ app.on('window-all-closed', function () {
 // code. You can also put them in separate files and require them here.
 
 // Find Music catalog discovery handlers (authorized store links + public metadata).
-require('./find-music-main').registerFindMusicHandlers({ ipcMain, shell });
+  require('./src/features/find-music/main/find-music-main').registerFindMusicHandlers({ ipcMain, shell });
 
 // Find Music opt-in download-folder detection and user-approved local-file import.
-require('./find-music-watch-main').registerFindMusicWatchHandlers({ ipcMain, app, BrowserWindow });
+  require('./src/features/find-music/watch').registerFindMusicWatchHandlers({ ipcMain, app, BrowserWindow });
 
 // Find Music in-app open-license downloads and secure official-store browser.
-require('./find-music-download-main').registerFindMusicDownloadHandlers({ ipcMain, app, BrowserWindow });
+  require('./src/features/find-music/download').registerFindMusicDownloadHandlers({ ipcMain, app, BrowserWindow });
 
-// Find Music Spotify playlist/album metadata only (no Spotify audio downloading).
+  require('./src/features/find-music/spotify').registerFindMusicSpotifyHandlers({ ipcMain });
 
 // Find Music public link metadata and public album-track lookup; no Spotify Web API login.
-require('./find-music-public-metadata-main').registerFindMusicPublicMetadataHandlers({ ipcMain });
+  require('./src/features/find-music/main/find-music-public-metadata-main').registerFindMusicPublicMetadataHandlers({ ipcMain });
 
 // Find Music conversion of user-selected local media using a user-installed FFmpeg binary.
-require('./find-music-convert-main').registerFindMusicConvertHandlers({ ipcMain, app, dialog, shell });
+  require('./src/features/find-music/convert').registerFindMusicConvertHandlers({ ipcMain, app, dialog, shell });
 
 // ---------- spotDL download integration ----------
 // This block uses the existing Electron main-process imports (app, ipcMain,

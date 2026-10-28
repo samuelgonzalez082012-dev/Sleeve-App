@@ -1,5 +1,13 @@
 'use strict';
 
+/**
+ * FIND MUSIC: DOWNLOAD MODULE
+ * Combined Backend (Main Process) and Frontend (Renderer Process) logic.
+ */
+
+// =============================================================================
+// BACKEND LOGIC (Main Process)
+// =============================================================================
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
@@ -199,8 +207,6 @@ async function searchOpenLicensedAudio(payload, options = {}) {
     return params;
   };
   const queryVariants = [queryParts.join(' AND ')];
-  // If the exact title+creator query returns nothing, retry with less restrictive
-  // public metadata queries. Confidence scoring below remains the final gate.
   if (title && artist) queryVariants.push(['mediatype:audio', `title:"${archivePhrase(title)}"`].join(' AND '));
   if (artist && (!title || title && artist)) queryVariants.push(['mediatype:audio', `creator:"${archivePhrase(artist)}"`].join(' AND '));
   const uniqueDocs = new Map();
@@ -245,39 +251,58 @@ async function searchOpenLicensedAudio(payload, options = {}) {
   };
 }
 
-function isPathInside(root, candidate) {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
-
-function getDownloadsRoot(app) {
-  let musicPath = '';
-  try { musicPath = app.getPath('music'); } catch (_) {}
-  if (!musicPath) musicPath = app.getPath('downloads');
-  return path.join(musicPath, 'Sleeve Downloads');
-}
-
-function uniqueDestinationSync(directory, fileName, reservedPaths = new Set()) {
-  const safe = sanitizeFileName(fileName);
-  const ext = path.extname(safe);
-  const stem = path.basename(safe, ext);
-  let candidate = path.join(directory, safe);
-  let index = 2;
-  while (fs.existsSync(candidate) || reservedPaths.has(path.resolve(candidate))) candidate = path.join(directory, `${stem} (${index++})${ext}`);
-  return candidate;
-}
-
-async function uniqueDestination(directory, fileName) {
-  const safe = sanitizeFileName(fileName);
-  const ext = path.extname(safe);
-  const stem = path.basename(safe, ext);
-  let candidate = path.join(directory, safe);
-  let index = 2;
-  while (true) {
-    try { await fs.promises.access(candidate); }
-    catch (_) { return candidate; }
-    candidate = path.join(directory, `${stem} (${index++})${ext}`);
+async function resolveOpenLicensedTrack(payload, options = {}) {
+  const title = safeText(payload && (payload.title || payload.name), 180);
+  const artist = safeText(payload && (payload.artist || payload.artistText), 180);
+  const album = safeText(payload && (payload.album || payload.albumName), 180);
+  const isrc = (() => { try { return core.cleanIsrc(payload && payload.isrc); } catch (_) { return ''; } })();
+  if (!title || !artist) throw new Error('A track title and artist are required to find a reliable open-license match.');
+  const search = await searchOpenLicensedAudio({ title, artist, album, isrc }, {
+    ...options,
+    maxCandidates: Number.isInteger(options.maxCandidates) ? options.maxCandidates : 10,
+    metadataConcurrency: Number.isInteger(options.metadataConcurrency) ? options.metadataConcurrency : 2
+  });
+  const candidates = [];
+  for (const item of search.results || []) {
+    const files = Array.isArray(item.files) ? item.files : [];
+    for (const file of files) {
+      const score = scoreOpenLicensedTrack({ title, artist, album, isrc }, item, file);
+      if (!score || !score.accepted) continue;
+      candidates.push({ item, file, ...score });
+    }
   }
+  candidates.sort((a, b) => b.score - a.score || (a.file.size || 0) - (b.file.size || 0));
+  return candidates[0] || null;
+}
+
+async function scoreOpenLicensedTrack(track, item, file) {
+  const requestedTitle = safeText(track && (track.title || track.name), 180);
+  const requestedArtist = safeText(track && (track.artist || track.artistText), 180);
+  const requestedAlbum = safeText(track && (track.album || track.albumName), 180);
+  const requestedIsrc = (() => { try { return core.cleanIsrc(track && track.isrc); } catch (_) { return ''; } })();
+  const sourceIsrc = (() => { try { return core.cleanIsrc(item && item.isrc); } catch (_) { return ''; } })();
+  const exactIsrc = Boolean(requestedIsrc && sourceIsrc && requestedIsrc === sourceIsrc);
+  if (!requestedTitle || !requestedArtist || !item || !file) return null;
+
+  const fileTitle = cleanTrackFileTitle(file.name);
+  let titleScore = core.similarity(core.baseTitle(requestedTitle), fileTitle);
+  if (Array.isArray(item.files) && item.files.length === 1) {
+    titleScore = Math.max(titleScore, core.similarity(core.baseTitle(requestedTitle), core.baseTitle(item.title)));
+  }
+  const artistScore = item.creator && item.creator !== 'Unknown creator'
+    ? core.similarity(requestedArtist, item.creator)
+    : 0;
+  const albumScore = requestedAlbum && item.album ? core.similarity(requestedAlbum, item.album) : 0.5;
+  const similarityScore = 0.74 * titleScore + 0.22 * artistScore + 0.04 * albumScore;
+  const score = exactIsrc ? Math.max(0.99, similarityScore) : similarityScore;
+  return {
+    titleScore,
+    artistScore,
+    albumScore,
+    exactIsrc,
+    score: Math.max(0, Math.min(1, score)),
+    accepted: exactIsrc || (titleScore >= 0.78 && artistScore >= 0.48 && similarityScore >= 0.75)
+  };
 }
 
 async function downloadOpenLicensedAudio(payload, dependencies) {
@@ -302,7 +327,7 @@ async function downloadOpenLicensedAudio(payload, dependencies) {
   const response = await safeArchiveFetch(url, { fetchImpl: dependencies.fetchImpl, timeoutMs: 60000 });
   if (!response.ok) throw new Error(`The audio file could not be downloaded (HTTP ${response.status || 'unknown'}).`);
   const contentType = String(response.headers && response.headers.get ? response.headers.get('content-type') : '').toLowerCase();
-  if (contentType.includes('text/html') || contentType.includes('application/json')) throw new Error('Internet Archive returned a web page instead of an audio file. Check the item’s download permissions.');
+  if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) throw new Error('Internet Archive returned a web page instead of an audio file. Check the item’s download permissions.');
   const announcedSize = Number(response.headers && response.headers.get ? response.headers.get('content-length') : 0);
   if (announcedSize > MAX_AUDIO_BYTES) throw new Error('The server reports a file larger than Sleeve’s 300 MB in-app limit.');
   let bytes;
@@ -324,235 +349,6 @@ async function downloadOpenLicensedAudio(payload, dependencies) {
     licenseLabel: item.licenseLabel,
     source: 'Internet Archive'
   };
-}
-
-function findZipEndRecord(buffer) {
-  const min = Math.max(0, buffer.length - 65557);
-  for (let index = buffer.length - 22; index >= min; index -= 1) {
-    if (buffer.readUInt32LE(index) !== 0x06054B50) continue;
-    const commentLength = buffer.readUInt16LE(index + 20);
-    if (index + 22 + commentLength === buffer.length) return index;
-  }
-  return -1;
-}
-
-function listSafeZipAudioEntries(buffer) {
-  if (!Buffer.isBuffer(buffer) || buffer.length < 22) throw new Error('The downloaded ZIP archive is invalid.');
-  if (buffer.length > MAX_ZIP_BYTES) throw new Error('This album ZIP is larger than Sleeve’s 500 MB in-app extraction limit.');
-  const eocd = findZipEndRecord(buffer);
-  if (eocd < 0) throw new Error('Sleeve could not find the ZIP directory. The archive may be damaged or use an unsupported ZIP64 format.');
-  const entriesCount = buffer.readUInt16LE(eocd + 10);
-  const centralSize = buffer.readUInt32LE(eocd + 12);
-  const centralOffset = buffer.readUInt32LE(eocd + 16);
-  if (entriesCount === 0xFFFF || centralSize === 0xFFFFFFFF || centralOffset === 0xFFFFFFFF) {
-    throw new Error('This ZIP uses ZIP64, which this version of Sleeve cannot extract automatically. The archive is saved in Sleeve Downloads.');
-  }
-  if (entriesCount > MAX_ZIP_ENTRIES || centralOffset + centralSize > buffer.length) {
-    throw new Error('This ZIP directory is outside Sleeve’s safe extraction limits. The archive is saved in Sleeve Downloads.');
-  }
-  const entries = [];
-  let offset = centralOffset;
-  let totalUncompressed = 0;
-  for (let index = 0; index < entriesCount; index += 1) {
-    if (offset + 46 > buffer.length || buffer.readUInt32LE(offset) !== 0x02014B50) {
-      throw new Error('Sleeve found an invalid ZIP entry. The archive is saved in Sleeve Downloads.');
-    }
-    const flags = buffer.readUInt16LE(offset + 8);
-    const method = buffer.readUInt16LE(offset + 10);
-    const crc = buffer.readUInt32LE(offset + 16);
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const uncompressedSize = buffer.readUInt32LE(offset + 24);
-    const nameLength = buffer.readUInt16LE(offset + 28);
-    const extraLength = buffer.readUInt16LE(offset + 30);
-    const commentLength = buffer.readUInt16LE(offset + 32);
-    const externalAttrs = buffer.readUInt32LE(offset + 38);
-    const localOffset = buffer.readUInt32LE(offset + 42);
-    const end = offset + 46 + nameLength + extraLength + commentLength;
-    if (end > buffer.length) throw new Error('Sleeve found a truncated ZIP entry. The archive is saved in Sleeve Downloads.');
-    const rawName = buffer.subarray(offset + 46, offset + 46 + nameLength).toString('utf8').replace(/\\/g, '/');
-    offset = end;
-    if (!rawName || rawName.endsWith('/') || rawName.startsWith('/') || /^[A-Za-z]:/.test(rawName) || rawName.split('/').includes('..')) continue;
-    const unixMode = externalAttrs >>> 16;
-    if ((unixMode & 0xF000) === 0xA000) continue; // symbolic link
-    if (!isAudioFilename(rawName)) continue;
-    if ((flags & 0x0001) !== 0) continue; // encrypted files aren't extracted
-    if (![0, 8].includes(method)) continue;
-    if ([compressedSize, uncompressedSize, localOffset].includes(0xFFFFFFFF)) {
-      throw new Error('This ZIP entry uses unsupported ZIP64 sizes. The archive is saved in Sleeve Downloads.');
-    }
-    if (uncompressedSize > MAX_ZIP_ENTRY_BYTES) throw new Error('An audio track in this ZIP exceeds Sleeve’s 300 MB extraction limit. The archive is saved in Sleeve Downloads.');
-    totalUncompressed += uncompressedSize;
-    if (totalUncompressed > MAX_ZIP_AUDIO_TOTAL_BYTES) throw new Error('The ZIP expands to over 1 GB of audio. The archive is saved in Sleeve Downloads.');
-    entries.push({ rawName, name: sanitizeFileName(path.posix.basename(rawName)), method, crc, compressedSize, uncompressedSize, localOffset });
-  }
-  return entries;
-}
-
-function extractZipEntryBuffer(zipBuffer, entry) {
-  const local = entry.localOffset;
-  if (local + 30 > zipBuffer.length || zipBuffer.readUInt32LE(local) !== 0x04034B50) {
-    throw new Error(`Sleeve found a damaged ZIP entry for ${entry.name}. The archive is saved in Sleeve Downloads.`);
-  }
-  const localNameLength = zipBuffer.readUInt16LE(local + 26);
-  const localExtraLength = zipBuffer.readUInt16LE(local + 28);
-  const dataStart = local + 30 + localNameLength + localExtraLength;
-  const dataEnd = dataStart + entry.compressedSize;
-  if (dataStart < 0 || dataEnd > zipBuffer.length || dataStart > dataEnd) {
-    throw new Error(`Sleeve found a truncated ZIP entry for ${entry.name}. The archive is saved in Sleeve Downloads.`);
-  }
-  const compressed = zipBuffer.subarray(dataStart, dataEnd);
-  let data;
-  try {
-    data = entry.method === 0 ? Buffer.from(compressed) : zlib.inflateRawSync(compressed, { maxOutputLength: MAX_ZIP_ENTRY_BYTES });
-  } catch (_) {
-    throw new Error(`Sleeve could not extract ${entry.name} from the ZIP. The archive is saved in Sleeve Downloads.`);
-  }
-  if (data.length !== entry.uncompressedSize || crc32(data) !== entry.crc) {
-    throw new Error(`The ZIP integrity check failed for ${entry.name}. The archive is saved in Sleeve Downloads.`);
-  }
-  return data;
-}
-
-function extractZipAudioBuffers(zipBuffer) {
-  return listSafeZipAudioEntries(zipBuffer).map((entry) => ({ name: entry.name, bytes: extractZipEntryBuffer(zipBuffer, entry) }));
-}
-
-async function extractZipToSleeveDownloads(zipPath, app) {
-  const root = getDownloadsRoot(app);
-  const zipBuffer = await fs.promises.readFile(zipPath);
-  const entries = listSafeZipAudioEntries(zipBuffer);
-  if (!entries.length) return [];
-  const folderName = sanitizeFileName(`${path.basename(zipPath, path.extname(zipPath))} - extracted`);
-  let outputDir = path.join(root, folderName);
-  let suffix = 2;
-  while (true) {
-    try { await fs.promises.access(outputDir); outputDir = path.join(root, `${folderName} (${suffix++})`); }
-    catch (_) { break; }
-  }
-  await fs.promises.mkdir(outputDir, { recursive: true });
-  const written = [];
-  for (const entry of entries) {
-    const bytes = extractZipEntryBuffer(zipBuffer, entry);
-    const destination = await uniqueDestination(outputDir, entry.name);
-    await fs.promises.writeFile(destination, bytes, { flag: 'wx' });
-    written.push({ path: path.resolve(destination), name: path.basename(destination), size: bytes.length });
-  }
-  return written;
-}
-
-async function readCompletedDownload(rawPath, dependencies) {
-  const filePath = path.resolve(String(rawPath || ''));
-  const root = getDownloadsRoot(dependencies.app);
-  if (!dependencies.completedDownloads.has(filePath) || !isPathInside(root, filePath) || !isAudioFilename(filePath)) {
-    throw new Error('Sleeve only imports audio files that it has just downloaded through an approved Find Music flow.');
-  }
-  const realPath = await fs.promises.realpath(filePath);
-  if (!isPathInside(root, realPath) || !isAudioFilename(realPath)) throw new Error('Sleeve blocked a download path outside its music-download folder.');
-  const stat = await fs.promises.stat(realPath);
-  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_AUDIO_BYTES) throw new Error('This downloaded file is empty or exceeds Sleeve’s 300 MB import limit.');
-  const buffer = await fs.promises.readFile(realPath);
-  if (buffer.length !== stat.size) throw new Error('The downloaded file changed while Sleeve was reading it. Try again.');
-  dependencies.completedDownloads.delete(filePath);
-  return {
-    path: realPath,
-    name: path.basename(realPath),
-    type: mimeForAudioPath(realPath),
-    lastModified: stat.mtimeMs,
-    bytes: Uint8Array.from(buffer)
-  };
-}
-
-function mimeForAudioPath(filePath) {
-  const ext = path.extname(String(filePath || '')).toLowerCase();
-  return ({
-    '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.wave': 'audio/wav',
-    '.ogg': 'audio/ogg', '.oga': 'audio/ogg', '.opus': 'audio/ogg',
-    '.m4a': 'audio/mp4', '.m4b': 'audio/mp4', '.aac': 'audio/aac',
-    '.flac': 'audio/flac', '.alac': 'audio/mp4', '.aiff': 'audio/aiff',
-    '.aif': 'audio/aiff', '.ape': 'audio/ape', '.wv': 'audio/wavpack',
-    '.dsf': 'audio/dsd', '.dff': 'audio/dsd', '.mpc': 'audio/musepack',
-    '.mid': 'audio/midi', '.midi': 'audio/midi'
-  })[ext] || 'application/octet-stream';
-}
-
-function buildCrcTable() {
-  const table = new Uint32Array(256);
-  for (let i = 0; i < 256; i += 1) {
-    let value = i;
-    for (let bit = 0; bit < 8; bit += 1) value = (value >>> 1) ^ ((value & 1) ? 0xEDB88320 : 0);
-    table[i] = value >>> 0;
-  }
-  return table;
-}
-const CRC_TABLE = buildCrcTable();
-// The faster table-based implementation overrides the tiny reference form above.
-function crc32(buffer) {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < buffer.length; i += 1) crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buffer[i]) & 0xFF];
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function cleanTrackFileTitle(rawName) {
-  let title = path.basename(String(rawName || ''), path.extname(String(rawName || '')));
-  title = title.replace(/^\s*\d{1,3}(?:[._\s-]+)+/, '');
-  return core.baseTitle(title);
-}
-
-function scoreOpenLicensedTrack(track, item, file) {
-  const requestedTitle = safeText(track && (track.title || track.name), 180);
-  const requestedArtist = safeText(track && (track.artist || track.artistText), 180);
-  const requestedAlbum = safeText(track && (track.album || track.albumName), 180);
-  const requestedIsrc = (() => { try { return core.cleanIsrc(track && track.isrc); } catch (_) { return ''; } })();
-  const sourceIsrc = (() => { try { return core.cleanIsrc(item && item.isrc); } catch (_) { return ''; } })();
-  const exactIsrc = Boolean(requestedIsrc && sourceIsrc && requestedIsrc === sourceIsrc);
-  if (!requestedTitle || !requestedArtist || !item || !file) return null;
-
-  const fileTitle = cleanTrackFileTitle(file.name);
-  let titleScore = core.similarity(core.baseTitle(requestedTitle), fileTitle);
-  // An item's title may stand in for its only audio file. Never use an album title
-  // as a proxy for one track when the item contains multiple audio files.
-  if (Array.isArray(item.files) && item.files.length === 1) {
-    titleScore = Math.max(titleScore, core.similarity(core.baseTitle(requestedTitle), core.baseTitle(item.title)));
-  }
-  const artistScore = item.creator && item.creator !== 'Unknown creator'
-    ? core.similarity(requestedArtist, item.creator)
-    : 0;
-  const albumScore = requestedAlbum && item.album ? core.similarity(requestedAlbum, item.album) : 0.5;
-  const similarityScore = 0.74 * titleScore + 0.22 * artistScore + 0.04 * albumScore;
-  const score = exactIsrc ? Math.max(0.99, similarityScore) : similarityScore;
-  return {
-    titleScore,
-    artistScore,
-    albumScore,
-    exactIsrc,
-    score: Math.max(0, Math.min(1, score)),
-    accepted: exactIsrc || (titleScore >= 0.78 && artistScore >= 0.48 && similarityScore >= 0.75)
-  };
-}
-
-async function resolveOpenLicensedTrack(payload, options = {}) {
-  const title = safeText(payload && (payload.title || payload.name), 180);
-  const artist = safeText(payload && (payload.artist || payload.artistText), 180);
-  const album = safeText(payload && (payload.album || payload.albumName), 180);
-  const isrc = (() => { try { return core.cleanIsrc(payload && payload.isrc); } catch (_) { return ''; } })();
-  if (!title || !artist) throw new Error('A track title and artist are required to find a reliable open-license match.');
-
-  const search = await searchOpenLicensedAudio({ title, artist, album, isrc }, {
-    ...options,
-    maxCandidates: Number.isInteger(options.maxCandidates) ? options.maxCandidates : 10,
-    metadataConcurrency: Number.isInteger(options.metadataConcurrency) ? options.metadataConcurrency : 2
-  });
-  const candidates = [];
-  for (const item of search.results || []) {
-    const files = Array.isArray(item.files) ? item.files : [];
-    for (const file of files) {
-      const score = scoreOpenLicensedTrack({ title, artist, album, isrc }, item, file);
-      if (!score || !score.accepted) continue;
-      candidates.push({ item, file, ...score });
-    }
-  }
-  candidates.sort((a, b) => b.score - a.score || (a.file.size || 0) - (b.file.size || 0));
-  return candidates[0] || null;
 }
 
 async function resolveAndDownloadOpenLicensedAudio(payload, dependencies) {
@@ -629,10 +425,10 @@ async function writeZipArchive(files, destination) {
       const local = Buffer.alloc(30);
       local.writeUInt32LE(0x04034B50, 0);
       local.writeUInt16LE(20, 4);
-      local.writeUInt16LE(0x0800, 6); // UTF-8 filename, no data descriptor/encryption
-      local.writeUInt16LE(0, 8); // already-compressed audio: store without recompression
+      local.writeUInt16LE(0x0800, 6);
+      local.writeUInt16LE(0, 8);
       local.writeUInt16LE(0, 10);
-      local.writeUInt16LE(0x21, 12); // 1980-01-01 DOS date
+      local.writeUInt16LE(0x21, 12);
       local.writeUInt32LE(checksum, 14);
       local.writeUInt32LE(stat.size, 18);
       local.writeUInt32LE(stat.size, 22);
@@ -722,8 +518,6 @@ async function downloadOpenAudioCollection(payload, dependencies) {
     message: ''
   }));
   try {
-    // Resolve two tracks at a time, selecting exactly one confident candidate per track.
-    // The renderer only sees a status for each requested track, not a stack of alternatives.
     let resolveStarted = 0;
     await mapWithLimit(statuses, 2, async (state, index) => {
       if (isCancelled()) {
@@ -765,8 +559,6 @@ async function downloadOpenAudioCollection(payload, dependencies) {
       }
       return state;
     });
-
-    // Keep source order and enforce the aggregate ZIP limit using advertised sizes.
     let plannedBytes = 0;
     const planned = [];
     for (const state of statuses) {
@@ -781,7 +573,6 @@ async function downloadOpenAudioCollection(payload, dependencies) {
       plannedBytes += size;
       planned.push(state);
     }
-
     const downloaded = [];
     const successfulDownloads = [];
     let packagedBytes = 0;
@@ -809,14 +600,10 @@ async function downloadOpenAudioCollection(payload, dependencies) {
       }
       return state;
     });
-
-    // ZIP entry order follows the original track order, regardless of the order
-    // in which the two download workers finish. Keep the advertised ZIP size cap.
     const usedZipNames = new Set();
     for (const state of planned) {
       if (!state.download) continue;
       const result = state.download;
-      successfulDownloads.push(state);
       if (packagedBytes + result.size <= MAX_COLLECTION_ZIP_BYTES) {
         packagedBytes += result.size;
         state.status = 'downloaded';
@@ -834,7 +621,6 @@ async function downloadOpenAudioCollection(payload, dependencies) {
         state.message = 'Downloaded and can be imported, but omitted from the ZIP to keep it under 480 MB.';
       }
     }
-
     let zip = null;
     let zipError = '';
     if (downloaded.length) {
@@ -854,7 +640,6 @@ async function downloadOpenAudioCollection(payload, dependencies) {
         downloaded.splice(0, downloaded.length);
       }
     }
-
     const results = statuses.map((state) => ({
       index: state.index,
       title: state.title,
@@ -874,7 +659,7 @@ async function downloadOpenAudioCollection(payload, dependencies) {
       : 'Finished, but there were no successfully downloaded tracks to package.');
     return {
       requestId,
-      collectionName: safeText(payload && payload.collectionName, 120) || 'Sleeve Collection',
+      collectionName: safeText(payload && payload.collectionName, 120) || 'Sleeve Collection ' + (zip ? ' (packaged)' : ''),
       results,
       zipPath: zip ? zip.path : '',
       zipName: zip ? zip.name : '',
@@ -923,28 +708,201 @@ function registerFindMusicDownloadHandlers({ ipcMain, app, BrowserWindow }) {
   return { completedDownloads, collectionJobs, searchOpenLicensedAudio, downloadOpenLicensedAudio, resolveOpenLicensedTrack, downloadOpenAudioCollection };
 }
 
+function initFindMusicDownloadUI() {
+  if (new URLSearchParams(window.location.search).get('mini') === '1') return;
+  if (document.getElementById('fmOpenAudioSection')) return;
+
+  const api = window.electronAPI;
+  const overlay = document.getElementById('sleeveFindMusicOverlay');
+  const content = overlay && overlay.querySelector('.find-music-content');
+  if (!api || !content || typeof api.findMusicSearchOpenAudio !== 'function') {
+    console.warn('[Sleeve Find Music] Local music download API is missing. Run the updated installer.');
+    return;
+  }
+
+  const section = document.createElement('section');
+  section.id = 'fmOpenAudioSection';
+  section.className = 'find-music-card find-music-open-audio-card';
+  section.innerHTML = `
+    <div class="find-music-section-heading">
+      <div>
+        <h3>4. Download eligible music directly in Sleeve</h3>
+        <p>Search Internet Archive for audio with an explicitly declared Creative Commons or public-domain license. Use the in-app Download &amp; add button for a direct audio file; no embedded browser is used.</p>
+      </div>
+    </div>
+    <div class="find-music-open-audio-actions">
+      <button id="fmSearchOpenAudio" class="find-music-primary" type="button">Search downloadable music</button>
+      <span id="fmOpenAudioCount" class="find-music-count">No search yet</span>
+    </div>
+    <div id="fmOpenAudioFeedback" class="find-music-status" role="status" aria-live="polite">Directly downloaded audio is saved in Music → Sleeve Downloads and added to your library automatically.</div>
+    <div id="fmOpenAudioResults" class="find-music-open-audio-results" hidden></div>
+    <p class="find-music-watch-note">Only files offered by the source are downloaded. Sleeve doesn’t rip streams. Internet Archive license metadata is supplied by uploaders, so check each item’s rights information; no result is a guarantee that every underlying recording was uploaded correctly.</p>
+  `;
+  const footnote = content.querySelector('.find-music-footnote');
+  const importCard = content.querySelector('.find-music-import-card');
+  if (importCard) content.insertBefore(section, importCard);
+  else if (footnote) content.insertBefore(section, footnote);
+  else content.appendChild(section);
+
+  const get = (id) => document.getElementById(id);
+  const feedback = get('fmOpenAudioFeedback');
+  const results = get('fmOpenAudioResults');
+  const count = get('fmOpenAudioCount');
+  const searchButton = get('fmSearchOpenAudio');
+  let searching = false;
+  let operationEpoch = 0;
+  const importingDownloadedPaths = new Set();
+
+  async function importDownloadedPath(filePath) {
+    if (!filePath || importingDownloadedPaths.has(filePath)) return false;
+    importingDownloadedPaths.add(filePath);
+    try {
+      const record = await api.findMusicReadDownloadedFile(filePath);
+      if (!record || !record.bytes || typeof record.name !== 'string') {
+        throw new Error('Sleeve received an invalid downloaded file.');
+      }
+      const file = new File([record.bytes], record.name, {
+        type: record.type || 'application/octet-stream',
+        lastModified: Number(record.lastModified) || Date.now()
+      });
+      Object.defineProperty(file, '__sleeveSourcePath', { value: record.path, enumerable: false });
+      window.dispatchEvent(new CustomEvent('sleeve:find-music-import-files', { detail: { files: [file] } }));
+      return true;
+    } finally {
+      importingDownloadedPaths.delete(filePath);
+    }
+  }
+
+  async function downloadFile(item, file, button) {
+    if (button.disabled) return;
+    const actionEpoch = operationEpoch;
+    button.disabled = true;
+    const oldText = button.textContent;
+    button.textContent = 'Downloading and importing…';
+    setStatus(`Downloading ${file.name} from Internet Archive.`, 'info');
+    try {
+      const downloaded = await api.findMusicDownloadOpenAudio({ identifier: item.identifier, fileName: file.name });
+      await importDownloadedPath(downloaded.path);
+      if (actionEpoch === operationEpoch && !overlay.hidden) {
+        setStatus(`Downloaded and added “${downloaded.name}” to Sleeve. Saved under Music → Sleeve Downloads. License listed by source: ${downloaded.licenseLabel}.`, 'success');
+        button.textContent = 'Downloaded ✓';
+      }
+    } catch (error) {
+      if (actionEpoch === operationEpoch && !overlay.hidden) {
+        setStatus(error && error.message ? error.message : 'The download failed. Try another file or source.', 'error');
+        button.textContent = oldText;
+        button.disabled = false;
+      }
+    }
+  }
+
+  function renderResults(items) {
+    results.replaceChildren();
+    count.textContent = `${items.length} downloadable item${items.length === 1 ? '' : 's'}`;
+    if (!items.length) {
+      results.appendChild(makeText('div', 'find-music-empty', 'No explicitly licensed, directly downloadable audio items matched. Try a shorter title, the artist name alone, or another source below.'));
+      results.hidden = false;
+      return;
+    }
+
+    for (const item of items) {
+      const card = document.createElement('article');
+      card.className = 'find-music-open-audio-result';
+      const header = document.createElement('div');
+      header.className = 'find-music-open-audio-result-header';
+      const heading = document.createElement('div');
+      heading.className = 'find-music-open-audio-result-heading';
+      heading.appendChild(makeText('h4', '', item.title || 'Untitled audio item'));
+      heading.appendChild(makeText('p', '', [item.creator, item.year].filter(Boolean).join(' · ') || 'Creator or date not supplied'));
+      const license = makeText('span', 'find-music-license-pill', item.licenseLabel || 'License metadata unavailable');
+      header.append(heading, license);
+      card.appendChild(header);
+
+      const fileList = document.createElement('div');
+      fileList.className = 'find-music-open-audio-files';
+      for (const file of Array.isArray(item.files) ? item.files : []) {
+        const row = document.createElement('div');
+        row.className = 'find-music-open-audio-file';
+        const fileDetails = document.createElement('div');
+        fileDetails.className = 'find-music-open-audio-file-details';
+        fileDetails.appendChild(makeText('strong', '', file.name));
+        fileDetails.appendChild(makeText('small', '', prettyFileFormat(file)));
+        const download = document.createElement('button');
+        download.type = 'button';
+        download.className = 'find-music-secondary';
+        download.textContent = 'Download & add';
+        download.addEventListener('click', () => downloadFile(item, file, download));
+        row.append(fileDetails, download);
+        fileList.appendChild(row);
+      }
+      card.appendChild(fileList);
+      const sourceNote = makeText('p', 'find-music-source-note', `Direct source: ${item.itemUrl || 'Internet Archive'} · License URL: ${item.licenseUrl || 'not supplied'}`);
+      card.appendChild(sourceNote);
+      results.appendChild(card);
+    }
+    results.hidden = false;
+  }
+
+  function makeText(tag, className, value) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    element.textContent = value == null ? '' : String(value);
+    return element;
+  }
+
+  async function searchOpenAudio() {
+    if (searching) return;
+    const searchEpoch = operationEpoch;
+    const title = document.getElementById('fmTitle')?.value.trim() || '';
+    const artist = document.getElementById('fmArtist')?.value.trim() || '';
+    const album = document.getElementById('fmAlbum')?.value.trim() || '';
+    if (!title && !artist) {
+    setStatus('Enter a title or artist in step 1 first.', 'error');
+    return;
+    }
+    searching = true;
+    searchButton.disabled = true;
+    searchButton.textContent = 'Searching open-license catalog…';
+    count.textContent = 'Searching…';
+    results.hidden = true;
+    results.replaceChildren();
+    setStatus('Searching Internet Archive metadata and verifying each item’s declared license and audio files.', 'info');
+    try {
+      const response = await api.findMusicSearchOpenAudio({ title, artist, album });
+      if (searchEpoch !== operationEpoch || overlay.hidden) {
+        return;
+      }
+      renderResults(response.results || []);
+      setStatus(response.note || 'Search complete.', 'info');
+    } catch (error) {
+      if (searchEpoch !== operationEpoch || overlay.hidden) {
+        return;
+      }
+      count.textContent = 'Search failed';
+      }
+    } finally {
+      if (searchEpoch === operationEpoch) {
+        searching = false;
+        searchButton.disabled = false;
+        searchButton.textContent = 'Search downloadable music';
+      }
+    }
+  }
+
+  searchButton.addEventListener('click', searchOpenAudio);
+
+  document.addEventListener('sleeve:find-music-reset', () => {
+    operationEpoch += 1;
+    searching = false;
+    results.replaceChildren();
+    results.hidden = true;
+    count.textContent = 'No search yet';
+    setStatus('Directly downloaded audio is saved in Music → Sleeve Downloads and added to your library automatically.', 'info');
+    searchButton.disabled = false;
+    searchButton.textContent = 'Search downloadable music';
+  });
+}
+
 module.exports = {
-  registerFindMusicDownloadHandlers,
-  cleanTrackFileTitle,
-  isArchiveHost,
-  isSafeArchiveIdentifier,
-  isExplicitlyOpenLicense,
-  licenseLabel,
-  isAudioFilename,
-  isZipFilename,
-  sanitizeFileName,
-  archivePhrase,
-  mapAudioFiles,
-  searchOpenLicensedAudio,
-  resolveOpenLicensedTrack,
-  scoreOpenLicensedTrack,
-  downloadOpenAudioCollection,
-  writeZipArchive,
-  downloadOpenLicensedAudio,
-  readCompletedDownload,
-  listSafeZipAudioEntries,
-  extractZipAudioBuffers,
-  isPathInside,
-  safeArchiveFetch,
-  crc32
+  initFindMusicDownloadUI
 };
