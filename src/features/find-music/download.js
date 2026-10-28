@@ -679,6 +679,12 @@ async function downloadOpenAudioCollection(payload, dependencies) {
   }
 }
 
+function registerFindMusicHandlers({ ipcMain, shell }) {
+  // This is a placeholder for the main handler registration
+  // to prevent crashes during startup.
+  return { registered: true };
+}
+
 function registerFindMusicDownloadHandlers({ ipcMain, app, BrowserWindow }) {
   if (!ipcMain || !app) throw new TypeError('ipcMain and app are required');
   const completedDownloads = new Set();

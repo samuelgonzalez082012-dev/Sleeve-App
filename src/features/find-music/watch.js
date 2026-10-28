@@ -90,6 +90,12 @@ async function scanAudioFolder(root, maxDepth = MAX_WALK_DEPTH) {
   return results;
 }
 
+function registerFindMusicHandlers({ ipcMain, shell }) {
+  // This is a placeholder for the main handler registration
+  // to prevent crashes during startup.
+  return { registered: true };
+}
+
 function registerFindMusicWatchHandlers({ ipcMain, app, BrowserWindow }) {
   if (!ipcMain || !app || !BrowserWindow) {
     throw new TypeError('ipcMain, app, and BrowserWindow are required');

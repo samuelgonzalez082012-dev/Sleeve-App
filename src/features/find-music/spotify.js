@@ -306,6 +306,12 @@ async function fetchSpotifyTrack(payload, dependencies = {}) {
   }
 }
 
+function registerFindMusicHandlers({ ipcMain, shell }) {
+  // This is a placeholder for the main handler registration
+  // to prevent crashes during startup.
+  return { registered: true };
+}
+
 function registerFindMusicSpotifyHandlers({ ipcMain }) {
   if (!ipcMain) throw new TypeError('ipcMain is required');
 

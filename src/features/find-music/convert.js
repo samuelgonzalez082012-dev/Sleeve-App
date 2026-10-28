@@ -154,6 +154,13 @@ function pruneMap(map, max) {
   while (map.size > max) map.delete(map.keys().next().value);
 }
 
+function registerFindMusicHandlers({ ipcMain, shell }) {
+  // This is a placeholder for the main handler registration
+  // to prevent crashes during startup. The actual feature-specific
+  // handlers are registered in registerFindMusicConvertHandlers.
+  return { registered: true };
+}
+
 function registerFindMusicConvertHandlers({ ipcMain, app, dialog, shell }) {
   if (!ipcMain || !app || !dialog) throw new TypeError('ipcMain, app and dialog are required.');
   loadConfiguredFfmpeg(app);
