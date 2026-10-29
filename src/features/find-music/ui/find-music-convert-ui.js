@@ -1,8 +1,6 @@
-/* Sleeve Find Music: local media conversion with FFmpeg.
- * Link URLs are used for identification/reference only. The converter accepts
- * a user-selected local media file; it does not extract YouTube streams. */
-(() => {
-  'use strict';
+// FRONTEND LOGIC (Renderer Process)
+// =============================================================================
+function initFindMusicConvertUI() {
   if (new URLSearchParams(window.location.search).get('mini') === '1') return;
   if (document.getElementById('fmConvertCard')) return;
 
@@ -280,4 +278,8 @@
 
   refreshFfmpegStatus();
   refreshActions();
-})();
+}
+
+module.exports = {
+  initFindMusicConvertUI
+};

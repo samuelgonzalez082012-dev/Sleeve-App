@@ -1,0 +1,10 @@
+  checkSpotdl: () => ipcRenderer.invoke('spotdl:check'),
+  startSpotdlDownload: (url) => ipcRenderer.invoke('spotdl:start', url),
+  cancelSpotdlDownload: () => ipcRenderer.invoke('spotdl:cancel'),
+  openSpotdlFolder: () => ipcRenderer.invoke('spotdl:open-folder'),
+  onSpotdlProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('spotdl:progress', listener);
+    return () => ipcRenderer.removeListener('spotdl:progress', listener);
+  },

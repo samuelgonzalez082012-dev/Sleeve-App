@@ -489,4 +489,4 @@ function initFindMusicWatchUI() {
   window.addEventListener('beforeunload', () => {
     if (typeof unsubscribe === 'function') unsubscribe();
   }, { once: true });
-})();
+};

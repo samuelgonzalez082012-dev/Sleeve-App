@@ -907,8 +907,9 @@ function initFindMusicDownloadUI() {
     searchButton.disabled = false;
     searchButton.textContent = 'Search downloadable music';
   });
-}
+
 
 module.exports = {
+  registerFindMusicDownloadHandlers,
   initFindMusicDownloadUI
 };
