@@ -999,6 +999,7 @@ stemAudio.drums.addEventListener('ended', () => {
     getPlaylists: () => playlists.map(pl => ({ id: pl.id, name: pl.name, trackCount: pl.trackIds.length })),
     getActivePlaylistId: () => (currentView.type === 'playlist' ? currentView.id : null),
     getTasteProfile: () => window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(playlist) : null,
+    getLibraryArtistNames: () => Array.from(new Set(playlist.filter(track => track && track.kind !== 'video').map(track => String(track.artist || '').trim()).filter(Boolean))),
     activatePlaylist: (playlistId, autoplay = true) => {
       const pl = playlists.find(p => p.id === playlistId);
       if (!pl) return false;
