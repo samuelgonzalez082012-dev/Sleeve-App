@@ -66,6 +66,10 @@ class LocalNetworkService {
     this.devices = readJson(this.devicesPath, []);
     if (!Array.isArray(this.devices)) this.devices = [];
     this.libraryStreaming = new LocalLibraryStreaming({ ffmpegPathProvider: options.ffmpegPathProvider });
+    this.pairedServersPath = path.join(this.userDataPath, 'network', 'paired-servers.json');
+    this.remoteProxyServer = null;
+    this.remoteProxyPort = null;
+    this.remoteProxySecret = null;
   }
 
   setLibrarySnapshot(tracks, playlists) {
@@ -208,6 +212,118 @@ class LocalNetworkService {
       setTimeout(() => { clearTimeout(timer); originalFinish(); }, Math.max(500, Math.min(Number(timeoutMs) || 1800, 5000)) + 30);
     });
     return [...found.values()];
+  }
+
+  getPairedServers() {
+    const records = readJson(this.pairedServersPath, []);
+    return (Array.isArray(records) ? records : []).map(({ serverId, name, address, port, pairedAt }) => ({
+      serverId, name, address, port, pairedAt
+    }));
+  }
+
+  getPairedServer(serverId) {
+    const records = readJson(this.pairedServersPath, []);
+    return Array.isArray(records) ? records.find(item => item.serverId === serverId && item.token) : null;
+  }
+
+  async getRemoteLibrary(serverId, section = 'library', options = {}) {
+    const record = this.getPairedServer(serverId);
+    if (!record) throw new Error('That Sleeve server is not paired with this device.');
+    const allowed = new Set(['library', 'tracks', 'albums', 'artists', 'genres', 'playlists']);
+    if (!allowed.has(section)) throw new Error('Unsupported library section.');
+    const params = new URLSearchParams();
+    for (const key of ['q', 'artist', 'album', 'genre', 'limit', 'offset']) {
+      if (options[key] !== undefined && options[key] !== null && String(options[key]).trim()) {
+        params.set(key, String(options[key]).slice(0, 160));
+      }
+    }
+    const suffix = section === 'library' ? '/v1/library' : '/v1/library/' + section;
+    const url = 'http://' + record.address + ':' + record.port + suffix + (params.size ? '?' + params.toString() : '');
+    const response = await fetch(url, {
+      headers: { authorization: 'Bearer ' + record.token },
+      signal: AbortSignal.timeout(12000)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not load the shared library.');
+    return data;
+  }
+
+  async getRemotePlaylistTracks(serverId, playlistId, options = {}) {
+    const record = this.getPairedServer(serverId);
+    if (!record) throw new Error('That Sleeve server is not paired with this device.');
+    const id = String(playlistId || '');
+    if (!/^[-A-Za-z0-9_]{1,40}$/.test(id)) throw new Error('Invalid playlist identifier.');
+    const params = new URLSearchParams();
+    for (const key of ['limit', 'offset']) if (options[key] != null) params.set(key, String(options[key]));
+    const url = 'http://' + record.address + ':' + record.port + '/v1/library/playlists/' + id + '/tracks' + (params.size ? '?' + params.toString() : '');
+    const response = await fetch(url, { headers: { authorization: 'Bearer ' + record.token }, signal: AbortSignal.timeout(12000) });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not load that shared playlist.');
+    return data;
+  }
+
+  async getRemoteStreamUrl(serverId, trackId, quality = 'original') {
+    const record = this.getPairedServer(serverId);
+    if (!record) throw new Error('That Sleeve server is not paired with this device.');
+    if (!/^\\d+$/.test(String(trackId)) || !['original', 'compact'].includes(quality)) {
+      throw new Error('Invalid remote track or quality setting.');
+    }
+    if (!this.remoteProxyServer) {
+      this.remoteProxySecret = crypto.randomBytes(24).toString('hex');
+      this.remoteProxyServer = http.createServer((req, res) => {
+        const url = new URL(req.url || '/', 'http://127.0.0.1');
+        const match = /^\\/([a-f0-9]{48})\\/([a-f0-9-]{36})\\/tracks\\/(\\d+)\\/stream$/.exec(url.pathname);
+        if (req.method !== 'GET' || !match || !safeEqualText(match[1], this.remoteProxySecret)) {
+          res.writeHead(404); return res.end();
+        }
+        const paired = this.getPairedServer(match[2]);
+        if (!paired) { res.writeHead(403); return res.end(); }
+        const streamQuality = url.searchParams.get('quality') || 'original';
+        if (!['original', 'compact'].includes(streamQuality)) { res.writeHead(400); return res.end(); }
+        const target = new URL('http://' + paired.address + ':' + paired.port + '/v1/tracks/' + match[3] + '/stream');
+        target.searchParams.set('quality', streamQuality);
+        if (streamQuality === 'compact' && url.searchParams.has('start')) {
+          target.searchParams.set('start', String(Math.max(0, Math.min(86400, Number(url.searchParams.get('start')) || 0))));
+        }
+        const upstream = http.request(target, {
+          method: 'GET',
+          headers: {
+            authorization: 'Bearer ' + paired.token,
+            ...(req.headers.range && streamQuality === 'original' ? { range: req.headers.range } : {})
+          }
+        }, remote => {
+          const headers = {};
+          for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control']) {
+            if (remote.headers[name]) headers[name] = remote.headers[name];
+          }
+          res.writeHead(remote.statusCode || 502, headers);
+          remote.pipe(res);
+        });
+        upstream.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end(); } else res.destroy(); });
+        req.on('aborted', () => upstream.destroy());
+        res.on('close', () => upstream.destroy());
+        upstream.end();
+      });
+      this.remoteProxyServer.on('error', () => { this.remoteProxyServer = null; this.remoteProxyPort = null; });
+      await new Promise((resolve, reject) => {
+        this.remoteProxyServer.once('error', reject);
+        this.remoteProxyServer.listen(0, '127.0.0.1', () => {
+          this.remoteProxyServer.removeListener('error', reject);
+          this.remoteProxyPort = this.remoteProxyServer.address().port;
+          resolve();
+        });
+      });
+    }
+    return 'http://127.0.0.1:' + this.remoteProxyPort + '/' + this.remoteProxySecret + '/' + serverId + '/tracks/' + trackId + '/stream?quality=' + quality;
+  }
+
+  async stopRemoteProxy() {
+    if (!this.remoteProxyServer) return;
+    const server = this.remoteProxyServer;
+    this.remoteProxyServer = null;
+    this.remoteProxySecret = null;
+    this.remoteProxyPort = null;
+    await new Promise(resolve => server.close(() => resolve()));
   }
 
   async pairWithServer(payload = {}) {
