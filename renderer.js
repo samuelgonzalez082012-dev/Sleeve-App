@@ -6057,6 +6057,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
         .map(track => String(track.genre || '').trim())
         .filter(Boolean))).sort((a, b) => a.localeCompare(b));
       const profilePlays = profileTracks.reduce((total, track) => total + Math.max(0, Number(track.playCount) || 0), 0);
+      const profilePopularTracks = profileTracks
+        .filter(track => Math.max(0, Number(track.playCount) || 0) > 0)
+        .slice()
+        .sort((a, b) => (Number(b.playCount) || 0) - (Number(a.playCount) || 0)
+          || String(a.title || '').localeCompare(String(b.title || '')))
+        .slice(0, 5);
       const profileBackdrop = profileThumb && profileThumb.url
         ? `<img class="artist-profile-backdrop-image" src="${escapeHtml(profileThumb.url)}" alt="" loading="lazy" decoding="async">`
         : '';
@@ -6077,6 +6083,28 @@ async function deleteAllDetectedDuplicateCopies(button) {
             </div>
           </div>
         </header>
+        <section class="artist-popular" aria-label="Popular tracks">
+          <div class="artist-section-heading">
+            <div><span class="artist-profile-eyebrow">YOUR LISTENING HISTORY</span><h3>Popular tracks</h3></div>
+            <span class="artist-popular-caption">Most played in your library</span>
+          </div>
+          <div class="artist-popular-list">
+            ${profilePopularTracks.length ? profilePopularTracks.map((track, rank) => {
+              const artEntry = albumArtForTrack(track);
+              const artMarkup = track.thumbUrl
+                ? `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`
+                : (artEntry ? albumArtMarkup(artEntry, track.album || track.title) : '<span class="artist-popular-art-placeholder" aria-hidden="true">♪</span>');
+              return `<button class="artist-popular-row" type="button" data-track-id="${escapeHtml(String(track.id))}" aria-label="Play ${escapeHtml(track.title)}">
+                <span class="artist-popular-rank">${rank + 1}</span>
+                <span class="artist-popular-art">${artMarkup}</span>
+                <span class="artist-popular-track-meta"><strong>${escapeHtml(track.title || 'Untitled track')}</strong><span>${escapeHtml((track.album || '').trim() || 'Unknown Album')}</span></span>
+                <span class="artist-popular-plays">${Math.max(0, Number(track.playCount) || 0).toLocaleString()} <small>plays</small></span>
+                <span class="artist-popular-duration">${Number(track.duration) > 0 ? formatTime(Number(track.duration)) : '—'}</span>
+                <span class="artist-popular-play-icon" aria-hidden="true">▶</span>
+              </button>`;
+            }).join('') : '<p class="artist-popular-empty">Your most-played tracks will appear here as you listen to this artist.</p>'}
+          </div>
+        </section>
         <div class="artist-profile-stats" aria-label="Collection statistics">
           <div class="artist-profile-stat"><strong>${profileAlbumCount}</strong><span>Albums in library</span></div>
           <div class="artist-profile-stat"><strong>${profileTracks.length}</strong><span>Tracks</span></div>
@@ -6110,6 +6138,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
       profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
       const removePhotoButton = profile.querySelector('.artist-profile-remove-photo');
       if (removePhotoButton) removePhotoButton.addEventListener('click', () => clearArtistThumb(currentView.artist));
+      profile.querySelectorAll('.artist-popular-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const trackIndex = playlist.findIndex(track => String(track.id) === row.dataset.trackId);
+          if (trackIndex !== -1) playTrackAt(trackIndex, true, profileTracks.map(track => track.id));
+        });
+      });
       cardGrid.appendChild(profile);
 
       pagedItems.forEach(({ name, tracks }) => {
