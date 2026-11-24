@@ -79,30 +79,55 @@
       genres, artists
     };
   }
-  function buildTasteMixTracks(inputTracks, profile, limit) {
+  function buildTasteMixTracks(inputTracks, profile, limit, options) {
     const maxTracks = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(100, Math.floor(Number(limit)))) : 25;
     if (!profile || !Array.isArray(profile.genres) || !profile.genres.length) return [];
+    const opts = options || {};
+    const random = typeof opts.random === 'function' ? opts.random : Math.random;
+    const previousTrackIds = new Set(Array.isArray(opts.previousTrackIds) ? opts.previousTrackIds.map(String) : []);
     const sourceTracks = (Array.isArray(inputTracks) ? inputTracks : []).filter((track) => track && track.kind !== 'video' && track.id != null);
     const groups = profile.genres.slice(0, 5).map((genre) => {
       const name = cleanLabel(genre && genre.name, 'Unknown Genre');
       const key = name.toLocaleLowerCase();
       const tracks = sourceTracks.filter((track) => cleanLabel(track.genre, 'Unknown Genre').toLocaleLowerCase() === key);
-      tracks.sort((a, b) => toTimestamp(b.lastPlayedAt) - toTimestamp(a.lastPlayedAt) || toCount(b.playCount) - toCount(a.playCount) || toTimestamp(b.addedAt) - toTimestamp(a.addedAt) || String(a.title || '').localeCompare(String(b.title || '')));
-      return { name, weight: Math.max(1, toCount(genre && genre.sharePercent)), tracks, picked: 0 };
+      return { name, weight: Math.max(1, toCount(genre && genre.sharePercent)), tracks };
     }).filter((group) => group.tracks.length);
-    const result = [];
-    while (result.length < maxTracks) {
-      let best = null;
-      for (const group of groups) {
-        if (group.picked >= group.tracks.length) continue;
-        const score = group.weight / (group.picked + 1);
-        if (!best || score > best.score) best = { group, score };
+    const candidates = groups.flatMap((group) => group.tracks.map((track) => ({ track, genreWeight: group.weight })));
+    const selected = [];
+    const selectedIds = new Set();
+    const artistCounts = new Map();
+    while (selected.length < maxTracks && candidates.length) {
+      let totalWeight = 0;
+      const weighted = candidates.map((candidate) => {
+        const id = String(candidate.track.id);
+        const artist = cleanLabel(candidate.track.artist, 'Unknown Artist').toLocaleLowerCase();
+        const artistCount = artistCounts.get(artist) || 0;
+        const repeatPenalty = previousTrackIds.has(id) ? 0.12 : 1;
+        const artistPenalty = 1 / (1 + artistCount * 1.5);
+        // Randomness changes each generated mix, while genre weight keeps the
+        // result anchored to the listener's profile and recent-play analysis.
+        const weight = candidate.genreWeight * repeatPenalty * artistPenalty * (0.5 + Math.max(0, Math.min(0.999999, Number(random()) || 0)));
+        totalWeight += weight;
+        return { candidate, weight };
+      });
+      if (!(totalWeight > 0)) break;
+      let roll = Math.max(0, Math.min(0.999999, Number(random()) || 0)) * totalWeight;
+      let chosen = weighted[weighted.length - 1].candidate;
+      for (const item of weighted) {
+        roll -= item.weight;
+        if (roll <= 0) { chosen = item.candidate; break; }
       }
-      if (!best) break;
-      result.push(best.group.tracks[best.group.picked]);
-      best.group.picked += 1;
+      const id = String(chosen.track.id);
+      const artist = cleanLabel(chosen.track.artist, 'Unknown Artist').toLocaleLowerCase();
+      if (!selectedIds.has(id)) {
+        selected.push(chosen.track);
+        selectedIds.add(id);
+        artistCounts.set(artist, (artistCounts.get(artist) || 0) + 1);
+      }
+      const index = candidates.findIndex((candidate) => String(candidate.track.id) === id);
+      if (index >= 0) candidates.splice(index, 1);
     }
-    return result;
+    return selected;
   }
   return { analyze, buildTasteMixTracks };
 });
