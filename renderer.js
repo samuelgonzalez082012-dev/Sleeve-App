@@ -6504,6 +6504,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
                     <span>${escapeHtml([edition.date || details.firstReleaseDate, edition.country, edition.status].filter(Boolean).join(' · ') || 'Release information')}</span>
                   </div>
                   ${tracks.length ? `<ol class="artist-release-track-list">${tracks.map(track => `<li><span class="artist-release-track-number">${track.position || '–'}</span><span class="artist-release-track-title">${escapeHtml(track.title || 'Unknown track')}${track.artist ? `<small>${escapeHtml(track.artist)}</small>` : ''}</span><time>${formatReleaseTrackDuration(track.durationMs)}</time></li>`).join('')}</ol>` : '<p class="artist-release-details-empty">No track listing is available for this edition.</p>'}
+                  ${Array.isArray(details.editions) && details.editions.length > 1 ? `<div class="artist-release-editions"><strong>Available editions</strong>${details.editions.map(edition => `<button type="button" data-open-release-edition="${escapeHtml(edition.musicBrainzUrl || '')}">${escapeHtml([edition.date, edition.country, edition.status, edition.trackCount ? `${edition.trackCount} tracks` : ''].filter(Boolean).join(' · ') || edition.title || 'Edition')}</button>`).join('')}</div>` : ''}
                   <button class="artist-release-details-refresh" type="button" data-release-details-refresh="${escapeHtml(release.id)}">Refresh details</button>
                 </div>`;
               })() : releaseDetailsState.status === 'error' ? `<div class="artist-release-details artist-release-details-error"><p>${escapeHtml(releaseDetailsState.error)}</p><button type="button" data-release-details-refresh="${escapeHtml(release.id)}">Try again</button></div>` : ''}
@@ -6576,6 +6577,14 @@ async function deleteAllDetectedDuplicateCopies(button) {
       });
       catalogSection.querySelectorAll('[data-release-details-refresh]').forEach(button => {
         button.addEventListener('click', () => loadReleaseGroupDetails(button.dataset.releaseDetailsRefresh, true));
+      });
+      catalogSection.querySelectorAll('[data-open-release-edition]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const url = button.dataset.openReleaseEdition;
+          if (!url || !window.electronAPI || typeof window.electronAPI.findMusicOpenUrl !== 'function') return;
+          try { await window.electronAPI.findMusicOpenUrl(url); }
+          catch (error) { console.warn('Could not open MusicBrainz edition page:', error); }
+        });
       });
       catalogSection.querySelectorAll('[data-open-catalog-release]').forEach(button => {
         button.addEventListener('click', async () => {
