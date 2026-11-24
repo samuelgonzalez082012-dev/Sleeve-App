@@ -2889,6 +2889,33 @@ startAudioOutputMonitoring();
     probe.src = track.url;
   }
 
+  // Video duration is read lazily for artist-profile cards. This only
+  // loads metadata; it does not start playback or add videos to music counts.
+  function probeVideoDuration(track){
+    if (!track || track.kind !== 'video' || track.duration != null || durationProbeCache.has(track.id)) return;
+    durationProbeCache.add(track.id);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.muted = true;
+    const releaseProbe = () => {
+      probe.removeAttribute('src');
+      try{ probe.load(); }catch(err){}
+    };
+    probe.addEventListener('loadedmetadata', () => {
+      if (Number.isFinite(probe.duration) && probe.duration > 0){
+        track.duration = probe.duration;
+        dbPut(track);
+        if (currentView.type === 'artistAlbums'
+          && normalizeArtistCredit(currentView.artist) === normalizeArtistCredit(track.artist)){
+          scheduleRender(searchInput.value);
+        }
+      }
+      releaseProbe();
+    }, { once: true });
+    probe.addEventListener('error', releaseProbe, { once: true });
+    probe.src = track.url;
+  }
+
   // ---------- Song thumbnails ----------
   const thumbInput = document.getElementById('thumbInput');
   let thumbEditTrackId = null;
@@ -3145,6 +3172,39 @@ startAudioOutputMonitoring();
         if (b.name === 'Unknown Album') return -1;
         return a.name.localeCompare(b.name);
       });
+  }
+
+  // Match artist credits conservatively: normalize case/spacing, but do not
+  // use substring matching or split collaboration text into guessed identities.
+  function normalizeArtistCredit(value){
+    return String(value || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  function getArtistPlaylistAppearances(artistName){
+    const targetArtist = normalizeArtistCredit(artistName);
+    if (!targetArtist) return [];
+    const tracksById = new Map(playlist.map(track => [track.id, track]));
+    return playlists
+      .filter(pl => (pl.type || 'music') === 'music')
+      .map(pl => {
+        const tracks = (Array.isArray(pl.trackIds) ? pl.trackIds : [])
+          .map(id => tracksById.get(id))
+          .filter(track => track && track.kind !== 'video');
+        const matchedTracks = tracks.filter(track => normalizeArtistCredit(track.artist) === targetArtist);
+        return matchedTracks.length ? { playlist: pl, matchedTracks, totalTrackCount: tracks.length } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.playlist.name.localeCompare(b.playlist.name));
+  }
+
+  function getArtistMusicVideos(artistName){
+    const targetArtist = normalizeArtistCredit(artistName);
+    if (!targetArtist) return [];
+    return playlist
+      .filter(track => track && track.kind === 'video'
+        && normalizeArtistCredit(track.artist) === targetArtist)
+      .slice()
+      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
   }
 
   function getYears(){
@@ -6219,6 +6279,90 @@ async function deleteAllDetectedDuplicateCopies(button) {
         });
         cardGrid.appendChild(card);
       });
+
+      // Phase 6.1.4 — local playlist appearances and locally imported music videos.
+      // These sections use existing playlist IDs and media tracks as their source of truth.
+      const artistPlaylists = getArtistPlaylistAppearances(currentView.artist);
+      const artistVideos = getArtistMusicVideos(currentView.artist);
+      artistVideos.forEach(probeVideoDuration);
+      const visibleArtistVideos = currentView.artistVideosExpanded
+        ? artistVideos
+        : artistVideos.slice(0, 4);
+      const relatedSections = document.createElement('section');
+      relatedSections.className = 'artist-related-sections';
+      relatedSections.setAttribute('aria-label', 'Artist playlists and music videos');
+      relatedSections.innerHTML = `
+        <section class="artist-related-section" aria-label="Featuring this artist">
+          <div class="artist-related-heading">
+            <div><span class="artist-profile-eyebrow">IN YOUR PLAYLISTS</span><h3>Featuring this artist</h3></div>
+            <span class="artist-related-count">${artistPlaylists.length} playlist${artistPlaylists.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="artist-featured-playlists">
+            ${artistPlaylists.length ? artistPlaylists.map(({ playlist: pl, matchedTracks, totalTrackCount }) => {
+              const firstTrack = matchedTracks[0];
+              const artEntry = pl.thumb
+                ? { url: pl.thumb, kind: 'image' }
+                : (firstTrack.thumbUrl
+                  ? { url: firstTrack.thumbUrl, kind: firstTrack.thumbKind || 'image' }
+                  : albumArtForTrack(firstTrack));
+              const artMarkup = artEntry && artEntry.url
+                ? (artEntry.kind === 'video'
+                  ? `<video src="${escapeHtml(artEntry.url)}" muted playsinline preload="metadata" aria-hidden="true"></video>`
+                  : `<img src="${escapeHtml(artEntry.url)}" alt="" loading="lazy" decoding="async">`)
+                : '<span aria-hidden="true">♫</span>';
+              return `<button class="artist-featured-playlist" type="button" data-playlist-id="${escapeHtml(String(pl.id))}" aria-label="Open playlist ${escapeHtml(pl.name)}">
+                <span class="artist-featured-playlist-art">${artMarkup}</span>
+                <span class="artist-featured-playlist-meta"><strong>${escapeHtml(pl.name)}</strong><span>${matchedTracks.length} song${matchedTracks.length === 1 ? '' : 's'} by this artist · ${totalTrackCount} total</span></span>
+                <span class="artist-featured-playlist-open" aria-hidden="true">›</span>
+              </button>`;
+            }).join('') : '<p class="artist-related-empty">Music playlists containing this artist’s tracks will appear here.</p>'}
+          </div>
+        </section>
+        <section class="artist-related-section" aria-label="Music videos">
+          <div class="artist-related-heading">
+            <div><span class="artist-profile-eyebrow">YOUR LOCAL MEDIA</span><h3>Music Videos</h3></div>
+            <span class="artist-related-count">${artistVideos.length} video${artistVideos.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="artist-music-videos">
+            ${artistVideos.length ? visibleArtistVideos.map(track => {
+              const artMarkup = track.thumbUrl
+                ? `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`
+                : '<span class="artist-video-placeholder" aria-hidden="true">▣</span>';
+              return `<button class="artist-video-card" type="button" data-video-track-id="${escapeHtml(String(track.id))}" aria-label="Play video ${escapeHtml(track.title || 'Untitled video')}">
+                <span class="artist-video-art">${artMarkup}<span class="artist-video-play" aria-hidden="true">▶</span></span>
+                <span class="artist-video-meta"><strong>${escapeHtml(track.title || 'Untitled video')}</strong><span>${track.duration > 0 ? formatTime(track.duration) : 'Local video'}</span></span>
+              </button>`;
+            }).join('') : '<p class="artist-related-empty">No local videos are tagged with this artist yet. Add a video, then set its Artist in Edit metadata to show it here.</p>'}
+          </div>
+          ${artistVideos.length > 4 ? `<button class="artist-videos-toggle" type="button" data-artist-videos-toggle>${currentView.artistVideosExpanded ? 'Show fewer' : `Show all ${artistVideos.length} videos`}</button>` : ''}
+        </section>
+      `;
+      relatedSections.querySelectorAll('.artist-featured-playlist').forEach(button => {
+        button.addEventListener('click', () => {
+          const targetPlaylist = playlists.find(pl => String(pl.id) === button.dataset.playlistId);
+          if (!targetPlaylist) return;
+          currentView = { type: 'playlist', id: targetPlaylist.id };
+          queueIds = targetPlaylist.trackIds.slice();
+          activeQueueIds = queueIds.slice();
+          if (shuffleEnabled) queueIds = shuffleArray(queueIds);
+          scheduleRender(searchInput.value);
+        });
+      });
+      relatedSections.querySelectorAll('.artist-video-card').forEach(button => {
+        button.addEventListener('click', () => {
+          const trackId = Number(button.dataset.videoTrackId);
+          const trackIndex = playlist.findIndex(track => track.id === trackId && track.kind === 'video');
+          if (trackIndex === -1) return;
+          const artistVideoIds = artistVideos.map(track => track.id);
+          playTrackAt(trackIndex, true, artistVideoIds);
+        });
+      });
+      const videosToggle = relatedSections.querySelector('[data-artist-videos-toggle]');
+      if (videosToggle) videosToggle.addEventListener('click', () => {
+        currentView.artistVideosExpanded = !currentView.artistVideosExpanded;
+        scheduleRender(searchInput.value);
+      });
+      cardGrid.appendChild(relatedSections);
     } else if (isBrowse){
       cardGrid.classList.add('browse-grid');
       cardGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
