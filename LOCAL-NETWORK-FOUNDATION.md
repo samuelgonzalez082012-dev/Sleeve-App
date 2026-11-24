@@ -68,3 +68,17 @@ Quality choices:
 The server-side endpoints and library snapshot plumbing are implemented in this chunk. A dedicated remote-library browsing/player screen and a client-side player that attaches the bearer token to stream requests are still follow-up UI work; this is not yet a complete end-to-end playback experience.
 
 The LAN transport is still plain HTTP. Do not use this on an untrusted/public network. The TLS, certificate-pinning, and final security work remains required under Phase 8.8.
+
+
+### Desktop remote-library interface
+
+The Settings drawer now includes:
+- Start/stop local sharing, host address and port, rotating pairing code, and paired-device revocation.
+- LAN discovery and pairing-code entry for connecting to another Sleeve host.
+- A paired-library selector with Tracks, Albums, Artists, Genres, and Playlists browsing.
+- Search for shared tracks and one-click playback in the normal Sleeve player.
+- Original and Compact quality selection for remote playback.
+
+The remote client never receives the saved bearer token. Main-process IPC retrieves library metadata, and an ephemeral loopback-only HTTP proxy attaches the token when the media element requests a stream. The proxy forwards byte-range requests for Original quality so the native player can seek without moving the token into renderer code. Remote tracks are session-only and are not written into the host or client's local music library.
+
+Compact mode is transcoded to MP3 by the host. Its current streaming response does not advertise byte-range support, so seeking behavior is not equivalent to Original quality in this UI.
