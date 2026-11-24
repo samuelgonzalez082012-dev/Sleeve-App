@@ -3218,15 +3218,16 @@ startAudioOutputMonitoring();
       .replace(/\s+/g, ' ');
   }
 
-  function getDiscographyCategory(release){
+  function getDiscographyCategories(release){
     const secondary = (release.secondaryTypes || []).map(value => String(value).toLocaleLowerCase());
-    if (secondary.includes('compilation')) return 'compilations';
-    if (secondary.includes('live')) return 'live';
     const primary = String(release.primaryType || '').toLocaleLowerCase();
-    if (primary === 'album') return 'albums';
-    if (primary === 'single') return 'singles';
-    if (primary === 'ep') return 'eps';
-    return 'other';
+    const categories = [];
+    if (secondary.includes('compilation')) categories.push('compilations');
+    if (secondary.includes('live')) categories.push('live');
+    if (primary === 'album') categories.push('albums');
+    else if (primary === 'single') categories.push('singles');
+    else if (primary === 'ep') categories.push('eps');
+    return categories.length ? categories : ['other'];
   }
 
   function getLocalAlbumMatchForRelease(artistName, release, localAlbumIndex){
@@ -6404,11 +6405,10 @@ async function deleteAllDetectedDuplicateCopies(button) {
           ['all', 'All'], ['albums', 'Albums'], ['singles', 'Singles'], ['eps', 'EPs'],
           ['compilations', 'Compilations'], ['live', 'Live'], ['other', 'Other']
         ];
-        const filteredReleases = catalogReleases.filter(release => filter === 'all' || getDiscographyCategory(release) === filter);
-        const categoryCount = category => catalogReleases.filter(release => category === 'all' || getDiscographyCategory(release) === category).length;
+        const filteredReleases = catalogReleases.filter(release => filter === 'all' || getDiscographyCategories(release).includes(filter));
+        const categoryCount = category => catalogReleases.filter(release => category === 'all' || getDiscographyCategories(release).includes(category)).length;
         const releaseCards = filteredReleases.map(release => {
           const localMatch = getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex);
-          const category = getDiscographyCategory(release);
           const year = String(release.firstReleaseDate || '').slice(0, 4);
           const typeLabel = [release.primaryType, ...(release.secondaryTypes || [])].filter(Boolean).join(' · ') || 'Release';
           return `
