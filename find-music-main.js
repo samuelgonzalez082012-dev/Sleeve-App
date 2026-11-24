@@ -290,6 +290,7 @@ function mapReleaseTrack(track, mediumPosition) {
 }
 
 async function getReleaseGroupDetails(payload, options = {}) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid release detail request.');
   const releaseGroupId = String(payload && payload.releaseGroupId || '').trim().toLowerCase();
   if (!isMusicBrainzId(releaseGroupId)) throw new Error('Choose a valid release before loading its details.');
   const cached = payload.forceRefresh === true ? null : readTimedCache(releaseDetailsCache, releaseGroupId);
@@ -337,6 +338,7 @@ async function getReleaseGroupDetails(payload, options = {}) {
 }
 
 async function getArtistRelationships(payload, options = {}) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid artist relationship request.');
   const artistId = String(payload && payload.artistId || '').trim().toLowerCase();
   if (!isMusicBrainzId(artistId)) throw new Error('Choose a valid MusicBrainz artist before loading artist connections.');
   const cached = payload.forceRefresh === true ? null : readTimedCache(artistRelationshipsCache, artistId);
