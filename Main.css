@@ -2116,3 +2116,139 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
   .artist-featured-playlist,.artist-video-art>img,.artist-video-play{transition:none}
   .artist-featured-playlist:hover{transform:none}
 }
+
+
+/* Phase 6.2 — full discography and local collection matching */
+.artist-catalog-section{
+  grid-column:1 / -1;
+  min-width:0;
+  margin:0 0 20px;
+  padding:18px clamp(18px,3vw,30px);
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:var(--bg-card);
+}
+.artist-catalog-heading,.artist-catalog-summary,.artist-catalog-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.artist-catalog-heading{margin-bottom:13px}
+.artist-catalog-heading h3{margin:5px 0 0;font-size:20px;letter-spacing:-.025em}
+.artist-catalog-provider-name{color:var(--text-dim);font-size:11px}
+.artist-catalog-intro{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.artist-catalog-intro p,.artist-catalog-status,.artist-catalog-error{
+  margin:0;
+  color:var(--text-dim);
+  font-size:11px;
+  line-height:1.6;
+}
+.artist-catalog-intro p{max-width:650px}
+.artist-catalog-primary,.artist-catalog-refresh,.artist-catalog-open-local,.artist-catalog-open-external{
+  flex:0 0 auto;
+  padding:8px 13px;
+  border:1px solid var(--line-bright);
+  border-radius:999px;
+  background:var(--bg-elevated);
+  color:var(--text);
+  font:inherit;
+  font-size:10px;
+  font-weight:650;
+  cursor:pointer;
+  transition:border-color .16s ease,background .16s ease,color .16s ease;
+}
+.artist-catalog-primary:hover,.artist-catalog-refresh:hover,.artist-catalog-open-local:hover,.artist-catalog-open-external:hover{
+  border-color:var(--accent-ice);
+  background:var(--bg-card-hover);
+}
+.artist-catalog-status{padding:10px 0}
+.artist-catalog-error{padding:10px 0;color:var(--accent-red,#e18b8b)}
+.artist-catalog-candidates{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:9px;margin-top:12px}
+.artist-catalog-candidate{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  min-width:0;
+  padding:11px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--bg-elevated);
+  color:var(--text);
+  text-align:left;
+  font:inherit;
+  cursor:pointer;
+}
+.artist-catalog-candidate:hover,.artist-catalog-candidate:focus-visible{outline:none;border-color:var(--accent-ice);background:var(--bg-card-hover)}
+.artist-catalog-candidate strong{font-size:12px}
+.artist-catalog-candidate span,.artist-catalog-candidate small{overflow:hidden;color:var(--text-dim);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.artist-catalog-summary{justify-content:flex-start;flex-wrap:wrap;margin-bottom:13px;color:var(--text-dim);font-size:10px}
+.artist-catalog-summary>span{padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--bg-elevated)}
+.artist-catalog-owned-count{color:var(--accent-green,#87c9a1)!important}
+.artist-catalog-missing-count{color:var(--text-dim)}
+.artist-catalog-filters{display:flex;gap:6px;overflow-x:auto;padding:1px 0 10px;scrollbar-width:thin}
+.artist-catalog-filter{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+  padding:7px 10px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:transparent;
+  color:var(--text-dim);
+  font:inherit;
+  font-size:10px;
+  cursor:pointer;
+}
+.artist-catalog-filter span{opacity:.7;font-variant-numeric:tabular-nums}
+.artist-catalog-filter.active,.artist-catalog-filter:hover{border-color:var(--accent-ice);background:var(--bg-elevated);color:var(--text)}
+.artist-catalog-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,270px),1fr));gap:9px}
+.artist-catalog-release{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  padding:9px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:var(--bg-elevated);
+}
+.artist-catalog-release.is-owned{border-color:color-mix(in srgb,var(--accent-green,#87c9a1) 36%,var(--line))}
+.artist-catalog-art{
+  position:relative;
+  display:flex;
+  flex:0 0 58px;
+  align-items:center;
+  justify-content:center;
+  width:58px;
+  height:58px;
+  overflow:hidden;
+  border-radius:7px;
+  background:var(--bg-elevated-2);
+  color:var(--text-dim);
+  font-size:20px;
+}
+.artist-catalog-art img{display:block;width:100%;height:100%;object-fit:cover}
+.artist-catalog-art-fallback{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.artist-catalog-art-fallback[hidden]{display:none}
+.artist-catalog-release-meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.artist-catalog-release-meta strong{overflow:hidden;color:var(--text);font-size:11px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.artist-catalog-release-meta>span{overflow:hidden;color:var(--text-dim);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.artist-catalog-release-meta .artist-catalog-ownership{color:var(--text-dim)}
+.artist-catalog-release.is-owned .artist-catalog-ownership{color:var(--accent-green,#87c9a1)}
+.artist-catalog-open-local,.artist-catalog-open-external{padding:6px 9px;font-size:9px}
+.artist-catalog-footer{margin-top:13px;padding-top:10px;border-top:1px solid var(--line);color:var(--text-dimmer);font-size:9px}
+.artist-catalog-refresh{padding:5px 9px;background:transparent;color:var(--text-dim);font-size:9px}
+@media(max-width:650px){
+  .artist-catalog-section{padding:15px 16px}
+  .artist-catalog-intro{align-items:flex-start;flex-direction:column}
+  .artist-catalog-grid{grid-template-columns:1fr}
+  .artist-catalog-heading{align-items:flex-start}
+  .artist-catalog-provider-name{max-width:45%;text-align:right}
+  .artist-catalog-release{gap:8px}
+  .artist-catalog-open-local,.artist-catalog-open-external{padding:6px 7px}
+}
+@media(prefers-reduced-motion:reduce){
+  .artist-catalog-primary,.artist-catalog-refresh,.artist-catalog-open-local,.artist-catalog-open-external{transition:none}
+}
