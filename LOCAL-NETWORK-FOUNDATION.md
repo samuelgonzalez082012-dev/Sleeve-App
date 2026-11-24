@@ -43,3 +43,28 @@ node tests/test-local-network-service.js
 ```
 
 The full Electron app and real multi-device discovery still need to be tested on the target operating systems and networks.
+
+
+## Phase 8.4–8.6 — paired library browsing and audio delivery
+
+The host renderer sends a debounced metadata snapshot to the main process. The main process resolves each local source path, rejects missing files, symbolic links, video files, and unsupported extensions, then keeps an allowlisted index in memory. The network API never returns source paths or exposes a directory listing.
+
+Authenticated endpoints (all require the paired device's bearer token):
+
+- `GET /v1/library` — available sections and item counts.
+- `GET /v1/library/tracks?limit=100&offset=0&q=search` — paginated track metadata.
+- `GET /v1/library/albums` — albums grouped by artist and album title.
+- `GET /v1/library/artists` — artists and track/album counts.
+- `GET /v1/library/genres` — distinct genres.
+- `GET /v1/library/playlists` — music playlists.
+- `GET /v1/library/playlists/:id/tracks` — tracks in a music playlist.
+- `GET /v1/tracks/:id/stream` — original file bytes with HTTP byte-range support (206 responses), allowing clients to seek.
+- `GET /v1/tracks/:id/stream?quality=compact&start=SECONDS` — transcode to 96-kbps MP3 using FFmpeg. The `start` parameter provides time-based seeking for compact mode; compact mode does not support byte ranges.
+
+Quality choices:
+- **Original** preserves the stored file format and bitrate. Range requests are supported.
+- **Compact** transcodes on demand to 96-kbps MP3. FFmpeg must be available on the host; otherwise the endpoint returns HTTP 503.
+
+The server-side endpoints and library snapshot plumbing are implemented in this chunk. A dedicated remote-library browsing/player screen and a client-side player that attaches the bearer token to stream requests are still follow-up UI work; this is not yet a complete end-to-end playback experience.
+
+The LAN transport is still plain HTTP. Do not use this on an untrusted/public network. The TLS, certificate-pinning, and final security work remains required under Phase 8.8.
