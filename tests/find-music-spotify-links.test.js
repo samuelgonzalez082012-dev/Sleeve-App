@@ -36,3 +36,20 @@ test('builds a safe SpotDL launch context for a discovered artist', () => {
   assert.equal(links.buildSpotdlDiscoveryContext('   '), null);
   assert.equal(links.buildSpotdlDiscoveryContext('x'.repeat(250)).artistName.length, 200);
 });
+
+test('distinguishes canonical Spotify content URLs from search URLs', () => {
+  assert.equal(links.isSpotifyContentUrl('https://open.spotify.com/artist/abc123'), true);
+  assert.equal(links.isSpotifyContentUrl('https://open.spotify.com/intl-en/track/abc123?si=share'), true);
+  assert.equal(links.isSpotifyContentUrl('https://spotify.link/shortcode'), true);
+  assert.equal(links.isSpotifyContentUrl('https://open.spotify.com/search/Bj%C3%B6rk'), false);
+  assert.equal(links.isSpotifyContentUrl('http://open.spotify.com/track/abc123'), false);
+  assert.equal(links.isSpotifyContentUrl('https://example.com/track/abc123'), false);
+  assert.equal(links.isSpotifyContentUrl('https://open.spotify.com/artist/abc123/extra'), false);
+});
+
+test('recognizes only HTTPS Spotify artist-search URLs for the discovery shortcut', () => {
+  assert.equal(links.isSpotifySearchUrl('https://open.spotify.com/search/Bj%C3%B6rk'), true);
+  assert.equal(links.isSpotifySearchUrl('https://open.spotify.com/search/'), false);
+  assert.equal(links.isSpotifySearchUrl('http://open.spotify.com/search/Bjork'), false);
+  assert.equal(links.isSpotifySearchUrl('https://example.com/search/Bjork'), false);
+});
