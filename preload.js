@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localNetworkDiscover: (timeoutMs) => ipcRenderer.invoke('network:discover', timeoutMs),
   localNetworkPair: (payload) => ipcRenderer.invoke('network:pair', payload),
   localNetworkRevokeDevice: (deviceId) => ipcRenderer.invoke('network:device-revoke', deviceId),
+  localNetworkSyncLibrary: (snapshot) => ipcRenderer.invoke('network:library-sync', snapshot),
   getMediaFileUrl: (filePath) =>
   ipcRenderer.invoke('media:file-url', filePath),
   splitStems: (filePath) => ipcRenderer.invoke('stems:split', filePath),
