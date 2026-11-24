@@ -655,6 +655,15 @@ function getStemPresetById(id) {
     || null;
 }
 
+function findStemPresetIdForVolumes(volumes) {
+  const normalized = stemPresetCore.normalizeVolumes(volumes);
+  const presets = stemPresetCore.BUILT_IN_PRESETS.concat(stemCustomPresets);
+  const match = presets.find((preset) => stemPresetCore.STEM_NAMES.every((name) =>
+    Math.abs(preset.volumes[name] - normalized[name]) < 0.005
+  ));
+  return match ? match.id : 'custom';
+}
+
 function renderStemPresetOptions() {
   const select = document.getElementById('stemPresetSelect');
   if (!select) return;
@@ -859,7 +868,7 @@ async function loadStemTrack(track) {
   stemPresetCore.STEM_NAMES.forEach((name) => { stemMuted[name] = false; });
   soloStemName = null;
   await loadStemPresetLibrary();
-  selectedStemPresetId = track.stemMix ? 'custom' : 'original';
+  selectedStemPresetId = track.stemMix ? findStemPresetIdForVolumes(track.stemMix) : 'original';
   applyStemMix(track.stemMix || stemPresetCore.ORIGINAL, { presetId: selectedStemPresetId, persist: false });
   createStemMixerUI();
   stemPresetCore.STEM_NAMES.forEach((name) => {
