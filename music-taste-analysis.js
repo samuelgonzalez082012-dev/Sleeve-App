@@ -23,21 +23,35 @@
     const parsed = Date.parse(value);
     return Number.isFinite(parsed) ? parsed : 0;
   }
-  function buildBreakdown(tracks, field, fallback, usePlays, limit) {
+  function buildBreakdown(tracks, field, fallback, usePlays, limit, now, recentWindowMs) {
     const buckets = new Map();
     for (const track of tracks) {
       const label = cleanLabel(track[field], fallback);
       if (label === fallback) continue;
       const key = label.toLocaleLowerCase();
       let bucket = buckets.get(key);
-      if (!bucket) { bucket = { name: label, trackCount: 0, plays: 0 }; buckets.set(key, bucket); }
+      if (!bucket) { bucket = { name: label, trackCount: 0, plays: 0, tasteWeight: 0, recentTrackCount: 0, latestPlayedAt: 0 }; buckets.set(key, bucket); }
       bucket.trackCount += 1;
-      bucket.plays += toCount(track.playCount);
+      const plays = toCount(track.playCount);
+      const lastPlayedAt = toTimestamp(track.lastPlayedAt);
+      const age = now - lastPlayedAt;
+      const freshness = lastPlayedAt > 0 && age >= 0 && age <= recentWindowMs && recentWindowMs > 0
+        ? 1 - (age / recentWindowMs)
+        : 0;
+      bucket.plays += plays;
+      bucket.tasteWeight += usePlays ? Math.sqrt(plays) : 1;
+      if (freshness > 0) {
+        bucket.recentTrackCount += 1;
+        bucket.latestPlayedAt = Math.max(bucket.latestPlayedAt, lastPlayedAt);
+        // A recent listen gives a genre a meaningful chance to enter the mix,
+        // without allowing one old high-play-count track to dominate forever.
+        bucket.tasteWeight += 5 * freshness;
+      }
     }
     const rows = Array.from(buckets.values());
-    const totalWeight = rows.reduce((sum, row) => sum + (usePlays ? row.plays : row.trackCount), 0);
-    rows.forEach((row) => { row.sharePercent = totalWeight ? Math.round(((usePlays ? row.plays : row.trackCount) / totalWeight) * 100) : 0; });
-    rows.sort((a, b) => (usePlays ? b.plays - a.plays : b.trackCount - a.trackCount) || a.name.localeCompare(b.name));
+    const totalWeight = rows.reduce((sum, row) => sum + row.tasteWeight, 0);
+    rows.forEach((row) => { row.sharePercent = totalWeight ? Math.round((row.tasteWeight / totalWeight) * 100) : 0; });
+    rows.sort((a, b) => b.tasteWeight - a.tasteWeight || b.latestPlayedAt - a.latestPlayedAt || a.name.localeCompare(b.name));
     return { items: rows.slice(0, limit) };
   }
   function analyze(inputTracks, options) {
@@ -48,8 +62,8 @@
     const tracks = (Array.isArray(inputTracks) ? inputTracks : []).filter((track) => track && track.kind !== 'video');
     const totalPlays = tracks.reduce((sum, track) => sum + toCount(track.playCount), 0);
     const usePlays = totalPlays > 0;
-    const genres = buildBreakdown(tracks, 'genre', 'Unknown Genre', usePlays, limit).items;
-    const artists = buildBreakdown(tracks, 'artist', 'Unknown Artist', usePlays, limit).items;
+    const genres = buildBreakdown(tracks, 'genre', 'Unknown Genre', usePlays, limit, now, recentWindowMs).items;
+    const artists = buildBreakdown(tracks, 'artist', 'Unknown Artist', usePlays, limit, now, recentWindowMs).items;
     const genreTaggedTrackCount = tracks.filter((track) => cleanLabel(track.genre, 'Unknown Genre') !== 'Unknown Genre').length;
     const artistTaggedTrackCount = tracks.filter((track) => cleanLabel(track.artist, 'Unknown Artist') !== 'Unknown Artist').length;
     const recentlyPlayedTrackCount = tracks.filter((track) => {
@@ -69,11 +83,11 @@
     const maxTracks = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(100, Math.floor(Number(limit)))) : 25;
     if (!profile || !Array.isArray(profile.genres) || !profile.genres.length) return [];
     const sourceTracks = (Array.isArray(inputTracks) ? inputTracks : []).filter((track) => track && track.kind !== 'video' && track.id != null);
-    const groups = profile.genres.slice(0, 3).map((genre) => {
+    const groups = profile.genres.slice(0, 5).map((genre) => {
       const name = cleanLabel(genre && genre.name, 'Unknown Genre');
       const key = name.toLocaleLowerCase();
       const tracks = sourceTracks.filter((track) => cleanLabel(track.genre, 'Unknown Genre').toLocaleLowerCase() === key);
-      tracks.sort((a, b) => toCount(b.playCount) - toCount(a.playCount) || toTimestamp(b.addedAt) - toTimestamp(a.addedAt) || String(a.title || '').localeCompare(String(b.title || '')));
+      tracks.sort((a, b) => toTimestamp(b.lastPlayedAt) - toTimestamp(a.lastPlayedAt) || toCount(b.playCount) - toCount(a.playCount) || toTimestamp(b.addedAt) - toTimestamp(a.addedAt) || String(a.title || '').localeCompare(String(b.title || '')));
       return { name, weight: Math.max(1, toCount(genre && genre.sharePercent)), tracks, picked: 0 };
     }).filter((group) => group.tracks.length);
     const result = [];
