@@ -3229,9 +3229,10 @@ startAudioOutputMonitoring();
     return 'other';
   }
 
-  function getLocalAlbumMatchForRelease(artistName, release){
+  function getLocalAlbumMatchForRelease(artistName, release, localAlbumIndex){
     const target = normalizeDiscographyTitle(release && release.title);
     if (!target) return null;
+    if (localAlbumIndex) return localAlbumIndex.get(target) || null;
     const matches = getAlbumsForArtist(artistName)
       .filter(album => normalizeDiscographyTitle(album.name) === target);
     if (!matches.length) return null;
@@ -5919,7 +5920,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
     }
 
     const hasAnyInView = isArtists ? artistsData.length > 0
-      : isArtistAlbums ? albumsData.length > 0
+      : isArtistAlbums ? getArtists().some(artist => artist.name === currentView.artist)
       : isBrowse ? browseData.length > 0
       : baseIndices.length > 0;
 
@@ -6355,8 +6356,15 @@ async function deleteAllDetectedDuplicateCopies(button) {
       catalogSection.className = 'artist-catalog-section';
       catalogSection.setAttribute('aria-label', 'Full artist discography');
       const catalogReleases = Array.isArray(catalogState.releaseGroups) ? catalogState.releaseGroups : [];
+      const localAlbumIndex = new Map();
+      getAlbumsForArtist(currentView.artist).forEach(album => {
+        const titleKey = normalizeDiscographyTitle(album.name);
+        if (!titleKey) return;
+        const existing = localAlbumIndex.get(titleKey);
+        if (!existing || album.tracks.length > existing.tracks.length) localAlbumIndex.set(titleKey, album);
+      });
       const ownedCatalogCount = catalogState.status === 'loaded'
-        ? catalogReleases.filter(release => getLocalAlbumMatchForRelease(currentView.artist, release)).length
+        ? catalogReleases.filter(release => getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex)).length
         : 0;
       const missingCatalogCount = catalogState.status === 'loaded' ? catalogReleases.length - ownedCatalogCount : 0;
       let catalogContent = '';
@@ -6399,7 +6407,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
         const filteredReleases = catalogReleases.filter(release => filter === 'all' || getDiscographyCategory(release) === filter);
         const categoryCount = category => catalogReleases.filter(release => category === 'all' || getDiscographyCategory(release) === category).length;
         const releaseCards = filteredReleases.map(release => {
-          const localMatch = getLocalAlbumMatchForRelease(currentView.artist, release);
+          const localMatch = getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex);
           const category = getDiscographyCategory(release);
           const year = String(release.firstReleaseDate || '').slice(0, 4);
           const typeLabel = [release.primaryType, ...(release.secondaryTypes || [])].filter(Boolean).join(' · ') || 'Release';
