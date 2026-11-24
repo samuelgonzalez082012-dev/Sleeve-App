@@ -3207,6 +3207,114 @@ startAudioOutputMonitoring();
       .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
   }
 
+  const artistDiscographyCache = new Map();
+
+  function normalizeDiscographyTitle(value){
+    return String(value || '').normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  function getDiscographyCategory(release){
+    const secondary = (release.secondaryTypes || []).map(value => String(value).toLocaleLowerCase());
+    if (secondary.includes('compilation')) return 'compilations';
+    if (secondary.includes('live')) return 'live';
+    const primary = String(release.primaryType || '').toLocaleLowerCase();
+    if (primary === 'album') return 'albums';
+    if (primary === 'single') return 'singles';
+    if (primary === 'ep') return 'eps';
+    return 'other';
+  }
+
+  function getLocalAlbumMatchForRelease(artistName, release){
+    const target = normalizeDiscographyTitle(release && release.title);
+    if (!target) return null;
+    const matches = getAlbumsForArtist(artistName)
+      .filter(album => normalizeDiscographyTitle(album.name) === target);
+    if (!matches.length) return null;
+    return matches.slice().sort((a, b) => b.tracks.length - a.tracks.length)[0];
+  }
+
+  function getArtistDiscographyState(artistName){
+    return artistDiscographyCache.get(normalizeArtistCredit(artistName)) || { status: 'idle' };
+  }
+
+  function refreshArtistDiscographyIfVisible(artistName){
+    if (currentView.type === 'artistAlbums'
+      && normalizeArtistCredit(currentView.artist) === normalizeArtistCredit(artistName)){
+      scheduleRender(searchInput.value);
+    }
+  }
+
+  async function loadArtistDiscography(artistName){
+    const key = normalizeArtistCredit(artistName);
+    if (!key) return;
+    const previous = artistDiscographyCache.get(key);
+    if (previous && ['searching', 'loading'].includes(previous.status)) return;
+    artistDiscographyCache.set(key, { status: 'searching', candidates: [], selectedArtist: null });
+    refreshArtistDiscographyIfVisible(artistName);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicSearchArtistCatalog !== 'function'){
+        throw new Error('Artist catalog lookup is unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicSearchArtistCatalog({ artistName });
+      const candidates = Array.isArray(result && result.artists) ? result.artists : [];
+      if (!candidates.length){
+        artistDiscographyCache.set(key, { status: 'empty', candidates: [] });
+        refreshArtistDiscographyIfVisible(artistName);
+        return;
+      }
+      const exactCandidates = candidates.filter(candidate => candidate.exactName);
+      if (exactCandidates.length === 1){
+        await fetchArtistDiscography(artistName, exactCandidates[0]);
+        return;
+      }
+      artistDiscographyCache.set(key, { status: 'chooseArtist', candidates });
+      refreshArtistDiscographyIfVisible(artistName);
+    }catch(error){
+      artistDiscographyCache.set(key, {
+        status: 'error',
+        error: String(error && error.message || 'Could not load artist catalog.'),
+        candidates: []
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }
+  }
+
+  async function fetchArtistDiscography(artistName, candidate){
+    const key = normalizeArtistCredit(artistName);
+    if (!candidate || !candidate.id) return;
+    artistDiscographyCache.set(key, { status: 'loading', candidates: [], selectedArtist: candidate });
+    refreshArtistDiscographyIfVisible(artistName);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicGetArtistDiscography !== 'function'){
+        throw new Error('Full discography lookup is unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicGetArtistDiscography({ artistId: candidate.id });
+      artistDiscographyCache.set(key, {
+        status: 'loaded',
+        selectedArtist: candidate,
+        releaseGroups: Array.isArray(result && result.releaseGroups) ? result.releaseGroups : [],
+        totalCount: Number(result && result.totalCount) || 0,
+        fetchedCount: Number(result && result.fetchedCount) || 0,
+        truncated: !!(result && result.truncated),
+        generatedAt: Number(result && result.generatedAt) || Date.now()
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }catch(error){
+      artistDiscographyCache.set(key, {
+        status: 'error',
+        error: String(error && error.message || 'Could not load this artist’s discography.'),
+        selectedArtist: candidate,
+        candidates: []
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }
+  }
+
   function getYears(){
     const map = new Map();
     playlist.forEach(t => {
