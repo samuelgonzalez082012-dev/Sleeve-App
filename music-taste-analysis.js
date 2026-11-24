@@ -65,5 +65,30 @@
       genres, artists
     };
   }
-  return { analyze };
+  function buildTasteMixTracks(inputTracks, profile, limit) {
+    const maxTracks = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(100, Math.floor(Number(limit)))) : 25;
+    if (!profile || !Array.isArray(profile.genres) || !profile.genres.length) return [];
+    const sourceTracks = (Array.isArray(inputTracks) ? inputTracks : []).filter((track) => track && track.kind !== 'video' && track.id != null);
+    const groups = profile.genres.slice(0, 3).map((genre) => {
+      const name = cleanLabel(genre && genre.name, 'Unknown Genre');
+      const key = name.toLocaleLowerCase();
+      const tracks = sourceTracks.filter((track) => cleanLabel(track.genre, 'Unknown Genre').toLocaleLowerCase() === key);
+      tracks.sort((a, b) => toCount(b.playCount) - toCount(a.playCount) || toTimestamp(b.addedAt) - toTimestamp(a.addedAt) || String(a.title || '').localeCompare(String(b.title || '')));
+      return { name, weight: Math.max(1, toCount(genre && genre.sharePercent)), tracks, picked: 0 };
+    }).filter((group) => group.tracks.length);
+    const result = [];
+    while (result.length < maxTracks) {
+      let best = null;
+      for (const group of groups) {
+        if (group.picked >= group.tracks.length) continue;
+        const score = group.weight / (group.picked + 1);
+        if (!best || score > best.score) best = { group, score };
+      }
+      if (!best) break;
+      result.push(best.group.tracks[best.group.picked]);
+      best.group.picked += 1;
+    }
+    return result;
+  }
+  return { analyze, buildTasteMixTracks };
 });
