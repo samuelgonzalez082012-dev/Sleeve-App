@@ -6057,25 +6057,26 @@ async function deleteAllDetectedDuplicateCopies(button) {
         .map(track => String(track.genre || '').trim())
         .filter(Boolean))).sort((a, b) => a.localeCompare(b));
       const profilePlays = profileTracks.reduce((total, track) => total + Math.max(0, Number(track.playCount) || 0), 0);
-      const profileArt = profileThumb && profileThumb.url
-        ? `<img class="artist-profile-image" src="${escapeHtml(profileThumb.url)}" alt="${escapeHtml(currentView.artist)}" loading="lazy" decoding="async">`
-        : `<div class="artist-profile-image artist-profile-image-placeholder" aria-hidden="true">${PERSON_ICON}</div>`;
+      const profileBackdrop = profileThumb && profileThumb.url
+        ? `<img class="artist-profile-backdrop-image" src="${escapeHtml(profileThumb.url)}" alt="" loading="lazy" decoding="async">`
+        : '';
       const profile = document.createElement('section');
       profile.className = 'artist-profile';
       profile.setAttribute('aria-label', `${currentView.artist} artist profile`);
       profile.innerHTML = `
-        <div class="artist-profile-hero">
-          <div class="artist-profile-art-wrap">${profileArt}</div>
+        <header class="artist-profile-hero${profileBackdrop ? ' has-artist-image' : ''}">
+          ${profileBackdrop}
+          <div class="artist-profile-hero-shade" aria-hidden="true"></div>
           <div class="artist-profile-heading">
-            <div class="artist-profile-eyebrow">ARTIST PROFILE</div>
+            <div class="artist-profile-eyebrow"><span class="artist-profile-eyebrow-mark" aria-hidden="true">♪</span> ARTIST</div>
             <h2>${escapeHtml(currentView.artist)}</h2>
-            <p>Your artist hub, built from the music in your library.</p>
+            <p>${profileTracks.length.toLocaleString()} tracks <span aria-hidden="true">·</span> ${profileAlbumCount.toLocaleString()} albums in your library</p>
             <div class="artist-profile-actions">
-              <button class="artist-profile-action artist-profile-photo-btn" type="button">${profileThumb ? 'Change photo' : 'Add artist photo'}</button>
-              ${profileThumb ? '<button class="artist-profile-action artist-profile-remove-photo" type="button">Remove photo</button>' : ''}
+              <button class="artist-profile-action artist-profile-photo-btn" type="button">${profileThumb ? 'Change artist image' : 'Add artist image'}</button>
+              ${profileThumb ? '<button class="artist-profile-action artist-profile-remove-photo" type="button">Remove image</button>' : ''}
             </div>
           </div>
-        </div>
+        </header>
         <div class="artist-profile-stats" aria-label="Collection statistics">
           <div class="artist-profile-stat"><strong>${profileAlbumCount}</strong><span>Albums in library</span></div>
           <div class="artist-profile-stat"><strong>${profileTracks.length}</strong><span>Tracks</span></div>
