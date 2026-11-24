@@ -7,6 +7,8 @@ const {
   requestMusicBrainzJson,
   searchArtistCatalog,
   getArtistDiscography,
+  getReleaseGroupDetails,
+  getArtistRelationships,
   mapReleaseGroup
 } = require('./find-music-main');
 
@@ -120,7 +122,82 @@ const {
     getArtistDiscography({ artistId: 'not-a-valid-mbid' }),
     /valid MusicBrainz artist/
   );
-  console.log('Find Music MusicBrainz retry and artist discography tests passed.');
+
+  const releaseGroupId = '55555555-5555-4555-8555-555555555555';
+  const releaseId = '66666666-6666-4666-8666-666666666666';
+  const relationshipArtistId = '77777777-7777-4777-8777-777777777777';
+  const detailCalls = [];
+  const detailFetch = async url => {
+    const parsed = new URL(url);
+    detailCalls.push(parsed.pathname);
+    if (parsed.pathname === `/ws/2/release-group/${releaseGroupId}`) {
+      assert.equal(parsed.searchParams.get('inc'), 'releases+artist-credits');
+      return {
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({
+          title: 'Detail Test Album',
+          'first-release-date': '2021-03-04',
+          releases: [{ id: releaseId, title: 'Detail Test Album', date: '2021-03-04', country: 'US', status: 'Official', 'track-count': 2 }]
+        })
+      };
+    }
+    if (parsed.pathname === `/ws/2/release/${releaseId}`) {
+      assert.equal(parsed.searchParams.get('inc'), 'recordings+artist-credits');
+      return {
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({
+          date: '2021-03-04', country: 'US', status: 'Official',
+          media: [{ position: 1, tracks: [
+            { position: 1, title: 'Opening Track', length: 185000, recording: { id: 'recording-one', title: 'Opening Track' } },
+            { position: 2, title: 'Closing Track', length: 210000, recording: { id: 'recording-two', title: 'Closing Track' } }
+          ] }]
+        })
+      };
+    }
+    if (parsed.pathname === `/ws/2/artist/${artistId}`) {
+      assert.equal(parsed.searchParams.get('inc'), 'artist-rels');
+      return {
+        ok: true, status: 200, headers: { get: () => null },
+        json: async () => ({
+          id: artistId, name: artistName,
+          relations: [
+            { type: 'collaboration', direction: 'forward', artist: { id: relationshipArtistId, name: 'Connected Artist', disambiguation: 'Musician' } },
+            { type: 'collaboration', direction: 'forward', artist: { id: relationshipArtistId, name: 'Connected Artist', disambiguation: 'Musician' } }
+          ]
+        })
+      };
+    }
+    throw new Error(`Unexpected MusicBrainz test URL: ${url}`);
+  };
+  const releaseDetails = await getReleaseGroupDetails({ releaseGroupId }, {
+    fetchImpl: detailFetch, minIntervalMs: 0, timeoutMs: 1000
+  });
+  assert.equal(releaseDetails.title, 'Detail Test Album');
+  assert.equal(releaseDetails.selectedEdition.id, releaseId);
+  assert.equal(releaseDetails.trackCount, 2);
+  assert.equal(releaseDetails.tracks[0].title, 'Opening Track');
+  assert.equal(releaseDetails.tracks[0].durationMs, 185000);
+  assert.deepEqual(detailCalls.slice(0, 2), [
+    `/ws/2/release-group/${releaseGroupId}`,
+    `/ws/2/release/${releaseId}`
+  ]);
+
+  const relationships = await getArtistRelationships({ artistId }, {
+    fetchImpl: detailFetch, minIntervalMs: 0, timeoutMs: 1000
+  });
+  assert.equal(relationships.relationships.length, 1, 'duplicate artist relationships should be deduplicated');
+  assert.equal(relationships.relationships[0].name, 'Connected Artist');
+  assert.equal(relationships.relationships[0].type, 'collaboration');
+  await assert.rejects(
+    getReleaseGroupDetails({ releaseGroupId: 'not-valid' }),
+    /valid release/
+  );
+  await assert.rejects(
+    getArtistRelationships({ artistId: 'not-valid' }),
+    /valid MusicBrainz artist/
+  );
+
+  console.log('Find Music MusicBrainz retry, discography, release detail, and artist relationship tests passed.');
 })().catch((error) => {
   console.error(error);
   process.exitCode = 1;
