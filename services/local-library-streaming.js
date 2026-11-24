@@ -217,7 +217,7 @@ class LocalLibraryStreaming {
     });
     const stream = fs.createReadStream(track.path, { start, end });
     stream.on('error', () => { if (!res.headersSent) this.sendJson(res, 500, { error: 'Could not read the source file.' }); else res.destroy(); });
-    req.on('close', () => stream.destroy());
+    res.on('close', () => stream.destroy());
     stream.pipe(res);
   }
 
@@ -251,7 +251,7 @@ class LocalLibraryStreaming {
     child.once('error', () => res.destroy());
     child.once('close', code => { if (code !== 0 && !res.writableEnded) res.destroy(); });
     const stop = () => { try { child.kill(); } catch (_) {} };
-    req.once('close', stop);
+    res.once('close', stop);
     res.once('close', stop);
   }
 
