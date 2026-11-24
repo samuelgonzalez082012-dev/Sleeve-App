@@ -12,6 +12,7 @@ const rendererFiles = [
   'music-taste-analysis.js',
   'playlist-import.js',
   'find-music.js',
+  'find-music-discovery-ui.js',
   'find-music-watch-ui.js',
   'find-music-download-ui.js',
   'find-music-import-core.js',
