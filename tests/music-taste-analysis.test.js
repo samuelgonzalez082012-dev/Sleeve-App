@@ -95,3 +95,46 @@ test('Taste Mix uses fresh weighted picks and reduces repeats from earlier mixes
   assert.equal(new Set(refreshed.map((track) => track.id)).size, 4);
   assert.ok(refreshed.some((track) => !first.some((oldTrack) => oldTrack.id === track.id)));
 });
+
+test('falls back to top taste-profile artists when genre tags are missing', () => {
+  const api = require('../music-taste-analysis');
+  const tracks = [
+    { id: 11, title: 'Artist A song 1', artist: 'Artist A', genre: '' },
+    { id: 12, title: 'Artist A song 2', artist: ' artist a ', genre: null },
+    { id: 13, title: 'Artist B song', artist: 'Artist B', genre: 'Unknown Genre' },
+    { id: 14, title: 'Unrelated song', artist: 'Artist C', genre: '' },
+    { id: 15, title: 'Video', artist: 'Artist A', genre: '', kind: 'video' }
+  ];
+  const profile = api.analyze(tracks, { now: 1000 });
+  const mix = api.buildTasteMixTracks(tracks, profile, 10, { random: () => 0.5 });
+  assert.equal(mix.length, 4);
+  assert.ok(mix.some(track => track.artist.trim().toLocaleLowerCase() === 'artist a'));
+  assert.ok(mix.every(track => track.kind !== 'video'));
+});
+
+test('falls back to listening history when both genre and artist tags are unavailable', () => {
+  const api = require('../music-taste-analysis');
+  const now = 1000000000;
+  const tracks = [
+    { id: 21, title: 'Played a lot', playCount: 20 },
+    { id: 22, title: 'Played recently', playCount: 1, lastPlayedAt: now - 3600000 },
+    { id: 23, title: 'Never played', playCount: 0 },
+    { id: 24, title: 'Video history', kind: 'video', playCount: 100 }
+  ];
+  const profile = api.analyze(tracks, { now });
+  const mix = api.buildTasteMixTracks(tracks, profile, 10, { random: () => 0.5 });
+  assert.equal(mix.length, 2);
+  assert.ok(mix.every(track => track.playCount > 0 || track.lastPlayedAt));
+  assert.ok(mix.every(track => track.kind !== 'video'));
+});
+
+test('normalizes case and repeated whitespace when matching genre labels', () => {
+  const api = require('../music-taste-analysis');
+  const tracks = [
+    { id: 31, title: 'Rock', artist: 'A', genre: '  HARD   ROCK ' },
+    { id: 32, title: 'Metal', artist: 'B', genre: 'metal' }
+  ];
+  const profile = { genres: [{ name: 'hard rock', sharePercent: 70 }] };
+  const mix = api.buildTasteMixTracks(tracks, profile, 5, { random: () => 0.5 });
+  assert.deepEqual(mix.map(track => track.id), [31]);
+});
