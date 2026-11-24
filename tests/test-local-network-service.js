@@ -28,7 +28,7 @@ test('local network host exposes info and pairs an authorized device', async () 
     const rejected = await fetch(baseUrl + '/v1/pair', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ code: '000000', deviceName: 'Unauthorized' })
+      body: JSON.stringify({ code: status.pairingCode === '000000' ? '000001' : '000000', deviceName: 'Unauthorized' })
     });
     assert.equal(rejected.status, 401);
 
