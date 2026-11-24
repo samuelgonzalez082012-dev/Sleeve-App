@@ -383,3 +383,23 @@ body.find-music-open { overflow: hidden; }
   .fm-convert-actions .fm-import-download-button { width: 100%; }
   .fm-convert-source-row > button { width: 100%; }
 }
+
+
+/* Phase 4.3 — local-taste artist discovery. */
+.fm-taste-discovery{border-color:rgba(120,164,139,.28);background:linear-gradient(145deg,rgba(50,92,68,.10),rgba(255,255,255,.018) 52%)}
+.fm-taste-discovery-actions{display:flex;align-items:center;gap:13px;flex-wrap:wrap}
+.fm-taste-privacy-note,.fm-taste-disclaimer{color:#8793a7;font-size:10px;line-height:1.5}
+.fm-taste-disclaimer{margin:12px 2px 0!important}
+.fm-taste-discovery-results{display:grid;gap:15px;margin-top:15px}
+.fm-taste-genre-group{display:grid;gap:8px}
+.fm-taste-genre-title{margin:0;color:#a9cdb4;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.fm-taste-artist-list{display:grid;gap:7px}
+.fm-taste-artist-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(0,0,0,.15)}
+.fm-taste-artist-details{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fm-taste-artist-details strong{color:#eef2fa;font-size:12px;overflow-wrap:anywhere}
+.fm-taste-artist-details small{color:#8793a7;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
+.fm-taste-artist-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex:0 0 auto;flex-wrap:wrap}
+.fm-taste-artist-open{flex:0 0 auto;min-height:34px}
+.fm-taste-spotify-link{border-color:rgba(30,215,96,.24)}
+.fm-taste-discovery-results[hidden]{display:none!important}
+@media(max-width:620px){.fm-taste-discovery-actions{align-items:stretch;flex-direction:column}.fm-taste-discovery-actions button{width:100%}.fm-taste-artist-card{align-items:flex-start;flex-direction:column}.fm-taste-artist-actions{justify-content:flex-start;width:100%}.fm-taste-artist-open{white-space:normal}}

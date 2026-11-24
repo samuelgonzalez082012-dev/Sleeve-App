@@ -14,6 +14,8 @@
   let running = false;
   let enhancing = false;
   let lastDownloadDir = '';
+  let spotdlAvailable = false;
+  let rightsConfirmed = false;
 
   const FORMAT_LABELS = {
     m4a: 'M4A — best available, avoid extra bitrate conversion',
@@ -40,6 +42,11 @@
       .sdl-url-input:focus,.sdl-format-select:focus{border-color:var(--accent,#8ba8ff);box-shadow:0 0 0 3px rgba(139,168,255,.14)}
       .sdl-helper{margin-top:8px;color:var(--text-secondary,#aab2c1);font-size:11px;line-height:1.5}
       .sdl-quality-note{margin-top:12px;padding:11px 12px;border:1px solid rgba(150,165,190,.18);border-radius:10px;background:rgba(150,165,190,.055);font-size:11px;line-height:1.55;color:var(--text-secondary,#b2bac9)}
+      .sdl-artist-context{margin:12px 0;padding:12px;border:1px solid rgba(30,215,96,.25);border-radius:10px;background:rgba(30,215,96,.055);font-size:12px;line-height:1.5}
+      .sdl-artist-context p{margin:6px 0 10px;color:var(--text-secondary,#b2bac9)}
+      .sdl-artist-context[hidden]{display:none!important}
+      .sdl-rights-confirm{display:flex;align-items:flex-start;gap:9px;margin-top:14px;padding:12px;border:1px solid rgba(232,177,67,.28);border-radius:10px;background:rgba(232,177,67,.055);font-size:11px;line-height:1.5}
+      .sdl-rights-confirm input{flex:0 0 auto;margin:2px 0 0;accent-color:var(--accent,#8ba8ff)}
       .sdl-find-music-card{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
       .sdl-find-music-card h3{margin:0 0 5px}
       .sdl-find-music-card p{margin:0;color:var(--text-secondary,#aab2c1);font-size:12px;line-height:1.5}
@@ -104,10 +111,12 @@
     const cancel = overlay.querySelector('#sleeveSpotdlCancel');
     const input = overlay.querySelector('#sleeveSpotdlUrl');
     const format = overlay.querySelector('#sleeveSpotdlFormat');
-    if (start) start.disabled = busy;
+    const rights = overlay.querySelector('#sleeveSpotdlRights');
+    if (start) start.disabled = busy || !spotdlAvailable || !rightsConfirmed;
     if (cancel) cancel.hidden = !busy;
     if (input) input.disabled = busy;
     if (format) format.disabled = busy;
+    if (rights) rights.disabled = busy;
     if (start) start.textContent = busy ? 'Downloading…' : 'Download';
   }
 
@@ -143,8 +152,10 @@
     section.querySelector('#sleeveSpotdlButton').addEventListener('click', openDialog);
   }
 
-  function openDialog() {
+  function openDialog(options = {}) {
     if (overlay) return;
+    rightsConfirmed = false;
+    spotdlAvailable = false;
     installStyles();
     overlay = make('div', 'sdl-overlay');
     overlay.id = 'sleeveSpotdlOverlay';
@@ -165,6 +176,12 @@
         </select>
         <div class="sdl-helper">M4A and Opus use spotDL’s bitrate-disable option to skip an extra conversion where supported. The output format cannot restore quality missing from the source.</div>
         <div class="sdl-quality-note"><strong>Quality note:</strong> changing the output format cannot improve a low-quality source. spotDL documents a typical 128 kbps ceiling for standard sources; its documented YouTube Music Premium route can reach up to 256 kbps M4A when properly configured. The format name alone does not guarantee a particular bitrate.</div>
+        <div id="sleeveSpotdlArtistContext" class="sdl-artist-context" hidden>
+          <strong id="sleeveSpotdlArtistName"></strong>
+          <p>Choose the correct artist or track on Spotify, then copy its actual Spotify page URL into the field above. Search-result URLs are not download links.</p>
+          <button id="sleeveSpotdlOpenArtistSearch" class="sdl-button sdl-secondary-button" type="button">Open Spotify artist search</button>
+        </div>
+        <label class="sdl-rights-confirm"><input id="sleeveSpotdlRights" type="checkbox"><span>I confirm that I own this recording or have permission to download it, and that my use complies with the source terms and applicable law.</span></label>
         <div id="sleeveSpotdlStatus" class="sdl-status" role="status" aria-live="polite">Checking spotDL installation…</div>
         <div id="sleeveSpotdlSetup" class="sdl-setup" hidden>
           <div class="sdl-setup-title">spotDL is not detected</div>
@@ -191,10 +208,33 @@
         <footer class="sdl-actions">
           <button id="sleeveSpotdlCancel" class="sdl-button sdl-secondary-button" type="button" hidden>Cancel download</button>
           <button id="sleeveSpotdlDone" class="sdl-button sdl-secondary-button" type="button">Close</button>
-          <button id="sleeveSpotdlStart" class="sdl-button sdl-primary-button" type="button">Download</button>
+          <button id="sleeveSpotdlStart" class="sdl-button sdl-primary-button" type="button" disabled>Download</button>
         </footer>
       </section>`;
     document.body.appendChild(overlay);
+
+    const rightsCheckbox = overlay.querySelector('#sleeveSpotdlRights');
+    const startButton = overlay.querySelector('#sleeveSpotdlStart');
+    rightsCheckbox.addEventListener('change', () => {
+      rightsConfirmed = rightsCheckbox.checked === true;
+      if (startButton) startButton.disabled = running || !spotdlAvailable || !rightsConfirmed;
+    });
+
+    const artistContext = overlay.querySelector('#sleeveSpotdlArtistContext');
+    const artistName = String(options && options.artistName || '').trim().slice(0, 200);
+    const artistSearchUrl = String(options && options.artistSearchUrl || '').trim();
+    if (artistName && window.SleeveSpotifyLinks && window.SleeveSpotifyLinks.isSpotifySearchUrl(artistSearchUrl)) {
+      artistContext.hidden = false;
+      overlay.querySelector('#sleeveSpotdlArtistName').textContent = `Discovered artist: ${artistName}`;
+      overlay.querySelector('#sleeveSpotdlOpenArtistSearch').addEventListener('click', async () => {
+        try {
+          if (!API || typeof API.findMusicOpenUrl !== 'function') throw new Error('Spotify link opening is unavailable.');
+          await API.findMusicOpenUrl(artistSearchUrl);
+        } catch (error) {
+          setStatus(error && error.message ? error.message : 'Could not open Spotify artist search.', 'error');
+        }
+      });
+    }
 
     overlay.querySelector('#sleeveSpotdlClose').addEventListener('click', closeDialog);
     overlay.querySelector('#sleeveSpotdlDone').addEventListener('click', closeDialog);
@@ -287,9 +327,13 @@
       const result = await API.checkSpotdl();
       if (!overlay) return;
       lastDownloadDir = result.downloadDir || '';
-      if (result.available) {
+      spotdlAvailable = result.available === true;
+      if (spotdlAvailable) {
+        const start = overlay.querySelector('#sleeveSpotdlStart');
+        if (start) start.disabled = !rightsConfirmed;
         setStatus(`spotDL is ready${result.version ? ` (${result.version})` : ''}. Downloads are saved to: ${lastDownloadDir}`, 'success');
       } else {
+        spotdlAvailable = false;
         setStatus(`spotDL was not found. Downloads are saved to: ${lastDownloadDir}`, 'warning');
         overlay.querySelector('#sleeveSpotdlSetup').hidden = false;
         overlay.querySelector('#sleeveSpotdlStart').disabled = true;
@@ -300,19 +344,17 @@
   }
 
   function isAllowedSpotifyLink(value) {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== 'https:') return false;
-      const host = url.hostname.toLowerCase();
-      if (!['open.spotify.com', 'spotify.com', 'www.spotify.com', 'spotify.link'].includes(host)) return false;
-      return url.pathname.length > 1;
-    } catch (_) {
-      return false;
-    }
+    return Boolean(window.SleeveSpotifyLinks &&
+      typeof window.SleeveSpotifyLinks.isSpotifyContentUrl === 'function' &&
+      window.SleeveSpotifyLinks.isSpotifyContentUrl(value));
   }
 
   async function startDownload() {
     if (running || !overlay) return;
+    if (!rightsConfirmed) {
+      setStatus('Confirm that you have the rights or permission to download this recording before continuing.', 'warning');
+      return;
+    }
     const input = overlay.querySelector('#sleeveSpotdlUrl');
     const formatControl = overlay.querySelector('#sleeveSpotdlFormat');
     const url = input.value.trim();
@@ -388,6 +430,8 @@
       setStatus(error && error.message ? error.message : 'Could not open the download folder.', 'error');
     }
   }
+
+  window.SleeveSpotdl = Object.freeze({ openDialog });
 
   installStyles();
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addUI, { once: true });

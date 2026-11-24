@@ -998,6 +998,8 @@ stemAudio.drums.addEventListener('ended', () => {
   window.__sleevePlayerApi = {
     getPlaylists: () => playlists.map(pl => ({ id: pl.id, name: pl.name, trackCount: pl.trackIds.length })),
     getActivePlaylistId: () => (currentView.type === 'playlist' ? currentView.id : null),
+    getTasteProfile: () => window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(playlist) : null,
+    getLibraryArtistNames: () => Array.from(new Set(playlist.filter(track => track && track.kind !== 'video').map(track => String(track.artist || '').trim()).filter(Boolean))),
     activatePlaylist: (playlistId, autoplay = true) => {
       const pl = playlists.find(p => p.id === playlistId);
       if (!pl) return false;
@@ -4040,7 +4042,9 @@ const titleVariants = [...new Set([
     const fmt=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h}h ${m}m`:`${m}m`};
     document.getElementById('statsGrid').innerHTML=[['Songs',tracks.length],['Artists',artists.size],['Albums',albums.size],['Total plays',totalPlays],['Known runtime',fmt(totalDuration)]].map(x=>`<div class="stat-card"><div class="stat-label">${x[0]}</div><div class="stat-value">${x[1]}</div></div>`).join('');
     const topPlayed=sortedByPlayed(tracks).filter(t=>(t.playCount||0)>0).slice(0,8), topArtists=[...artists].map(a=>({a,n:tracks.filter(t=>(t.artist||'Unknown Artist')===a).reduce((x,t)=>x+(t.playCount||0),0)})).sort((a,b)=>b.n-a.n).slice(0,8);
-    document.getElementById('statsLists').innerHTML=`<div><h4>Most played songs</h4>${topPlayed.length?topPlayed.map(t=>`<div class="stats-list-row"><span>${escapeHtml(t.title)}</span><span>${t.playCount||0}</span></div>`).join(''):'<div class="stats-list-row"><span>Play something to build history.</span><span>—</span></div>'}</div><div><h4>Most played artists</h4>${topArtists.length?topArtists.map(x=>`<div class="stats-list-row"><span>${escapeHtml(x.a)}</span><span>${x.n}</span></div>`).join(''):'<div class="stats-list-row"><span>No play history yet.</span><span>—</span></div>'}</div>`;
+    const tasteProfile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(tracks) : null;
+    const tasteProfileHtml = tasteProfile ? renderTasteProfileSections(tasteProfile) : '';
+    document.getElementById('statsLists').innerHTML=`<div><h4>Most played songs</h4>${topPlayed.length?topPlayed.map(t=>`<div class="stats-list-row"><span>${escapeHtml(t.title)}</span><span>${t.playCount||0}</span></div>`).join(''):'<div class="stats-list-row"><span>Play something to build history.</span><span>—</span></div>'}</div><div><h4>Most played artists</h4>${topArtists.length?topArtists.map(x=>`<div class="stats-list-row"><span>${escapeHtml(x.a)}</span><span>${x.n}</span></div>`).join(''):'<div class="stats-list-row"><span>No play history yet.</span><span>—</span></div>'}</div>` + tasteProfileHtml;
     const settingsStatsGrid = document.getElementById('settingsStatsGrid');
     const settingsStatsLists = document.getElementById('settingsStatsLists');
     if (settingsStatsGrid) settingsStatsGrid.innerHTML = document.getElementById('statsGrid').innerHTML;
@@ -4050,8 +4054,25 @@ const titleVariants = [...new Set([
         historySection('Recently played', sortedByRecent(tracks.filter(t => t.lastPlayedAt)), t => formatRelativeTime(t.lastPlayedAt), 'Nothing has been played yet.') +
         historySection('Most played', sortedByPlayed(tracks.filter(t => (t.playCount || 0) > 0)), t => `${t.playCount || 0} plays`, 'Nothing has been played yet.') +
         historySection('Never played', tracks.filter(t => (t.playCount || 0) === 0).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)), () => 'never', 'Every song has been played.') +
-        historySection('Recently added', sortedByAdded(tracks), t => formatRelativeTime(t.addedAt), 'No songs have been added yet.');
+        historySection('Recently added', sortedByAdded(tracks), t => formatRelativeTime(t.addedAt), 'No songs have been added yet.') + tasteProfileHtml;
     }
+  }
+
+  function renderTasteProfileSections(profile){
+    const basis = profile.rankingBasis === 'plays' ? 'Ranked by total plays' : 'No play history yet — ranked by number of tracks';
+    const rows = (items) => items.length
+      ? items.map(item => '<div class="stats-list-row"><span>' + escapeHtml(item.name) + '</span><span>' + item.sharePercent + '% · ' + item.trackCount + ' tracks</span></div>').join('')
+      : '<div class="stats-list-row"><span>No tagged data available.</span><span>—</span></div>';
+    const coverage = profile.metadataCoverage;
+    return '<div class="taste-profile-stats"><h4>Music taste profile</h4>' +
+      '<div class="stats-list-row"><span>' + basis + '</span><span>' + profile.totalPlays + ' plays</span></div>' +
+      '<h4>Top genres</h4>' + rows(profile.genres) +
+      '<h4>Top artists</h4>' + rows(profile.artists) +
+      '<h4>Library signals</h4>' +
+      '<div class="stats-list-row"><span>Genre tags</span><span>' + coverage.genreTaggedTrackCount + '/' + profile.trackCount + ' · ' + coverage.genrePercent + '%</span></div>' +
+      '<div class="stats-list-row"><span>Artist tags</span><span>' + coverage.artistTaggedTrackCount + '/' + profile.trackCount + ' · ' + coverage.artistPercent + '%</span></div>' +
+      '<div class="stats-list-row"><span>Played in last ' + profile.recentWindowDays + ' days</span><span>' + profile.recentlyPlayedTrackCount + ' tracks</span></div>' +
+      '<p class="stats-profile-note">Calculated from your current library. Recent activity counts tracks by their last-played date; Sleeve does not yet store a complete per-play history.</p></div>';
   }
 
   // ---------- Equalizer ----------
@@ -4443,6 +4464,7 @@ const titleVariants = [...new Set([
     { key: 'leastPlayed', title: 'Least Played', sub: "Songs you own but rarely reach for" },
     { key: 'recentlyAdded', title: 'Recently Added', sub: 'Newest additions to your library' },
     { key: 'random', title: 'Random Mix', sub: 'A shuffled grab-bag for a change of pace' },
+    { key: 'yourTaste', title: 'Your Taste Mix', sub: 'A mix built from the genres and artists you already listen to' },
   ];
   const SMART_PLAYLIST_SIZE = 25;
 
@@ -4508,6 +4530,13 @@ const titleVariants = [...new Set([
         return sortedByAdded(musicTracks).slice(0, SMART_PLAYLIST_SIZE);
       case 'random':
         return shuffleArray(musicTracks.slice()).slice(0, SMART_PLAYLIST_SIZE);
+      case 'yourTaste': {
+        const profile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(musicTracks) : null;
+        const previousTasteTrackIds = playlists
+          .filter(pl => /^Your Taste Mix Mix(?: \d+)?$/.test(pl.name || ''))
+          .flatMap(pl => Array.isArray(pl.trackIds) ? pl.trackIds : []);
+        return window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.buildTasteMixTracks(musicTracks, profile, SMART_PLAYLIST_SIZE, { previousTrackIds: previousTasteTrackIds }) : [];
+      }
       default:
         return [];
     }
@@ -4528,7 +4557,9 @@ const titleVariants = [...new Set([
     const picked = pickTracksForCriterion(criterion);
 
     if (!picked.length){
-      alert("There isn't enough listening history yet to build that playlist.");
+      alert(criterion === 'yourTaste'
+        ? "Sleeve couldn't build a Taste Mix yet. Add genre or artist tags, or play a few songs so Sleeve can learn from your listening history, then try again."
+        : "There isn't enough listening history yet to build that playlist.");
       return null;
     }
 

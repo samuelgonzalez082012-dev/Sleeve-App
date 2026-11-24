@@ -49,6 +49,7 @@ verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
   // Find Music exposes catalog discovery only; it does not expose arbitrary filesystem or downloader APIs.
   findMusicParseLink: (url) => ipcRenderer.invoke('find-music:parse-link', url),
   findMusicSearchRecordings: (payload) => ipcRenderer.invoke('find-music:search-recordings', payload),
+  findMusicDiscoverByTaste: (payload) => ipcRenderer.invoke('find-music:discover-by-taste', payload),
   findMusicOpenUrl: (url) => ipcRenderer.invoke('find-music:open-url', url),
   // Folder watching is opt-in. Only paths reported from the selected folder can be read for import.
   findMusicWatchSelectFolder: () => ipcRenderer.invoke('find-music:watch-select-folder'),
