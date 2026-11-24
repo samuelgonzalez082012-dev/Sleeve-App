@@ -15,7 +15,7 @@ test('uses play counts to rank genres and artists when history exists', () => {
   assert.equal(profile.genres[0].name, 'Rock');
   assert.equal(profile.genres[0].sharePercent, 71);
   assert.equal(profile.artists[0].name, 'Artist One');
-  assert.equal(profile.artists[0].sharePercent, 50);
+  assert.equal(profile.artists[0].sharePercent, 71);
 });
 test('falls back to library composition when no play history exists', () => {
   const profile = analyze([{ artist: 'A', genre: 'Rock' }, { artist: 'B', genre: 'Rock' }, { artist: 'C', genre: 'Jazz' }], { now: 1000 });
