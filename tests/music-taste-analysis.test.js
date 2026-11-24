@@ -45,7 +45,7 @@ test('builds a taste mix from the top genres using only local audio tracks', () 
     { id: 3, title: 'Jazz One', genre: 'Jazz', playCount: 5 },
     { id: 4, title: 'Pop One', genre: 'Pop', playCount: 2 },
     { id: 5, title: 'Video', genre: 'Rock', kind: 'video', playCount: 100 },
-    { id: 6, title: 'No ID', genre: 'Rock', playCount: 50 }
+    { title: 'No ID', genre: 'Rock', playCount: 50 }
   ];
   const profile = analyze(tracks, { now: 1000 });
   const mix = require('../music-taste-analysis').buildTasteMixTracks(tracks, profile, 4);
