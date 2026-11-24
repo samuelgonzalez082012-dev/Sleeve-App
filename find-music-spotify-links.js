@@ -23,11 +23,38 @@
     };
   }
 
+  function isSpotifyContentUrl(value) {
+    try {
+      const url = new URL(String(value || '').trim());
+      const host = url.hostname.toLowerCase();
+      const hosts = ['open.spotify.com', 'spotify.com', 'www.spotify.com', 'spotify.link'];
+      if (url.protocol !== 'https:' || !hosts.includes(host)) return false;
+      if (host === 'spotify.link') return url.pathname.length > 1;
+      const parts = url.pathname.split('/').filter(Boolean);
+      const typeIndex = parts.findIndex((part) => ['track', 'album', 'playlist', 'artist'].includes(part));
+      return typeIndex >= 0 && Boolean(parts[typeIndex + 1]) && parts.length === typeIndex + 2;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function isSpotifySearchUrl(value) {
+    try {
+      const url = new URL(String(value || '').trim());
+      return url.protocol === 'https:' &&
+        url.hostname.toLowerCase() === 'open.spotify.com' &&
+        url.pathname.startsWith('/search/') &&
+        url.pathname.length > '/search/'.length;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function buildSpotdlDiscoveryContext(artistName) {
     const name = String(artistName == null ? '' : artistName).trim().slice(0, 200);
     if (!name) return null;
     return { artistName: name, artistSearchUrl: buildSpotifySearchUrl(name) };
   }
 
-  return { buildSpotifySearchUrl, buildArtistLinks, buildSpotdlDiscoveryContext };
+  return { buildSpotifySearchUrl, buildArtistLinks, buildSpotdlDiscoveryContext, isSpotifyContentUrl, isSpotifySearchUrl };
 });
