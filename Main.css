@@ -2085,8 +2085,8 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 .artist-related-heading h3{margin:5px 0 0;font-size:20px;letter-spacing:-.025em}
 .artist-related-count{padding-bottom:2px;color:var(--text-dim);font-size:11px;white-space:nowrap}
 .artist-featured-playlists{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:9px}
-.artist-featured-playlist{display:flex;align-items:center;gap:11px;min-width:0;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
-.artist-featured-playlist:hover,.artist-featured-playlist:focus-visible{outline:none;border-color:var(--accent-ice);background:var(--panel-2);transform:translateY(-1px)}
+.artist-featured-playlist{display:flex;align-items:center;gap:11px;min-width:0;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--bg-card);color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.artist-featured-playlist:hover,.artist-featured-playlist:focus-visible{outline:none;border-color:var(--accent-ice);background:var(--bg-card-hover);transform:translateY(-1px)}
 .artist-featured-playlist-art{display:flex;flex:0 0 52px;align-items:center;justify-content:center;width:52px;height:52px;overflow:hidden;border-radius:7px;background:var(--bg-elevated-2);color:var(--text-dim);font-size:22px}
 .artist-featured-playlist-art img,.artist-featured-playlist-art video{display:block;width:100%;height:100%;object-fit:cover}
 .artist-featured-playlist-meta,.artist-video-meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
@@ -2097,10 +2097,10 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 .artist-music-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,175px),1fr));gap:12px}
 .artist-video-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer}
 .artist-video-art{position:relative;display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:16 / 9;overflow:hidden;border:1px solid var(--line);border-radius:9px;background:var(--bg-elevated-2);color:var(--text-dim)}
-.artist-video-art>img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .2s ease}
+.artist-video-art>img,.artist-video-art>video{display:block;width:100%;height:100%;object-fit:cover;transition:transform .2s ease}
 .artist-video-placeholder{font-size:28px;opacity:.75}
 .artist-video-play{position:absolute;right:9px;bottom:9px;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(255,255,255,.28);border-radius:50%;background:rgba(8,12,18,.76);color:#fff;font-size:11px;opacity:0;transform:translateY(3px);transition:opacity .16s ease,transform .16s ease}
-.artist-video-card:hover .artist-video-art>img{transform:scale(1.035)}
+.artist-video-card:hover .artist-video-art>img,.artist-video-card:hover .artist-video-art>video{transform:scale(1.035)}
 .artist-video-card:hover .artist-video-play,.artist-video-card:focus-visible .artist-video-play{opacity:1;transform:translateY(0)}
 .artist-video-card:focus-visible{outline:2px solid var(--accent-ice);outline-offset:4px;border-radius:8px}
 .artist-video-meta{padding:0 2px}
