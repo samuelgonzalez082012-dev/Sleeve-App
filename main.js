@@ -17,7 +17,8 @@ function getLocalNetworkService() {
   if (!localNetworkService) {
     localNetworkService = new LocalNetworkService({
       userDataPath: app.getPath('userData'),
-      deviceName: `Sleeve — ${os.hostname()}`
+      deviceName: `Sleeve — ${os.hostname()}`,
+      ffmpegPathProvider: findFfmpegForEnhancement
     })
   }
   return localNetworkService
@@ -32,6 +33,34 @@ ipcMain.handle('network:pair', async (_event, payload) => getLocalNetworkService
 ipcMain.handle('network:device-revoke', async (_event, deviceId) => ({
   ok: getLocalNetworkService().revokeDevice(deviceId)
 }))
+
+// The renderer publishes a metadata-only snapshot. File paths are validated
+// in the main process and are never returned by the network API.
+ipcMain.handle('network:library-sync', async (event, payload = {}) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Library sync is only available to the primary Sleeve window.');
+  }
+  const incoming = Array.isArray(payload.tracks) ? payload.tracks.slice(0, 20000) : [];
+  const tracks = [];
+  for (const item of incoming) {
+    if (!item || !Number.isSafeInteger(Number(item.id)) || typeof item.sourcePath !== 'string' ||
+        !item.sourcePath.trim() || item.sourcePath.length > 4096 || item.kind === 'video') continue;
+    const resolved = resolveSourcePath(item.sourcePath);
+    try {
+      const linkStat = fs.lstatSync(resolved);
+      if (!linkStat.isFile() || linkStat.isSymbolicLink()) continue;
+      const extension = path.extname(resolved).toLowerCase();
+      if (!AUDIO_EXTENSIONS.has(extension)) continue;
+      tracks.push({
+        id: Number(item.id), path: path.resolve(resolved), kind: item.kind,
+        title: item.title, artist: item.artist, album: item.album,
+        year: item.year, genre: item.genre, duration: item.duration, trackNum: item.trackNum
+      });
+    } catch (_) {}
+  }
+  const playlists = Array.isArray(payload.playlists) ? payload.playlists.slice(0, 2000) : [];
+  return getLocalNetworkService().setLibrarySnapshot(tracks, playlists);
+})
 
 // Where Demucs source files get resolved to and where split stems get
 // written. Resolving/hashing is shared by the split, find-existing, and
@@ -449,7 +478,7 @@ ipcMain.handle('shell:show-in-folder', async (_event, filePath) => {
 
 function createWindow () {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     icon: path.join(__dirname, 'Icon.ico'),
@@ -460,6 +489,7 @@ function createWindow () {
 
   // and load the index.html of the app.
   mainWindow.loadFile('index.html')
+  mainWindow.on('closed', () => { mainWindow = null; })
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
