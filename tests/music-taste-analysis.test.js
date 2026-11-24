@@ -6,14 +6,14 @@ test('uses play counts to rank genres and artists when history exists', () => {
   const profile = analyze([
     { kind: 'audio', artist: 'Artist One', genre: 'Rock', playCount: 8 },
     { kind: 'audio', artist: 'Artist One', genre: 'Rock', playCount: 2 },
-    { kind: 'audio', artist: 'Artist Two', genre: 'Jazz', playCount: 10 },
+    { kind: 'audio', artist: 'Artist Two', genre: 'Jazz', playCount: 4 },
     { kind: 'video', artist: 'Video Artist', genre: 'Pop', playCount: 100 }
   ], { now: 1000 });
   assert.equal(profile.trackCount, 3);
-  assert.equal(profile.totalPlays, 20);
+  assert.equal(profile.totalPlays, 14);
   assert.equal(profile.rankingBasis, 'plays');
   assert.equal(profile.genres[0].name, 'Rock');
-  assert.equal(profile.genres[0].sharePercent, 50);
+  assert.equal(profile.genres[0].sharePercent, 71);
   assert.equal(profile.artists[0].name, 'Artist One');
   assert.equal(profile.artists[0].sharePercent, 50);
 });
