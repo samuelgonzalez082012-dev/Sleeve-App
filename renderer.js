@@ -1764,7 +1764,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     const server = networkDiscoveredServers[Number(networkDiscoveredSelect.value)];
     const code = networkPairCodeInput.value.trim();
     if (!server) return networkStatusText(networkPairStatus, 'Find and select a Sleeve device first.', true);
-    if (!/^\\d{6}$/.test(code)) return networkStatusText(networkPairStatus, 'Enter the six-digit code shown on the host.', true);
+    if (!/^\d{6}$/.test(code)) return networkStatusText(networkPairStatus, 'Enter the six-digit code shown on the host.', true);
     networkPairBtn.disabled = true;
     try {
       const paired = await window.electronAPI.localNetworkPair({
