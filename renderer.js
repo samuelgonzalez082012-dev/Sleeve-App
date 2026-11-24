@@ -998,6 +998,7 @@ stemAudio.drums.addEventListener('ended', () => {
   window.__sleevePlayerApi = {
     getPlaylists: () => playlists.map(pl => ({ id: pl.id, name: pl.name, trackCount: pl.trackIds.length })),
     getActivePlaylistId: () => (currentView.type === 'playlist' ? currentView.id : null),
+    getTasteProfile: () => window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(playlist) : null,
     activatePlaylist: (playlistId, autoplay = true) => {
       const pl = playlists.find(p => p.id === playlistId);
       if (!pl) return false;
@@ -4040,6 +4041,8 @@ const titleVariants = [...new Set([
     const fmt=s=>{const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h}h ${m}m`:`${m}m`};
     document.getElementById('statsGrid').innerHTML=[['Songs',tracks.length],['Artists',artists.size],['Albums',albums.size],['Total plays',totalPlays],['Known runtime',fmt(totalDuration)]].map(x=>`<div class="stat-card"><div class="stat-label">${x[0]}</div><div class="stat-value">${x[1]}</div></div>`).join('');
     const topPlayed=sortedByPlayed(tracks).filter(t=>(t.playCount||0)>0).slice(0,8), topArtists=[...artists].map(a=>({a,n:tracks.filter(t=>(t.artist||'Unknown Artist')===a).reduce((x,t)=>x+(t.playCount||0),0)})).sort((a,b)=>b.n-a.n).slice(0,8);
+    const tasteProfile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(tracks) : null;
+    const tasteProfileHtml = tasteProfile ? renderTasteProfileSections(tasteProfile) : '';
     document.getElementById('statsLists').innerHTML=`<div><h4>Most played songs</h4>${topPlayed.length?topPlayed.map(t=>`<div class="stats-list-row"><span>${escapeHtml(t.title)}</span><span>${t.playCount||0}</span></div>`).join(''):'<div class="stats-list-row"><span>Play something to build history.</span><span>—</span></div>'}</div><div><h4>Most played artists</h4>${topArtists.length?topArtists.map(x=>`<div class="stats-list-row"><span>${escapeHtml(x.a)}</span><span>${x.n}</span></div>`).join(''):'<div class="stats-list-row"><span>No play history yet.</span><span>—</span></div>'}</div>`;
     const settingsStatsGrid = document.getElementById('settingsStatsGrid');
     const settingsStatsLists = document.getElementById('settingsStatsLists');
@@ -4052,6 +4055,23 @@ const titleVariants = [...new Set([
         historySection('Never played', tracks.filter(t => (t.playCount || 0) === 0).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)), () => 'never', 'Every song has been played.') +
         historySection('Recently added', sortedByAdded(tracks), t => formatRelativeTime(t.addedAt), 'No songs have been added yet.');
     }
+  }
+
+  function renderTasteProfileSections(profile){
+    const basis = profile.rankingBasis === 'plays' ? 'Ranked by total plays' : 'No play history yet — ranked by number of tracks';
+    const rows = (items) => items.length
+      ? items.map(item => '<div class="stats-list-row"><span>' + escapeHtml(item.name) + '</span><span>' + item.sharePercent + '% · ' + item.trackCount + ' tracks</span></div>').join('')
+      : '<div class="stats-list-row"><span>No tagged data available.</span><span>—</span></div>';
+    const coverage = profile.metadataCoverage;
+    return '<div class="taste-profile-stats"><h4>Music taste profile</h4>' +
+      '<div class="stats-list-row"><span>' + basis + '</span><span>' + profile.totalPlays + ' plays</span></div>' +
+      '<h4>Top genres</h4>' + rows(profile.genres) +
+      '<h4>Top artists</h4>' + rows(profile.artists) +
+      '<h4>Library signals</h4>' +
+      '<div class="stats-list-row"><span>Genre tags</span><span>' + coverage.genreTaggedTrackCount + '/' + profile.trackCount + ' · ' + coverage.genrePercent + '%</span></div>' +
+      '<div class="stats-list-row"><span>Artist tags</span><span>' + coverage.artistTaggedTrackCount + '/' + profile.trackCount + ' · ' + coverage.artistPercent + '%</span></div>' +
+      '<div class="stats-list-row"><span>Played in last ' + profile.recentWindowDays + ' days</span><span>' + profile.recentlyPlayedTrackCount + ' tracks</span></div>' +
+      '<p class="stats-profile-note">Calculated from your current library. Recent activity counts tracks by their last-played date; Sleeve does not yet store a complete per-play history.</p></div>';
   }
 
   // ---------- Equalizer ----------
