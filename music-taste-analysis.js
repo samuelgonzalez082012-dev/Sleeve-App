@@ -120,7 +120,8 @@
         .map((track) => {
           const played = toCount(track.playCount);
           const lastPlayedAt = toTimestamp(track.lastPlayedAt);
-          const ageDays = lastPlayedAt > 0 ? Math.max(0, (Date.now() - lastPlayedAt) / 86400000) : 365;
+          const referenceTime = toTimestamp(profile.generatedAt) || Date.now();
+          const ageDays = lastPlayedAt > 0 ? Math.max(0, (referenceTime - lastPlayedAt) / 86400000) : 365;
           return { track, tasteWeight: Math.max(1, played) + (lastPlayedAt > 0 ? 5 / (1 + ageDays / 7) : 0) };
         });
     }
