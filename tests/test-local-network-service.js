@@ -9,7 +9,12 @@ const { LocalNetworkService } = require('../services/local-network-service');
 
 test('local network host exposes info and pairs an authorized device', async () => {
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'sleeve-network-test-'));
+  const audioPath = path.join(userDataPath, 'sample.mp3');
+  fs.writeFileSync(audioPath, Buffer.from('0123456789abcdef'));
   const service = new LocalNetworkService({ userDataPath, deviceName: 'Sleeve Test Host' });
+  service.setLibrarySnapshot([
+    { id: 12, path: audioPath, title: 'Sample Song', artist: 'Test Artist', album: 'Test Album', genre: 'Ambient', duration: 90, kind: 'audio' }
+  ], [{ id: 4, name: 'Test Playlist', type: 'music', trackIds: [12] }]);
 
   try {
     const status = await service.startHost();
@@ -45,6 +50,42 @@ test('local network host exposes info and pairs an authorized device', async () 
     const paired = await pairResponse.json();
     assert.equal(typeof paired.token, 'string');
     assert.equal(paired.serverId, status.serverId);
+
+    const unauthorizedLibrary = await fetch(baseUrl + '/v1/library');
+    assert.equal(unauthorizedLibrary.status, 401);
+
+    const libraryResponse = await fetch(baseUrl + '/v1/library', {
+      headers: { authorization: 'Bearer ' + paired.token }
+    });
+    assert.equal(libraryResponse.status, 200);
+    const library = await libraryResponse.json();
+    assert.deepEqual(library.counts, { tracks: 1, albums: 1, artists: 1, genres: 1, playlists: 1 });
+
+    const tracksResponse = await fetch(baseUrl + '/v1/library/tracks?q=sample', {
+      headers: { authorization: 'Bearer ' + paired.token }
+    });
+    assert.equal(tracksResponse.status, 200);
+    const tracks = await tracksResponse.json();
+    assert.equal(tracks.items[0].title, 'Sample Song');
+    assert.equal(Object.hasOwn(tracks.items[0], 'path'), false);
+
+    const playlistResponse = await fetch(baseUrl + '/v1/library/playlists/4/tracks', {
+      headers: { authorization: 'Bearer ' + paired.token }
+    });
+    assert.equal(playlistResponse.status, 200);
+    assert.equal((await playlistResponse.json()).items.length, 1);
+
+    const rangeResponse = await fetch(baseUrl + '/v1/tracks/12/stream', {
+      headers: { authorization: 'Bearer ' + paired.token, range: 'bytes=2-5' }
+    });
+    assert.equal(rangeResponse.status, 206);
+    assert.equal(rangeResponse.headers.get('content-range'), 'bytes 2-5/16');
+    assert.equal(Buffer.from(await rangeResponse.arrayBuffer()).toString(), '2345');
+
+    const compactResponse = await fetch(baseUrl + '/v1/tracks/12/stream?quality=compact', {
+      headers: { authorization: 'Bearer ' + paired.token }
+    });
+    assert.equal(compactResponse.status, 503);
 
     const devicesResponse = await fetch(baseUrl + '/v1/devices', {
       headers: { authorization: 'Bearer ' + paired.token }
