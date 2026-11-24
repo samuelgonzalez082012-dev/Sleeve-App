@@ -252,7 +252,6 @@ class LocalLibraryStreaming {
     child.once('close', code => { if (code !== 0 && !res.writableEnded) res.destroy(); });
     const stop = () => { try { child.kill(); } catch (_) {} };
     res.once('close', stop);
-    res.once('close', stop);
   }
 
   sendJson(res, status, value) {
