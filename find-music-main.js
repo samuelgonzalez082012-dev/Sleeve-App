@@ -229,6 +229,139 @@ async function searchMusicBrainz(payload) {
 
 
 const MUSICBRAINZ_ARTIST_URL = 'https://musicbrainz.org/ws/2/artist/';
+const MUSICBRAINZ_RELEASE_GROUP_URL = 'https://musicbrainz.org/ws/2/release-group/';
+const ARTIST_CATALOG_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const MAX_ARTIST_RELEASE_GROUPS = 500;
+const artistCatalogSearchCache = new Map();
+const artistCatalogSearchInFlight = new Map();
+const artistDiscographyCache = new Map();
+const artistDiscographyInFlight = new Map();
+
+function normalizeCatalogName(value) {
+  return String(value || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+}
+
+function mapCatalogArtist(artist, requestedName) {
+  const mapped = mapDiscoveredArtist(artist, '');
+  return {
+    ...mapped,
+    exactName: normalizeCatalogName(mapped.name) === normalizeCatalogName(requestedName)
+  };
+}
+
+function mapReleaseGroup(releaseGroup) {
+  const id = String(releaseGroup && releaseGroup.id || '');
+  const secondaryTypes = Array.isArray(releaseGroup && releaseGroup['secondary-types'])
+    ? releaseGroup['secondary-types'].map(value => String(value || '').trim()).filter(Boolean)
+    : [];
+  return {
+    id,
+    title: String(releaseGroup && releaseGroup.title || '').trim(),
+    firstReleaseDate: String(releaseGroup && releaseGroup['first-release-date'] || '').trim(),
+    primaryType: String(releaseGroup && releaseGroup['primary-type'] || '').trim(),
+    secondaryTypes,
+    releaseCount: Math.max(0, Number(releaseGroup && releaseGroup.count) || 0),
+    disambiguation: String(releaseGroup && releaseGroup.disambiguation || '').trim(),
+    coverArtUrl: id ? `https://coverartarchive.org/release-group/${encodeURIComponent(id)}/front-250` : '',
+    musicBrainzUrl: id ? `https://musicbrainz.org/release-group/${encodeURIComponent(id)}` : ''
+  };
+}
+
+function readTimedCache(cache, key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.value;
+}
+
+function writeTimedCache(cache, key, value) {
+  cache.set(key, { value, expiresAt: Date.now() + ARTIST_CATALOG_CACHE_TTL_MS });
+  return value;
+}
+
+async function searchArtistCatalog(payload, options = {}) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid artist catalog search.');
+  const artistName = String(payload.artistName || '').trim().slice(0, 240);
+  if (!artistName) throw new Error('Enter an artist name to search the music catalog.');
+  const cacheKey = normalizeCatalogName(artistName);
+  const cached = readTimedCache(artistCatalogSearchCache, cacheKey);
+  if (cached) return cached;
+  if (artistCatalogSearchInFlight.has(cacheKey)) return artistCatalogSearchInFlight.get(cacheKey);
+
+  const promise = (async () => {
+    const params = new URLSearchParams({
+      query: `artist:"${escapeLucene(artistName)}"`,
+      fmt: 'json',
+      limit: '10'
+    });
+    const json = await requestMusicBrainzJson(`${MUSICBRAINZ_ARTIST_URL}?${params.toString()}`, options);
+    const artists = (Array.isArray(json && json.artists) ? json.artists : [])
+      .map(artist => mapCatalogArtist(artist, artistName))
+      .filter(artist => artist.id && artist.name)
+      .sort((a, b) => Number(b.exactName) - Number(a.exactName)
+        || b.score - a.score || a.name.localeCompare(b.name));
+    return writeTimedCache(artistCatalogSearchCache, cacheKey, {
+      provider: 'MusicBrainz',
+      requestedName: artistName,
+      generatedAt: Date.now(),
+      artists
+    });
+  })().finally(() => artistCatalogSearchInFlight.delete(cacheKey));
+  artistCatalogSearchInFlight.set(cacheKey, promise);
+  return promise;
+}
+
+async function getArtistDiscography(payload, options = {}) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid artist discography request.');
+  const artistId = String(payload.artistId || '').trim().toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(artistId)) {
+    throw new Error('Choose a valid MusicBrainz artist before loading its discography.');
+  }
+  const cached = readTimedCache(artistDiscographyCache, artistId);
+  if (cached) return cached;
+  if (artistDiscographyInFlight.has(artistId)) return artistDiscographyInFlight.get(artistId);
+
+  const promise = (async () => {
+    const releaseGroups = [];
+    let totalCount = 0;
+    let offset = 0;
+    const pageSize = 100;
+    while (releaseGroups.length < MAX_ARTIST_RELEASE_GROUPS) {
+      const params = new URLSearchParams({
+        artist: artistId,
+        fmt: 'json',
+        limit: String(pageSize),
+        offset: String(offset),
+        'release-group-status': 'website-default'
+      });
+      const json = await requestMusicBrainzJson(`${MUSICBRAINZ_RELEASE_GROUP_URL}?${params.toString()}`, options);
+      const batch = Array.isArray(json && json['release-groups']) ? json['release-groups'] : [];
+      totalCount = Math.max(totalCount, Number(json && json['release-group-count']) || 0);
+      if (!batch.length) break;
+      releaseGroups.push(...batch.map(mapReleaseGroup).filter(item => item.id && item.title));
+      offset += batch.length;
+      if (offset >= totalCount || batch.length < pageSize) break;
+    }
+    releaseGroups.sort((a, b) => {
+      const dateOrder = (a.firstReleaseDate || '9999').localeCompare(b.firstReleaseDate || '9999');
+      return dateOrder || a.title.localeCompare(b.title);
+    });
+    return writeTimedCache(artistDiscographyCache, artistId, {
+      provider: 'MusicBrainz',
+      artistId,
+      generatedAt: Date.now(),
+      totalCount: totalCount || releaseGroups.length,
+      fetchedCount: releaseGroups.length,
+      truncated: releaseGroups.length < totalCount ? releaseGroups.length >= MAX_ARTIST_RELEASE_GROUPS : false,
+      releaseGroups
+    });
+  })().finally(() => artistDiscographyInFlight.delete(artistId));
+  artistDiscographyInFlight.set(artistId, promise);
+  return promise;
+}
 
 function mapDiscoveredArtist(artist, genre) {
   const lifeSpan = artist && artist['life-span'] && typeof artist['life-span'] === 'object'
@@ -299,6 +432,14 @@ function registerFindMusicHandlers({ ipcMain, shell }) {
     return core.parseReferenceLink(rawUrl);
   });
 
+  ipcMain.handle('find-music:search-artist-catalog', async (_event, payload) => {
+    return searchArtistCatalog(payload);
+  });
+
+  ipcMain.handle('find-music:get-artist-discography', async (_event, payload) => {
+    return getArtistDiscography(payload);
+  });
+
   ipcMain.handle('find-music:discover-by-taste', async (_event, payload) => {
     return searchTasteArtists(payload);
   });
@@ -323,6 +464,9 @@ module.exports = {
   searchMusicBrainz,
   searchTasteArtists,
   searchArtistsForGenre,
+  searchArtistCatalog,
+  getArtistDiscography,
+  mapReleaseGroup,
   mapDiscoveredArtist,
   mapRecording,
   artistCreditName,
