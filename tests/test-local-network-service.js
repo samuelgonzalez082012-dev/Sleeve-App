@@ -12,6 +12,9 @@ test('local network host exposes info and pairs an authorized device', async () 
   const audioPath = path.join(userDataPath, 'sample.mp3');
   fs.writeFileSync(audioPath, Buffer.from('0123456789abcdef'));
   const service = new LocalNetworkService({ userDataPath, deviceName: 'Sleeve Test Host' });
+  const clientDataPath = path.join(userDataPath, 'client');
+  fs.mkdirSync(path.join(clientDataPath, 'network'), { recursive: true });
+  let client;
   service.setLibrarySnapshot([
     { id: 12, path: audioPath, title: 'Sample Song', artist: 'Test Artist', album: 'Test Album', genre: 'Ambient', duration: 90, kind: 'audio' }
   ], [{ id: 4, name: 'Test Playlist', type: 'music', trackIds: [12] }]);
@@ -50,6 +53,17 @@ test('local network host exposes info and pairs an authorized device', async () 
     const paired = await pairResponse.json();
     assert.equal(typeof paired.token, 'string');
     assert.equal(paired.serverId, status.serverId);
+    fs.writeFileSync(path.join(clientDataPath, 'network', 'paired-servers.json'), JSON.stringify([{
+      serverId: paired.serverId, name: 'Sleeve Test Host', address: '127.0.0.1',
+      port: status.port, deviceId: paired.deviceId, token: paired.token
+    }]));
+    client = new LocalNetworkService({ userDataPath: clientDataPath });
+    const remoteTracks = await client.getRemoteLibrary(status.serverId, 'tracks', { q: 'sample' });
+    assert.equal(remoteTracks.items[0].title, 'Sample Song');
+    const remoteStreamUrl = await client.getRemoteStreamUrl(status.serverId, 12, 'original');
+    const remoteRangeResponse = await fetch(remoteStreamUrl, { headers: { range: 'bytes=3-6' } });
+    assert.equal(remoteRangeResponse.status, 206);
+    assert.equal(Buffer.from(await remoteRangeResponse.arrayBuffer()).toString(), '3456');
 
     const unauthorizedLibrary = await fetch(baseUrl + '/v1/library');
     assert.equal(unauthorizedLibrary.status, 401);
@@ -102,6 +116,7 @@ test('local network host exposes info and pairs an authorized device', async () 
     assert.equal(revokedResponse.status, 401);
     assert.equal(service.getStatus().pairedDevices[0].revokedAt !== null, true);
   } finally {
+    if (client) await client.stopRemoteProxy();
     await service.stopHost();
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }
