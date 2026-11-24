@@ -170,7 +170,7 @@ class LocalLibraryStreaming {
 
     const playlistMatch = /^\/v1\/library\/playlists\/([^/]+)\/tracks$/.exec(url.pathname);
     if (req.method === 'GET' && playlistMatch) {
-      const playlist = this.playlists.find(item => item.id === decodeURIComponent(playlistMatch[1]) && item.type === 'music');
+      const playlist = this.playlists.find(item => item.id === playlistMatch[1] && item.type === 'music');
       if (!playlist) return this.sendJson(res, 404, { error: 'Playlist not found.' });
       const items = playlist.trackIds.map(id => this.tracks.get(id)).filter(Boolean).map(track => this.publicTrack(track));
       return this.sendJson(res, 200, this.page(items, url));
