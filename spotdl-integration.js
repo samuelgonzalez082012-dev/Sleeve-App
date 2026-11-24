@@ -153,6 +153,7 @@
   function openDialog(options = {}) {
     if (overlay) return;
     rightsConfirmed = false;
+    spotdlAvailable = false;
     installStyles();
     overlay = make('div', 'sdl-overlay');
     overlay.id = 'sleeveSpotdlOverlay';
@@ -205,7 +206,7 @@
         <footer class="sdl-actions">
           <button id="sleeveSpotdlCancel" class="sdl-button sdl-secondary-button" type="button" hidden>Cancel download</button>
           <button id="sleeveSpotdlDone" class="sdl-button sdl-secondary-button" type="button">Close</button>
-          <button id="sleeveSpotdlStart" class="sdl-button sdl-primary-button" type="button">Download</button>
+          <button id="sleeveSpotdlStart" class="sdl-button sdl-primary-button" type="button" disabled>Download</button>
         </footer>
       </section>`;
     document.body.appendChild(overlay);
