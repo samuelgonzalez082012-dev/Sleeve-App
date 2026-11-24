@@ -1003,9 +1003,13 @@ function validateSpotdlUrl(rawUrl) {
   if (typeof rawUrl !== 'string' || rawUrl.length > 2048) return null;
   try {
     const parsed = new URL(rawUrl.trim());
+    const host = parsed.hostname.toLowerCase();
     const allowedHosts = new Set(['open.spotify.com', 'spotify.com', 'www.spotify.com', 'spotify.link']);
-    if (parsed.protocol !== 'https:' || !allowedHosts.has(parsed.hostname.toLowerCase())) return null;
-    if (!parsed.pathname || parsed.pathname === '/') return null;
+    if (parsed.protocol !== 'https:' || !allowedHosts.has(host)) return null;
+    if (host === 'spotify.link') return parsed.pathname.length > 1 ? parsed.toString() : null;
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const typeIndex = parts.findIndex((part) => ['track', 'album', 'playlist', 'artist'].includes(part));
+    if (typeIndex < 0 || !parts[typeIndex + 1] || parts.length !== typeIndex + 2) return null;
     return parsed.toString();
   } catch (_) {
     return null;
