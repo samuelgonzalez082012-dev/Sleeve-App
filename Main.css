@@ -2009,6 +2009,27 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 .artist-profile-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
 .artist-profile-action{border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(10,15,22,.34);backdrop-filter:blur(12px);color:#fff;padding:8px 14px;font:inherit;font-size:11px;font-weight:650;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
 .artist-profile-action:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.52);transform:translateY(-1px)}
+.artist-popular{padding:22px clamp(18px,3vw,30px) 0}
+.artist-section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+.artist-section-heading h3{margin:5px 0 0;font-size:21px;letter-spacing:-.025em}
+.artist-popular-caption{color:var(--text-dim);font-size:11px}
+.artist-popular-list{display:flex;flex-direction:column;gap:3px}
+.artist-popular-row{display:grid;grid-template-columns:24px 42px minmax(0,1fr) minmax(54px,auto) 42px 24px;align-items:center;gap:12px;width:100%;min-width:0;padding:7px 9px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.artist-popular-row:hover,.artist-popular-row:focus-visible{outline:none;border-color:var(--line);background:rgba(255,255,255,.055)}
+.artist-popular-rank{color:var(--text-dim);font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
+.artist-popular-art{display:flex;align-items:center;justify-content:center;width:42px;height:42px;overflow:hidden;border-radius:6px;background:var(--bg-elevated-2);color:var(--text-dim)}
+.artist-popular-art img,.artist-popular-art video{display:block;width:100%;height:100%;object-fit:cover}
+.artist-popular-art-placeholder{font-size:19px}
+.artist-popular-track-meta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.artist-popular-track-meta strong,.artist-popular-track-meta>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.artist-popular-track-meta strong{font-size:12px;font-weight:650}
+.artist-popular-track-meta>span{color:var(--text-dim);font-size:10px}
+.artist-popular-plays{color:var(--text-dim);font-size:11px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.artist-popular-plays small{font-size:10px}
+.artist-popular-duration{color:var(--text-dim);font-size:11px;text-align:right;font-variant-numeric:tabular-nums}
+.artist-popular-play-icon{color:var(--accent-ice);font-size:12px;text-align:center;opacity:0;transition:opacity .15s ease}
+.artist-popular-row:hover .artist-popular-play-icon,.artist-popular-row:focus-visible .artist-popular-play-icon{opacity:1}
+.artist-popular-empty{margin:0;padding:17px 12px;border:1px dashed var(--line-bright);border-radius:9px;color:var(--text-dim);font-size:12px;line-height:1.5}
 .artist-profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0;padding:18px clamp(18px,3vw,30px) 0}
 .artist-profile-stat{display:flex;flex-direction:column;gap:4px;padding:13px 15px;border:1px solid var(--line);border-radius:10px;background:rgba(4,12,23,.24)}
 .artist-profile-stat strong{font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
@@ -2024,6 +2045,12 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 .artist-profile-discography-heading>span{padding-bottom:2px;color:var(--text-dim);font-size:11px;white-space:nowrap}
 @media(max-width:620px){
   .artist-profile-hero{min-height:300px;padding:22px 18px}
+  .artist-section-heading{align-items:flex-start;flex-direction:column;gap:5px}
+  .artist-popular{padding-left:18px;padding-right:18px}
+  .artist-popular-row{grid-template-columns:18px 38px minmax(0,1fr) auto 20px;gap:8px;padding:7px 4px}
+  .artist-popular-art{width:38px;height:38px}
+  .artist-popular-duration{display:none}
+  .artist-popular-plays small{display:none}
   .artist-profile-backdrop-image{object-position:center}
   .artist-profile-hero-shade{background:linear-gradient(0deg,rgba(5,9,15,.96) 0%,rgba(5,9,15,.38) 100%)}
   .artist-profile-heading h2{font-size:clamp(34px,10vw,54px)}
