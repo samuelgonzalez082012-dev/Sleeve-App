@@ -5792,8 +5792,11 @@ async function deleteAllDetectedDuplicateCopies(button) {
       emptyMain.querySelector('h3').textContent = 'No artists found yet';
       emptyMain.querySelector('p').textContent = 'Add some music with artist tags — most MP3s already have them — and they\u2019ll show up here automatically.';
     } else if (isArtistAlbums){
-      emptyMain.querySelector('h3').textContent = 'No albums found';
-      emptyMain.querySelector('p').textContent = `None of ${currentView.artist}'s tracks have an album tag yet.`;
+      const releaseFilter = currentView.artistReleaseFilter || 'popular';
+      emptyMain.querySelector('h3').textContent = releaseFilter === 'singles' ? 'No short releases found' : 'No albums found';
+      emptyMain.querySelector('p').textContent = releaseFilter === 'singles'
+        ? 'No releases with six or fewer tracks were found in this artist’s local collection.'
+        : `None of ${currentView.artist}'s tracks have a named album tag yet.`;
     } else if (isBrowse){
       emptyMain.querySelector('h3').textContent = currentView.mode === 'year' ? 'No years found yet' : 'No genres found yet';
       emptyMain.querySelector('p').textContent = 'Add some music with year/genre tags — most MP3s already have them — and they\u2019ll show up here automatically.';
