@@ -238,7 +238,7 @@ const artistDiscographyCache = new Map();
 const artistDiscographyInFlight = new Map();
 
 function normalizeCatalogName(value) {
-  return String(value || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+  return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
 function mapCatalogArtist(artist, requestedName) {
