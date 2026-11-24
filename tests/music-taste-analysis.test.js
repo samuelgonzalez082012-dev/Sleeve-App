@@ -38,3 +38,24 @@ test('handles empty and malformed input safely', () => {
   assert.deepEqual(profile.artists, []);
   assert.equal(profile.metadataCoverage.genrePercent, 0);
 });
+test('builds a taste mix from the top genres using only local audio tracks', () => {
+  const tracks = [
+    { id: 1, title: 'Rock One', genre: 'Rock', playCount: 10 },
+    { id: 2, title: 'Rock Two', genre: 'Rock', playCount: 8 },
+    { id: 3, title: 'Jazz One', genre: 'Jazz', playCount: 5 },
+    { id: 4, title: 'Pop One', genre: 'Pop', playCount: 2 },
+    { id: 5, title: 'Video', genre: 'Rock', kind: 'video', playCount: 100 },
+    { id: 6, title: 'No ID', genre: 'Rock', playCount: 50 }
+  ];
+  const profile = analyze(tracks, { now: 1000 });
+  const mix = require('../music-taste-analysis').buildTasteMixTracks(tracks, profile, 4);
+  assert.deepEqual(mix.map((track) => track.id), [1, 3, 2, 4]);
+});
+
+test('returns no taste mix when there is no genre metadata and respects limits', () => {
+  const api = require('../music-taste-analysis');
+  const tracks = [{ id: 1, genre: 'Rock' }, { id: 2, genre: 'Rock' }, { id: 3, genre: 'Jazz' }];
+  assert.deepEqual(api.buildTasteMixTracks(tracks, { genres: [] }, 25), []);
+  const profile = api.analyze(tracks, { now: 1000 });
+  assert.equal(api.buildTasteMixTracks(tracks, profile, 1).length, 1);
+});
