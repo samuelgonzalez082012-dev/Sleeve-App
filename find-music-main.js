@@ -227,11 +227,80 @@ async function searchMusicBrainz(payload) {
   return promise;
 }
 
+
+const MUSICBRAINZ_ARTIST_URL = 'https://musicbrainz.org/ws/2/artist/';
+
+function mapDiscoveredArtist(artist, genre) {
+  const lifeSpan = artist && artist['life-span'] && typeof artist['life-span'] === 'object'
+    ? artist['life-span'] : {};
+  const area = artist && (artist.area || artist['begin-area']) || {};
+  return {
+    id: String(artist && artist.id || ''),
+    name: String(artist && artist.name || '').trim(),
+    genre,
+    score: Math.max(0, Math.min(100, Number(artist && artist.score) || 0)),
+    type: String(artist && artist.type || ''),
+    country: String(area.name || ''),
+    beginDate: String(lifeSpan.begin || ''),
+    endDate: String(lifeSpan.end || ''),
+    disambiguation: String(artist && artist.disambiguation || ''),
+    musicBrainzUrl: artist && artist.id
+      ? `https://musicbrainz.org/artist/${encodeURIComponent(artist.id)}`
+      : ''
+  };
+}
+
+async function searchArtistsForGenre(genre, options = {}) {
+  const params = new URLSearchParams({
+    query: `tag:"${escapeLucene(genre)}"`,
+    fmt: 'json',
+    limit: '20'
+  });
+  const json = await requestMusicBrainzJson(`${MUSICBRAINZ_ARTIST_URL}?${params.toString()}`, options);
+  const artists = Array.isArray(json && json.artists) ? json.artists : [];
+  return artists
+    .map((artist) => mapDiscoveredArtist(artist, genre))
+    .filter((artist) => artist.id && artist.name)
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    .slice(0, 15);
+}
+
+async function searchTasteArtists(payload, options = {}) {
+  if (!payload || typeof payload !== 'object') throw new Error('Invalid music discovery request.');
+  const inputGenres = Array.isArray(payload.genres) ? payload.genres : [];
+  const seen = new Set();
+  const genres = inputGenres.map((value) => String(value == null ? '' : value).trim().slice(0, 80))
+    .filter((genre) => {
+      const key = genre.toLocaleLowerCase();
+      if (!genre || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 3);
+  if (!genres.length) throw new Error('Sleeve needs at least one known genre to discover new artists.');
+
+  const results = [];
+  // MusicBrainz asks clients to stay at or below one request per second.
+  // Reuse the same serialized request queue as recording searches.
+  for (const genre of genres) {
+    results.push({ genre, artists: await searchArtistsForGenre(genre, options) });
+  }
+  return {
+    provider: 'MusicBrainz',
+    generatedAt: Date.now(),
+    genres: results,
+    resultCount: results.reduce((sum, group) => sum + group.artists.length, 0)
+  };
+}
+
 function registerFindMusicHandlers({ ipcMain, shell }) {
   if (!ipcMain || !shell) throw new TypeError('ipcMain and shell are required');
 
   ipcMain.handle('find-music:parse-link', async (_event, rawUrl) => {
     return core.parseReferenceLink(rawUrl);
+  });
+
+  ipcMain.handle('find-music:discover-by-taste', async (_event, payload) => {
+    return searchTasteArtists(payload);
   });
 
   ipcMain.handle('find-music:search-recordings', async (_event, payload) => {
@@ -252,6 +321,9 @@ function registerFindMusicHandlers({ ipcMain, shell }) {
 module.exports = {
   registerFindMusicHandlers,
   searchMusicBrainz,
+  searchTasteArtists,
+  searchArtistsForGenre,
+  mapDiscoveredArtist,
   mapRecording,
   artistCreditName,
   escapeLucene,
