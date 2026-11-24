@@ -52,7 +52,7 @@ The host renderer sends a debounced metadata snapshot to the main process. The m
 Authenticated endpoints (all require the paired device's bearer token):
 
 - `GET /v1/library` — available sections and item counts.
-- `GET /v1/library/tracks?limit=100&offset=0&q=search` — paginated track metadata.
+- `GET /v1/library/tracks?limit=100&offset=0&q=search` — paginated track metadata; optional exact `artist`, `album`, and `genre` filters support drilling into browse categories.
 - `GET /v1/library/albums` — albums grouped by artist and album title.
 - `GET /v1/library/artists` — artists and track/album counts.
 - `GET /v1/library/genres` — distinct genres.
