@@ -6045,6 +6045,71 @@ async function deleteAllDetectedDuplicateCopies(button) {
         cardGrid.appendChild(card);
       });
     } else if (isArtistAlbums){
+      // Phase 6.1: artist profile header. Only show facts derived from the
+      // local library; biography/origin/similar-artist data needs a metadata
+      // provider and is intentionally not fabricated here.
+      const profileArtist = getArtists().find(a => a.name === currentView.artist);
+      const profileTracks = profileArtist ? profileArtist.tracks : [];
+      const profileAlbums = getAlbumsForArtist(currentView.artist);
+      const profileThumb = artistThumbs.get(currentView.artist);
+      const profileGenres = Array.from(new Set(profileTracks
+        .map(track => String(track.genre || '').trim())
+        .filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      const profilePlays = profileTracks.reduce((total, track) => total + Math.max(0, Number(track.playCount) || 0), 0);
+      const profileArt = profileThumb && profileThumb.url
+        ? `<img class="artist-profile-image" src="${escapeHtml(profileThumb.url)}" alt="${escapeHtml(currentView.artist)}" loading="lazy" decoding="async">`
+        : `<div class="artist-profile-image artist-profile-image-placeholder" aria-hidden="true">${PERSON_ICON}</div>`;
+      const profile = document.createElement('section');
+      profile.className = 'artist-profile';
+      profile.setAttribute('aria-label', `${currentView.artist} artist profile`);
+      profile.innerHTML = `
+        <div class="artist-profile-hero">
+          <div class="artist-profile-art-wrap">${profileArt}</div>
+          <div class="artist-profile-heading">
+            <div class="artist-profile-eyebrow">ARTIST PROFILE</div>
+            <h2>${escapeHtml(currentView.artist)}</h2>
+            <p>Your artist hub, built from the music in your library.</p>
+            <div class="artist-profile-actions">
+              <button class="artist-profile-action artist-profile-photo-btn" type="button">${profileThumb ? 'Change photo' : 'Add artist photo'}</button>
+              ${profileThumb ? '<button class="artist-profile-action artist-profile-remove-photo" type="button">Remove photo</button>' : ''}
+            </div>
+          </div>
+        </div>
+        <div class="artist-profile-stats" aria-label="Collection statistics">
+          <div class="artist-profile-stat"><strong>${profileAlbums.length}</strong><span>Albums in library</span></div>
+          <div class="artist-profile-stat"><strong>${profileTracks.length}</strong><span>Tracks</span></div>
+          <div class="artist-profile-stat"><strong>${profilePlays.toLocaleString()}</strong><span>Plays</span></div>
+        </div>
+        <div class="artist-profile-details">
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">About</div>
+            <p class="artist-profile-muted">Biography and country of origin will appear when artist metadata is connected. Sleeve won't guess or invent profile details.</p>
+          </section>
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">Genres in your library</div>
+            <div class="artist-profile-tags">${profileGenres.length
+              ? profileGenres.slice(0, 8).map(genre => `<span class="artist-profile-tag">${escapeHtml(genre)}</span>`).join('')
+              : '<span class="artist-profile-muted">No genre tags found in this artist’s tracks yet.</span>'}</div>
+          </section>
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">Artist timeline</div>
+            <p class="artist-profile-muted">Active years will be shown once verified artist profile data is available.</p>
+          </section>
+          <section class="artist-profile-panel artist-profile-similar">
+            <div class="artist-profile-panel-heading">Similar artists</div>
+            <p class="artist-profile-muted">Artist connections are part of Phase 6.3.</p>
+          </section>
+        </div>
+        <div class="artist-profile-discography-heading">
+          <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Albums by ${escapeHtml(currentView.artist)}</h3></div>
+          <span>${profileAlbums.length} release group${profileAlbums.length === 1 ? '' : 's'}</span>
+        </div>
+      `;
+      profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
+      const removePhotoButton = profile.querySelector('.artist-profile-remove-photo');
+      if (removePhotoButton) removePhotoButton.addEventListener('click', () => clearArtistThumb(currentView.artist));
+      cardGrid.appendChild(profile);
+
       pagedItems.forEach(({ name, tracks }) => {
         const key = albumKey(currentView.artist, name);
         const entry = albumThumbs.get(key);
