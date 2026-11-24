@@ -24,7 +24,7 @@ jobs:
         with:
           script: |
             const { execSync } = require('node:child_process');
-            const files = ['main.js','preload.js','renderer.js','music-taste-analysis.js','work-manager.js','ux-enhancements.js','services/work-coordinator.js','workspace-layout.js','workspace-openrouter-ui.js','services/openrouter-service.js'];
+            const files = ['main.js','preload.js','renderer.js','music-taste-analysis.js','find-music-main.js','find-music-discovery-ui.js','work-manager.js','ux-enhancements.js','services/work-coordinator.js','workspace-layout.js','workspace-openrouter-ui.js','services/openrouter-service.js'];
             const failures = [];
             for (const file of files) {
               try { execSync('node --check ' + file, { encoding: 'utf8', stdio: 'pipe' }); }
