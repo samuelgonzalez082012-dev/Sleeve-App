@@ -2076,3 +2076,43 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
   .artist-profile-action{transition:none}
   .artist-profile-action:hover{transform:none}
 }
+
+
+/* Phase 6.1.4 — artist playlist appearances and local music videos */
+.artist-related-sections{grid-column:1 / -1;display:grid;grid-template-columns:minmax(0,1fr);gap:22px;min-width:0;margin:4px 0 18px;padding:0 clamp(18px,3vw,30px)}
+.artist-related-section{min-width:0}
+.artist-related-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:0 0 12px}
+.artist-related-heading h3{margin:5px 0 0;font-size:20px;letter-spacing:-.025em}
+.artist-related-count{padding-bottom:2px;color:var(--text-dim);font-size:11px;white-space:nowrap}
+.artist-featured-playlists{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:9px}
+.artist-featured-playlist{display:flex;align-items:center;gap:11px;min-width:0;padding:9px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);text-align:left;font:inherit;cursor:pointer;transition:background .16s ease,border-color .16s ease,transform .16s ease}
+.artist-featured-playlist:hover,.artist-featured-playlist:focus-visible{outline:none;border-color:var(--accent-ice);background:var(--panel-2);transform:translateY(-1px)}
+.artist-featured-playlist-art{display:flex;flex:0 0 52px;align-items:center;justify-content:center;width:52px;height:52px;overflow:hidden;border-radius:7px;background:var(--bg-elevated-2);color:var(--text-dim);font-size:22px}
+.artist-featured-playlist-art img,.artist-featured-playlist-art video{display:block;width:100%;height:100%;object-fit:cover}
+.artist-featured-playlist-meta,.artist-video-meta{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.artist-featured-playlist-meta strong,.artist-video-meta strong{overflow:hidden;color:var(--text);font-size:12px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.artist-featured-playlist-meta>span,.artist-video-meta>span{overflow:hidden;color:var(--text-dim);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.artist-featured-playlist-open{color:var(--text-dim);font-size:23px;line-height:1}
+.artist-related-empty{margin:0;padding:14px 15px;border:1px dashed var(--line-bright);border-radius:10px;color:var(--text-dimmer);font-size:11px;line-height:1.55}
+.artist-music-videos{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,175px),1fr));gap:12px}
+.artist-video-card{display:flex;flex-direction:column;gap:8px;min-width:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer}
+.artist-video-art{position:relative;display:flex;align-items:center;justify-content:center;width:100%;aspect-ratio:16 / 9;overflow:hidden;border:1px solid var(--line);border-radius:9px;background:var(--bg-elevated-2);color:var(--text-dim)}
+.artist-video-art>img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .2s ease}
+.artist-video-placeholder{font-size:28px;opacity:.75}
+.artist-video-play{position:absolute;right:9px;bottom:9px;display:flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid rgba(255,255,255,.28);border-radius:50%;background:rgba(8,12,18,.76);color:#fff;font-size:11px;opacity:0;transform:translateY(3px);transition:opacity .16s ease,transform .16s ease}
+.artist-video-card:hover .artist-video-art>img{transform:scale(1.035)}
+.artist-video-card:hover .artist-video-play,.artist-video-card:focus-visible .artist-video-play{opacity:1;transform:translateY(0)}
+.artist-video-card:focus-visible{outline:2px solid var(--accent-ice);outline-offset:4px;border-radius:8px}
+.artist-video-meta{padding:0 2px}
+.artist-videos-toggle{margin-top:12px;padding:7px 12px;border:1px solid var(--line-bright);border-radius:999px;background:transparent;color:var(--text-dim);font:inherit;font-size:10px;font-weight:650;cursor:pointer}
+.artist-videos-toggle:hover{border-color:var(--accent-ice);color:var(--text)}
+@media(max-width:620px){
+  .artist-related-sections{gap:19px;padding-left:18px;padding-right:18px}
+  .artist-related-heading{align-items:flex-start}
+  .artist-featured-playlists{grid-template-columns:1fr}
+  .artist-music-videos{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+}
+@media(prefers-reduced-motion:reduce){
+  .artist-featured-playlist,.artist-video-art>img,.artist-video-play{transition:none}
+  .artist-featured-playlist:hover{transform:none}
+}
