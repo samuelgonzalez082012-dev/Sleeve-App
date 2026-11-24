@@ -4532,7 +4532,10 @@ const titleVariants = [...new Set([
         return shuffleArray(musicTracks.slice()).slice(0, SMART_PLAYLIST_SIZE);
       case 'yourTaste': {
         const profile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(musicTracks) : null;
-        return window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.buildTasteMixTracks(musicTracks, profile, SMART_PLAYLIST_SIZE) : [];
+        const previousTasteTrackIds = playlists
+          .filter(pl => /^Your Taste Mix Mix(?: \\d+)?$/.test(pl.name || ''))
+          .flatMap(pl => Array.isArray(pl.trackIds) ? pl.trackIds : []);
+        return window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.buildTasteMixTracks(musicTracks, profile, SMART_PLAYLIST_SIZE, { previousTrackIds: previousTasteTrackIds }) : [];
       }
       default:
         return [];
