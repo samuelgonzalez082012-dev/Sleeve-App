@@ -23,5 +23,11 @@
     };
   }
 
-  return { buildSpotifySearchUrl, buildArtistLinks };
+  function buildSpotdlDiscoveryContext(artistName) {
+    const name = String(artistName == null ? '' : artistName).trim().slice(0, 200);
+    if (!name) return null;
+    return { artistName: name, artistSearchUrl: buildSpotifySearchUrl(name) };
+  }
+
+  return { buildSpotifySearchUrl, buildArtistLinks, buildSpotdlDiscoveryContext };
 });
