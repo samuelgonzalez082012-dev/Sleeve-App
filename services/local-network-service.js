@@ -296,6 +296,8 @@ class LocalNetworkService {
           for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'cache-control']) {
             if (remote.headers[name]) headers[name] = remote.headers[name];
           }
+          headers['access-control-allow-origin'] = '*';
+          headers['access-control-expose-headers'] = 'Accept-Ranges, Content-Range, Content-Length';
           res.writeHead(remote.statusCode || 502, headers);
           remote.pipe(res);
         });
