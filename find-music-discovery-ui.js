@@ -28,7 +28,7 @@
       </div>
       <div id="fmTasteDiscoveryStatus" class="find-music-status" role="status" aria-live="polite">Sleeve will use up to three genres from your library taste profile.</div>
       <div id="fmTasteDiscoveryResults" class="fm-taste-discovery-results" hidden></div>
-      <p class="fm-taste-disclaimer">Suggestions use MusicBrainz community tags and catalog matches. Spotify buttons open Spotify search results for the artist or their music; Sleeve does not need a Spotify login or API connection for these links.</p>
+      <p class="fm-taste-disclaimer">Suggestions use MusicBrainz community tags and catalog matches. Spotify opens search results; SpotDL opens the existing downloader for a selected artist. Downloads are never automatic and require you to confirm you have permission.</p>
     `;
 
     content.insertBefore(section, content.firstElementChild || null);
@@ -126,6 +126,19 @@
               catch (error) { setStatus(error && error.message ? error.message : 'Could not open Spotify search.', 'error'); }
             });
             actions.append(spotifyArtist, spotifyMusic);
+
+            if (window.SleeveSpotdl && typeof window.SleeveSpotdl.openDialog === 'function' &&
+                window.SleeveSpotifyLinks && typeof window.SleeveSpotifyLinks.buildSpotdlDiscoveryContext === 'function') {
+              const downloadContext = window.SleeveSpotifyLinks.buildSpotdlDiscoveryContext(artist.name);
+              if (downloadContext) {
+                const spotdlButton = document.createElement('button');
+                spotdlButton.type = 'button';
+                spotdlButton.className = 'find-music-secondary fm-taste-artist-open fm-taste-spotify-link';
+                spotdlButton.textContent = 'Download with SpotDL';
+                spotdlButton.addEventListener('click', () => window.SleeveSpotdl.openDialog(downloadContext));
+                actions.appendChild(spotdlButton);
+              }
+            }
           }
           card.append(details, actions);
           list.appendChild(card);
