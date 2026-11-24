@@ -563,7 +563,6 @@ function setStemVolume(name, value, options = {}) {
 
   updateStemGain(name);
   if (options.markCustom !== false) {
-    selectedStemPresetId = 'custom';
     const select = document.getElementById('stemPresetSelect');
     if (select) select.value = 'custom';
     updateStemPresetActions();
@@ -863,6 +862,9 @@ async function loadStemTrack(track) {
   selectedStemPresetId = track.stemMix ? 'custom' : 'original';
   applyStemMix(track.stemMix || stemPresetCore.ORIGINAL, { presetId: selectedStemPresetId, persist: false });
   createStemMixerUI();
+  stemPresetCore.STEM_NAMES.forEach((name) => {
+    setStemVolume(name, stemVolumes[name], { persist: false, markCustom: false });
+  });
   renderStemPresetOptions();
   updateStemPresetActions();
   showStemMixerUI();
