@@ -6414,6 +6414,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           const localMatch = getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex);
           const year = String(release.firstReleaseDate || '').slice(0, 4);
           const typeLabel = [release.primaryType, ...(release.secondaryTypes || [])].filter(Boolean).join(' · ') || 'Release';
+          const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(`${currentView.artist} ${release.title}`)}`;
           return `
             <article class="artist-catalog-release${localMatch ? ' is-owned' : ' is-missing'}">
               <div class="artist-catalog-art">
@@ -6427,7 +6428,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
               </div>
               ${localMatch
                 ? `<button class="artist-catalog-open-local" type="button" data-open-local-album="${escapeHtml(localMatch.name)}">Open album</button>`
-                : `<button class="artist-catalog-open-external" type="button" data-open-catalog-release="${escapeHtml(release.musicBrainzUrl || '')}">View release</button>`}
+                : `<button class="artist-catalog-open-external" type="button" data-open-catalog-release="${escapeHtml(spotifySearchUrl)}">View release on Spotify</button>`}
             </article>`;
         }).join('');
         catalogContent = `
@@ -6490,7 +6491,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           const url = button.dataset.openCatalogRelease;
           if (!url || !window.electronAPI || typeof window.electronAPI.findMusicOpenUrl !== 'function') return;
           try { await window.electronAPI.findMusicOpenUrl(url); }
-          catch (error) { console.warn('Could not open MusicBrainz release page:', error); }
+          catch (error) { console.warn('Could not open Spotify release search:', error); }
         });
       });
       const catalogRefreshButton = catalogSection.querySelector('[data-catalog-refresh]');
