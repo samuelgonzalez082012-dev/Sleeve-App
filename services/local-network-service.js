@@ -5,6 +5,7 @@ const dgram = require('node:dgram');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { LocalLibraryStreaming } = require('./local-library-streaming');
 
 const DISCOVERY_PORT = 45831;
 const SERVER_PORT = 45832;
@@ -64,6 +65,11 @@ class LocalNetworkService {
     this.devicesPath = path.join(this.userDataPath, 'network', 'paired-devices.json');
     this.devices = readJson(this.devicesPath, []);
     if (!Array.isArray(this.devices)) this.devices = [];
+    this.libraryStreaming = new LocalLibraryStreaming({ ffmpegPathProvider: options.ffmpegPathProvider });
+  }
+
+  setLibrarySnapshot(tracks, playlists) {
+    return this.libraryStreaming.setSnapshot(tracks, playlists);
   }
 
   getStatus() {
@@ -239,6 +245,12 @@ class LocalNetworkService {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     res.setHeader('cache-control', 'no-store');
     res.setHeader('x-content-type-options', 'nosniff');
+    if (url.pathname === '/v1/library' || url.pathname.startsWith('/v1/library/') || /^\\/v1\\/tracks\\/\\d+\\/stream$/.test(url.pathname)) {
+      const device = this.authorize(req);
+      if (!device) return this.sendJson(res, 401, { error: 'Device authorization required.' });
+      const handled = await this.libraryStreaming.handleRequest(req, res, url);
+      if (handled !== false) return handled;
+    }
     if (req.method === 'GET' && url.pathname === '/v1/info') {
       return this.sendJson(res, 200, {
         protocol: PROTOCOL, serverId: this.serverId, name: this.deviceName,
