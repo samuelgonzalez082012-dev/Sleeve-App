@@ -9,8 +9,11 @@ const root = path.resolve(__dirname, '..');
 const rendererFiles = [
   'duplicate-detection.js',
   'renderer.js',
+  'music-taste-analysis.js',
   'playlist-import.js',
   'find-music.js',
+  'find-music-spotify-links.js',
+  'find-music-discovery-ui.js',
   'find-music-watch-ui.js',
   'find-music-download-ui.js',
   'find-music-import-core.js',
