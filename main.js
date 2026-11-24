@@ -38,6 +38,17 @@ ipcMain.handle('network:device-revoke', async (_event, deviceId) => ({
 
 // The renderer publishes a metadata-only snapshot. File paths are validated
 // in the main process and are never returned by the network API.
+ipcMain.handle('network:paired-servers', async () => getLocalNetworkService().getPairedServers());
+ipcMain.handle('network:remote-library', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemoteLibrary(payload.serverId, payload.section, payload.options || {})
+);
+ipcMain.handle('network:remote-playlist-tracks', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemotePlaylistTracks(payload.serverId, payload.playlistId, payload.options || {})
+);
+ipcMain.handle('network:remote-stream-url', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemoteStreamUrl(payload.serverId, payload.trackId, payload.quality || 'original')
+);
+
 ipcMain.handle('network:library-sync', async (event, payload = {}) => {
   payload = payload && typeof payload === 'object' ? payload : {};
   if (!mainWindow || event.sender !== mainWindow.webContents) {
@@ -571,7 +582,10 @@ app.whenReady().then(() => {
 // for applications and their menu bar to stay in the app when there's
 // no windows open. This behavior is not required on non-macOS platforms.
 app.on('before-quit', () => {
-  if (localNetworkService) localNetworkService.stopHost().catch(() => {})
+  if (localNetworkService) {
+    localNetworkService.stopHost().catch(() => {});
+    localNetworkService.stopRemoteProxy().catch(() => {});
+  }
 })
 
 app.on('window-all-closed', function () {
