@@ -63,6 +63,7 @@ test('local network host exposes info and pairs an authorized device', async () 
     const remoteStreamUrl = await client.getRemoteStreamUrl(status.serverId, 12, 'original');
     const remoteRangeResponse = await fetch(remoteStreamUrl, { headers: { range: 'bytes=3-6' } });
     assert.equal(remoteRangeResponse.status, 206);
+    assert.equal(remoteRangeResponse.headers.get('access-control-allow-origin'), '*');
     assert.equal(Buffer.from(await remoteRangeResponse.arrayBuffer()).toString(), '3456');
 
     const unauthorizedLibrary = await fetch(baseUrl + '/v1/library');
