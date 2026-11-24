@@ -6239,6 +6239,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
       // local library; biography/origin/similar-artist data needs a metadata
       // provider and is intentionally not fabricated here.
       const profileArtist = getArtists().find(a => a.name === currentView.artist);
+      const profileCatalogState = getArtistDiscographyState(currentView.artist);
       const profileTracks = profileArtist ? profileArtist.tracks : [];
       const profileAlbums = getAlbumsForArtist(currentView.artist);
       const profileAlbumCount = profileAlbums.filter(album => album.name !== 'Unknown Album').length;
@@ -6320,18 +6321,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
             <p class="artist-profile-muted">Artist connections are part of Phase 6.3.</p>
           </section>
         </div>
-        <section class="artist-discography" aria-label="Artist discography in your library">
+        <section class="artist-discography" aria-label="Artist collection">
           <div class="artist-profile-discography-heading">
-            <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Discography</h3></div>
+            <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Albums in your library</h3></div>
             <span>${profileAlbumCount} release${profileAlbumCount === 1 ? '' : 's'}</span>
           </div>
-          <div class="artist-release-filters" role="group" aria-label="Filter artist releases">
-            <button class="artist-release-filter" type="button" data-release-filter="popular">Popular releases</button>
-            <button class="artist-release-filter" type="button" data-release-filter="albums">Albums</button>
-            <button class="artist-release-filter" type="button" data-release-filter="singles">Singles &amp; EPs</button>
-            <button class="artist-release-filter" type="button" data-release-filter="compilations" disabled title="Compilation tags are not currently available in the local library metadata">Compilations</button>
-          </div>
-          <p class="artist-release-filter-note">${currentView.artistReleaseFilter === 'singles' ? 'Showing shorter releases with six or fewer tracks.' : currentView.artistReleaseFilter === 'compilations' ? 'Compilation details need release metadata support.' : 'Release order and popularity are based on your local library.'}</p>
+          <p class="artist-release-filter-note">${profileCatalogState.status === 'loaded' ? 'Your owned releases are marked in the full discography below.' : 'Load the full discography to compare your local albums with the artist’s catalog.'}</p>
         </section>
       `;
       profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
