@@ -7292,6 +7292,8 @@ async function deleteAllDetectedDuplicateCopies(button) {
       // Reset the media element before assigning the new object URL. This
       // prevents a previous source/load state from swallowing the first play.
       try{ mediaEl.pause(); mediaEl.removeAttribute('src'); mediaEl.load(); }catch(e){}
+      if (track.remoteNetworkTrack) mediaEl.setAttribute('crossorigin', 'anonymous');
+      else mediaEl.removeAttribute('crossorigin');
       mediaEl.src = track.url;
       mediaEl.load();
       try{
