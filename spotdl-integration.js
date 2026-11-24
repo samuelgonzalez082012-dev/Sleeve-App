@@ -111,10 +111,12 @@
     const cancel = overlay.querySelector('#sleeveSpotdlCancel');
     const input = overlay.querySelector('#sleeveSpotdlUrl');
     const format = overlay.querySelector('#sleeveSpotdlFormat');
+    const rights = overlay.querySelector('#sleeveSpotdlRights');
     if (start) start.disabled = busy || !spotdlAvailable || !rightsConfirmed;
     if (cancel) cancel.hidden = !busy;
     if (input) input.disabled = busy;
     if (format) format.disabled = busy;
+    if (rights) rights.disabled = busy;
     if (start) start.textContent = busy ? 'Downloading…' : 'Download';
   }
 
@@ -221,7 +223,7 @@
     const artistContext = overlay.querySelector('#sleeveSpotdlArtistContext');
     const artistName = String(options && options.artistName || '').trim().slice(0, 200);
     const artistSearchUrl = String(options && options.artistSearchUrl || '').trim();
-    if (artistName && isAllowedSpotifyLink(artistSearchUrl)) {
+    if (artistName && window.SleeveSpotifyLinks && window.SleeveSpotifyLinks.isSpotifySearchUrl(artistSearchUrl)) {
       artistContext.hidden = false;
       overlay.querySelector('#sleeveSpotdlArtistName').textContent = `Discovered artist: ${artistName}`;
       overlay.querySelector('#sleeveSpotdlOpenArtistSearch').addEventListener('click', async () => {
@@ -342,15 +344,9 @@
   }
 
   function isAllowedSpotifyLink(value) {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== 'https:') return false;
-      const host = url.hostname.toLowerCase();
-      if (!['open.spotify.com', 'spotify.com', 'www.spotify.com', 'spotify.link'].includes(host)) return false;
-      return url.pathname.length > 1;
-    } catch (_) {
-      return false;
-    }
+    return Boolean(window.SleeveSpotifyLinks &&
+      typeof window.SleeveSpotifyLinks.isSpotifyContentUrl === 'function' &&
+      window.SleeveSpotifyLinks.isSpotifyContentUrl(value));
   }
 
   async function startDownload() {
