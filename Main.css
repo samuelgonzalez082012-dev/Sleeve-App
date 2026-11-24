@@ -1954,3 +1954,52 @@ body.reduce-motion .album-detail-hero.spotify-playlist-artwork-enabled .playlist
 .visualizer-color-row input[type=color]{width:42px;height:30px;padding:2px;border:1px solid var(--line-bright);border-radius:7px;background:var(--bg-elevated);cursor:pointer;}
 body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 @media(prefers-reduced-motion:reduce){.visualizer-canvas{mix-blend-mode:normal;}}
+
+
+/* Phase 6.1 — artist profile page */
+.artist-profile{
+  grid-column:1 / -1;
+  min-width:0;
+  margin:0 0 12px;
+  padding:clamp(18px,3vw,30px);
+  border:1px solid var(--line-bright);
+  border-radius:16px;
+  background:linear-gradient(135deg,rgba(31,55,83,.78),rgba(13,25,42,.92) 58%,rgba(10,21,38,.96));
+  box-shadow:var(--shadow-card);
+  color:var(--text);
+}
+.artist-profile-hero{display:flex;align-items:center;gap:clamp(18px,3vw,30px);min-width:0}
+.artist-profile-art-wrap{width:clamp(112px,17vw,176px);height:clamp(112px,17vw,176px);flex:0 0 auto;overflow:hidden;border-radius:14px;background:var(--bg-elevated-2);box-shadow:0 14px 34px rgba(0,0,0,.3)}
+.artist-profile-image{display:block;width:100%;height:100%;object-fit:cover}
+.artist-profile-image-placeholder{display:flex;align-items:center;justify-content:center;color:var(--text-dim);padding:28px}
+.artist-profile-image-placeholder svg{width:100%;height:100%;max-width:76px;max-height:76px}
+.artist-profile-heading{min-width:0}
+.artist-profile-eyebrow{font-size:10px;font-weight:700;letter-spacing:.16em;color:var(--accent-ice);text-transform:uppercase}
+.artist-profile-heading h2{margin:8px 0 5px;font-size:clamp(27px,4vw,44px);line-height:1.05;letter-spacing:-.045em;overflow-wrap:anywhere}
+.artist-profile-heading p{margin:0;color:var(--text-dim);font-size:13px}
+.artist-profile-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}
+.artist-profile-action{border:1px solid var(--line-bright);border-radius:8px;background:rgba(255,255,255,.045);color:var(--text);padding:7px 11px;font:inherit;font-size:11px;cursor:pointer}
+.artist-profile-action:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.24)}
+.artist-profile-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:24px}
+.artist-profile-stat{display:flex;flex-direction:column;gap:4px;padding:13px 15px;border:1px solid var(--line);border-radius:10px;background:rgba(4,12,23,.24)}
+.artist-profile-stat strong{font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
+.artist-profile-stat span{font-size:11px;color:var(--text-dim)}
+.artist-profile-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.artist-profile-panel{min-width:0;padding:15px;border:1px solid var(--line);border-radius:10px;background:rgba(4,12,23,.2)}
+.artist-profile-panel-heading{margin-bottom:8px;font-size:12px;font-weight:700;letter-spacing:.04em}
+.artist-profile-muted{margin:0;color:var(--text-dimmer);font-size:11px;line-height:1.6}
+.artist-profile-tags{display:flex;flex-wrap:wrap;gap:6px}
+.artist-profile-tag{padding:5px 9px;border:1px solid rgba(143,216,247,.18);border-radius:999px;background:rgba(143,216,247,.07);color:var(--accent-ice);font-size:10px}
+.artist-profile-discography-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:25px;padding-top:19px;border-top:1px solid var(--line)}
+.artist-profile-discography-heading h3{margin:5px 0 0;font-size:20px;letter-spacing:-.025em}
+.artist-profile-discography-heading>span{padding-bottom:2px;color:var(--text-dim);font-size:11px;white-space:nowrap}
+@media(max-width:620px){
+  .artist-profile-hero{align-items:flex-start;flex-direction:column}
+  .artist-profile-art-wrap{width:116px;height:116px}
+  .artist-profile-details{grid-template-columns:1fr}
+  .artist-profile-stats{gap:7px}
+  .artist-profile-stat{padding:11px 9px}
+  .artist-profile-stat strong{font-size:19px}
+  .artist-profile-stat span{font-size:10px}
+  .artist-profile-discography-heading{align-items:flex-start;flex-direction:column}
+}
