@@ -4463,6 +4463,7 @@ const titleVariants = [...new Set([
     { key: 'leastPlayed', title: 'Least Played', sub: "Songs you own but rarely reach for" },
     { key: 'recentlyAdded', title: 'Recently Added', sub: 'Newest additions to your library' },
     { key: 'random', title: 'Random Mix', sub: 'A shuffled grab-bag for a change of pace' },
+    { key: 'yourTaste', title: 'Your Taste Mix', sub: 'A mix built from the genres and artists you already listen to' },
   ];
   const SMART_PLAYLIST_SIZE = 25;
 
@@ -4528,6 +4529,10 @@ const titleVariants = [...new Set([
         return sortedByAdded(musicTracks).slice(0, SMART_PLAYLIST_SIZE);
       case 'random':
         return shuffleArray(musicTracks.slice()).slice(0, SMART_PLAYLIST_SIZE);
+      case 'yourTaste': {
+        const profile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(musicTracks) : null;
+        return window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.buildTasteMixTracks(musicTracks, profile, SMART_PLAYLIST_SIZE) : [];
+      }
       default:
         return [];
     }
@@ -4548,7 +4553,9 @@ const titleVariants = [...new Set([
     const picked = pickTracksForCriterion(criterion);
 
     if (!picked.length){
-      alert("There isn't enough listening history yet to build that playlist.");
+      alert(criterion === 'yourTaste'
+        ? "Sleeve couldn't build a Taste Mix yet. Make sure your music has genre tags, then try again."
+        : "There isn't enough listening history yet to build that playlist.");
       return null;
     }
 
