@@ -124,6 +124,7 @@
         </button>
 <div class="stage-panel" id="stagePanel">
           <button class="stage-close-btn" id="stageCloseBtn" type="button" title="Close now-playing panel" aria-label="Close now-playing panel">&times;</button>
+          <img class="stage-artwork-backdrop" id="stageArtworkBackdrop" alt="" aria-hidden="true" decoding="async">
           <div class="stage-visual" id="stageVisual">
             <video id="mediaEl" playsinline></video>
             <div class="stage-vinyl">
@@ -518,6 +519,25 @@
         <div class="drawer-toggle-row">
           <span>Thumbnail in now playing</span>
           <label class="switch"><input type="checkbox" id="toggleNowPlayingThumb"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
+          <span>Dynamic artwork background</span>
+          <label class="switch"><input type="checkbox" id="toggleDynamicArtworkBackground" checked><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-section-title" style="margin-top:14px;">Background blur</div>
+        <div class="range-row">
+          <input type="range" id="artworkBackgroundBlurRange" min="0" max="64" step="1" value="38" aria-label="Artwork background blur">
+          <span class="range-value" id="artworkBackgroundBlurValue">38px</span>
+        </div>
+        <div class="drawer-section-title" style="margin-top:12px;">Background intensity</div>
+        <div class="range-row">
+          <input type="range" id="artworkBackgroundIntensityRange" min="0" max="100" step="1" value="72" aria-label="Artwork background intensity">
+          <span class="range-value" id="artworkBackgroundIntensityValue">72%</span>
+        </div>
+        <div class="drawer-section-title" style="margin-top:12px;">Background saturation</div>
+        <div class="range-row">
+          <input type="range" id="artworkBackgroundSaturationRange" min="0" max="200" step="5" value="125" aria-label="Artwork background saturation">
+          <span class="range-value" id="artworkBackgroundSaturationValue">125%</span>
         </div>
         <div class="drawer-section-title" style="margin-top:14px;">Thumbnail framing</div>
         <div class="segmented" id="thumbnailFitSeg">

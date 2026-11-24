@@ -1,0 +1,22 @@
+name: AI workspace validation
+on:
+  push:
+    branches: [feature/ai-workspace-redesign]
+  pull_request:
+    branches: [feature/ai-workspace-redesign]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --check main.js && node --check preload.js && node --check renderer.js && node --check workspace-layout.js && node --check workspace-openrouter-ui.js && node --check services/openrouter-service.js && node --check services/agent-event-store.js && node --check services/agent-orchestrator.js && node --check scripts/workspace-smoke.js
+      - run: npm test
+      - name: Electron workspace smoke test
+        run: npm run smoke:workspace
+      - name: Electron browser service smoke test
+        run: npm run smoke:browser

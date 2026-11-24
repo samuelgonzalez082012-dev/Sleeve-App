@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workspace mode smoke fixture</title><link rel="stylesheet" href="../workspace-redesign.css"></head>
+<body><aside id="chatbar"><button id="enterAiWorkspace" type="button">AI Workspace</button><button id="standalone-browser" type="button" data-view="browser">Browser</button></aside>
+<main id="mainWorkspace"><header id="topbar">Local AI Runner</header>
+<div id="workspaceViews">
+<section id="chatView" class="workspace-view active" data-view="chat"><h2>Chat fixture</h2></section>
+<section id="editorView" class="workspace-view" data-view="editor"><h2>Editor fixture</h2></section>
+<section id="browserView" class="workspace-view" data-view="browser"><h2>Browser fixture</h2></section>
+<section class="workspace-view" data-view="projects"><h2>Projects fixture</h2></section>
+<section class="workspace-view" data-view="models"><h2>Models fixture</h2></section>
+<section class="workspace-view" data-view="tasks"><h2>Tasks fixture</h2></section>
+<section class="workspace-view" data-view="connections"><h2>Connections fixture</h2></section>
+<section class="workspace-view" data-view="memory"><h2>Memory fixture</h2></section>
+<section class="workspace-view" data-view="insights"><h2>Insights fixture</h2></section>
+<section class="workspace-view" data-view="settings"><h2>Settings fixture</h2></section>
+<section class="workspace-view" data-view="help"><h2>Help fixture</h2></section>
+</div></main>
+<script>
+const config={planner:{name:'Planner',provider:'openrouter',model:'test/planner',instructions:'Coordinate.'},'developer-1':{name:'Developer 1',provider:'openrouter',model:'test/dev1',instructions:'Build.'},'developer-2':{name:'Developer 2',provider:'ollama',model:'qwen-coder',instructions:'Test.'},reviewer:{name:'Reviewer',provider:'openrouter',model:'test/reviewer',instructions:'Review.'}};
+window.__smokeCalls=[];window.__workspacePath='/workspace/smoke';
+window.LocalAIWorkspaceNavigate=view=>{window.__nativeView=view;document.querySelectorAll('.workspace-view').forEach(x=>x.classList.toggle('active',x.dataset.view===view));};
+document.querySelector('#standalone-browser').addEventListener('click',()=>{window.LocalAIWorkspaceExit('browser',true);window.LocalAIWorkspaceNavigate('browser');});
+window.localAI={
+ workspace:{info:async()=>({path:window.__workspacePath,name:'smoke'}),list:async()=>[],read:async()=>'',create:async path=>({path}),write:async path=>({path})},
+ agentTeam:{getConfig:async()=>structuredClone(config),saveConfig:async value=>{Object.assign(config,value);return structuredClone(config);},models:async provider=>[{id:provider==='ollama'?'qwen-coder':'test/model',name:'Smoke model'}],templates:async()=>['Smoke template'],saveTemplate:async()=>['Smoke template'],loadTemplate:async()=>structuredClone(config),run:async(message,to)=>{window.__smokeCalls.push({message,to});return {plan:'Smoke plan completed',needsUserInput:'',assignments:[{agentId:'developer-1',task:message}],proposals:[]};},pause:async()=>({paused:true}),resume:async()=>({resumed:true}),stop:async()=>({stopped:true}),status:async()=>({running:false})},
+ agentEvents:{list:async()=>[{id:'e1',at:new Date().toISOString(),type:'task-completed',agentId:'developer-1',summary:'Smoke task completed',detail:'Checked fixture'}],append:async event=>event,onUpdate:()=>()=>{}},
+ openRouter:{status:async()=>({connected:false}),models:async()=>[],setKey:async()=>({connected:true})}
+};
+</script><script src="../workspace-layout.js"></script><script src="../workspace-openrouter-ui.js"></script></body></html>

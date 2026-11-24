@@ -1828,3 +1828,114 @@
   opacity: 0.55;
   cursor: wait;
 }
+
+/* Phase 2 — optional, artwork-driven Now Playing atmosphere.
+   The existing Spotify preset owns its separate backdrop and is intentionally
+   excluded by the renderer's artwork-background-enabled class. */
+.stage-panel.artwork-background-enabled {
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-card) 120%);
+  transition: background-color .35s ease, border-color .35s ease;
+}
+.stage-panel.artwork-background-enabled::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(112deg,
+    var(--stage-artwork-color-a, var(--accent-blue)),
+    var(--stage-artwork-color-b, var(--bg-elevated)));
+  opacity: calc(var(--stage-artwork-intensity, .72) * .34);
+  transition: opacity .35s ease, background .45s ease;
+}
+.stage-panel.artwork-background-enabled > :not(.stage-artwork-backdrop) {
+  position: relative;
+  z-index: 2;
+}
+.stage-panel.artwork-background-enabled .stage-artwork-backdrop {
+  position: absolute;
+  inset: -12%;
+  z-index: 0;
+  width: 124%;
+  height: 124%;
+  object-fit: cover;
+  opacity: var(--stage-artwork-intensity, .72);
+  filter: blur(var(--stage-artwork-blur, 38px)) saturate(var(--stage-artwork-saturation, 125%)) brightness(.72);
+  transform: scale(1.04);
+  pointer-events: none;
+  user-select: none;
+  transition: opacity .35s ease, filter .35s ease;
+}
+.stage-panel.artwork-background-enabled .stage-close-btn {
+  z-index: 4;
+}
+body.theme-paper .stage-panel.artwork-background-enabled {
+  background: linear-gradient(135deg, rgba(231,230,223,.82), rgba(216,216,209,.9));
+}
+body.theme-paper .stage-panel.artwork-background-enabled::before {
+  opacity: .14;
+}
+body.reduce-motion .stage-panel.artwork-background-enabled,
+body.reduce-motion .stage-panel.artwork-background-enabled::before,
+body.reduce-motion .stage-panel.artwork-background-enabled .stage-artwork-backdrop {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-panel.artwork-background-enabled,
+  .stage-panel.artwork-background-enabled::before,
+  .stage-panel.artwork-background-enabled .stage-artwork-backdrop {
+    transition: none;
+  }
+}
+
+
+/* Phase 2 — Spotify playlist-detail hero artwork atmosphere.
+   This is scoped to the playlist summary card, not Spotify's Now Playing stage. */
+.album-detail-hero.spotify-playlist-artwork-enabled{
+  position:relative;
+  isolation:isolate;
+  overflow:hidden;
+  background:linear-gradient(120deg,var(--bg-elevated),var(--bg-card));
+  transition:background-color .35s ease;
+}
+.album-detail-hero.spotify-playlist-artwork-enabled::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background:linear-gradient(112deg,
+    var(--playlist-artwork-color-a,var(--accent-blue)),
+    var(--playlist-artwork-color-b,var(--bg-elevated)));
+  opacity:calc(var(--stage-artwork-intensity,.72) * .34);
+  transition:opacity .35s ease,background .45s ease;
+}
+.album-detail-hero.spotify-playlist-artwork-enabled > :not(.playlist-artwork-backdrop){
+  position:relative;
+  z-index:2;
+}
+.album-detail-hero.spotify-playlist-artwork-enabled .playlist-artwork-backdrop{
+  position:absolute;
+  inset:-12%;
+  z-index:0;
+  width:124%;
+  height:124%;
+  object-fit:cover;
+  opacity:var(--stage-artwork-intensity,.72);
+  filter:blur(var(--stage-artwork-blur,38px)) saturate(var(--stage-artwork-saturation,125%)) brightness(.72);
+  transform:scale(1.04);
+  pointer-events:none;
+  user-select:none;
+  transition:opacity .35s ease,filter .35s ease;
+}
+body.theme-paper .album-detail-hero.spotify-playlist-artwork-enabled::before{opacity:.14;}
+body.reduce-motion .album-detail-hero.spotify-playlist-artwork-enabled,
+body.reduce-motion .album-detail-hero.spotify-playlist-artwork-enabled::before,
+body.reduce-motion .album-detail-hero.spotify-playlist-artwork-enabled .playlist-artwork-backdrop{transition:none;}
+@media(prefers-reduced-motion:reduce){
+  .album-detail-hero.spotify-playlist-artwork-enabled,
+  .album-detail-hero.spotify-playlist-artwork-enabled::before,
+  .album-detail-hero.spotify-playlist-artwork-enabled .playlist-artwork-backdrop{transition:none;}
+}

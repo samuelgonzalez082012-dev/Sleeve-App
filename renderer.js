@@ -1678,6 +1678,10 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     highContrast: false,
     pattern: false,
     nowPlayingThumb: false,
+    dynamicArtworkBackground: true,
+    artworkBackgroundBlur: 38,
+    artworkBackgroundIntensity: 72,
+    artworkBackgroundSaturation: 125,
     thumbnailFit: 'cover',
     font: 'serif',
     view: 'grid',
@@ -2245,6 +2249,10 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     document.body.classList.toggle('preset-sleeve', settings.appPreset === 'sleeve');
     document.body.classList.toggle('preset-spotify', settings.appPreset === 'spotify');
     document.body.classList.toggle('preset-amazonMusic', settings.appPreset === 'amazonMusic');
+    document.documentElement.style.setProperty('--stage-artwork-blur', `${Math.max(0, Math.min(64, Number(settings.artworkBackgroundBlur ?? 38)))}px`);
+    document.documentElement.style.setProperty('--stage-artwork-intensity', String(Math.max(0, Math.min(100, Number(settings.artworkBackgroundIntensity ?? 72))) / 100));
+    document.documentElement.style.setProperty('--stage-artwork-saturation', `${Math.max(0, Math.min(200, Number(settings.artworkBackgroundSaturation ?? 125)))}%`);
+    stagePanel.classList.toggle('artwork-background-enabled', settings.dynamicArtworkBackground !== false && settings.appPreset !== 'spotify' && !stagePanel.classList.contains('has-video'));
     document.body.classList.toggle('spotify-now-playing', settings.appPreset === 'spotify' && settings.showStage && !stagePanel.classList.contains('stage-closed'));
     
     cardGrid.classList.toggle('view-list', settings.view === 'list');
@@ -2302,6 +2310,13 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     document.getElementById('toggleHighContrast').checked = !!settings.highContrast;
     document.getElementById('togglePattern').checked = !!settings.pattern;
     document.getElementById('toggleNowPlayingThumb').checked = !!settings.nowPlayingThumb;
+    document.getElementById('toggleDynamicArtworkBackground').checked = settings.dynamicArtworkBackground !== false;
+    document.getElementById('artworkBackgroundBlurRange').value = settings.artworkBackgroundBlur ?? 38;
+    document.getElementById('artworkBackgroundBlurValue').textContent = `${settings.artworkBackgroundBlur ?? 38}px`;
+    document.getElementById('artworkBackgroundIntensityRange').value = settings.artworkBackgroundIntensity ?? 72;
+    document.getElementById('artworkBackgroundIntensityValue').textContent = `${settings.artworkBackgroundIntensity ?? 72}%`;
+    document.getElementById('artworkBackgroundSaturationRange').value = settings.artworkBackgroundSaturation ?? 125;
+    document.getElementById('artworkBackgroundSaturationValue').textContent = `${settings.artworkBackgroundSaturation ?? 125}%`;
     document.getElementById('toggleCardShadow').checked = settings.cardShadow !== false;
     document.getElementById('toggleBoldTitles').checked = !!settings.boldTitles;
     document.getElementById('toggleHairlines').checked = settings.hairlines !== false;
@@ -2498,6 +2513,26 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   document.getElementById('toggleNowPlayingThumb').addEventListener('change', (e) => {
     updateSetting({ nowPlayingThumb: e.target.checked });
     if (currentIndex !== -1) updateNowPlayingArt(playlist[currentIndex]);
+  });
+  document.getElementById('toggleDynamicArtworkBackground').addEventListener('change', (e) => {
+    updateSetting({ dynamicArtworkBackground: e.target.checked });
+    if (currentIndex !== -1) updateNowPlayingArt(playlist[currentIndex]);
+    if (currentView.type === 'playlist') scheduleRender(searchInput.value);
+  });
+  document.getElementById('artworkBackgroundBlurRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('artworkBackgroundBlurValue').textContent = `${value}px`;
+    updateSetting({ artworkBackgroundBlur: value });
+  });
+  document.getElementById('artworkBackgroundIntensityRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('artworkBackgroundIntensityValue').textContent = `${value}%`;
+    updateSetting({ artworkBackgroundIntensity: value });
+  });
+  document.getElementById('artworkBackgroundSaturationRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('artworkBackgroundSaturationValue').textContent = `${value}%`;
+    updateSetting({ artworkBackgroundSaturation: value });
   });
   document.getElementById('miniPlayerScaleRange').addEventListener('input', (e) => {
     const v = parseInt(e.target.value, 10);
@@ -3189,10 +3224,22 @@ startAudioOutputMonitoring();
     const artInner = activePlaylist.thumb
       ? `<img src="${escapeHtml(activePlaylist.thumb)}" alt="${escapeHtml(activePlaylist.name)}">`
       : iconFor(activePlaylist.type === 'video' ? 'video' : 'audio');
+    const firstArtworkTrack = playlistTracks.find(track => track.kind !== 'video');
+    const firstArtworkEntry = firstArtworkTrack
+      ? (firstArtworkTrack.thumbUrl && firstArtworkTrack.thumbKind !== 'video'
+        ? { url: firstArtworkTrack.thumbUrl, kind: firstArtworkTrack.thumbKind }
+        : albumArtForTrack(firstArtworkTrack))
+      : null;
+    const playlistHeroArtwork = activePlaylist.type !== 'video'
+      ? (activePlaylist.thumb || (firstArtworkEntry && firstArtworkEntry.kind !== 'video' ? firstArtworkEntry.url : ''))
+      : '';
+    const useSpotifyPlaylistBackdrop = settings.appPreset === 'spotify' &&
+      settings.dynamicArtworkBackground !== false && !!playlistHeroArtwork;
 
     playlistTracks.forEach(track => probeDuration(track));
     albumDetail.innerHTML = `
-      <section class="album-detail-hero">
+      <section class="album-detail-hero${useSpotifyPlaylistBackdrop ? ' spotify-playlist-artwork-enabled' : ''}">
+        ${useSpotifyPlaylistBackdrop ? `<img class="playlist-artwork-backdrop" src="${escapeHtml(playlistHeroArtwork)}" alt="" aria-hidden="true" decoding="async">` : ''}
         <button class="album-detail-art" type="button" title="Set playlist artwork">${artInner}</button>
         <div class="album-detail-info">
           <div class="album-detail-title">${escapeHtml(activePlaylist.name)}</div>
@@ -3222,6 +3269,25 @@ startAudioOutputMonitoring();
         }).join('')}
       </section>`;
 
+    const playlistHero = albumDetail.querySelector('.album-detail-hero.spotify-playlist-artwork-enabled');
+    const playlistBackdrop = playlistHero && playlistHero.querySelector('.playlist-artwork-backdrop');
+    if (playlistBackdrop){
+      const applyPlaylistPalette = () => {
+        if (playlistBackdrop.isConnected && playlistBackdrop.naturalWidth){
+          applyArtworkPalette(playlistBackdrop, playlistHeroArtwork, playlistHero, 'playlist-artwork');
+        }
+      };
+      playlistBackdrop.addEventListener('load', applyPlaylistPalette, { once: true });
+      playlistBackdrop.addEventListener('error', () => {
+        if (playlistHero.isConnected){
+          playlistHero.classList.remove('spotify-playlist-artwork-enabled');
+          playlistBackdrop.remove();
+          playlistHero.style.removeProperty('--playlist-artwork-color-a');
+          playlistHero.style.removeProperty('--playlist-artwork-color-b');
+        }
+      }, { once: true });
+      if (playlistBackdrop.complete && playlistBackdrop.naturalWidth) applyPlaylistPalette();
+    }
     albumDetail.querySelector('.album-detail-art').addEventListener('click', () => openPlaylistThumbPicker(activePlaylist));
     albumDetail.querySelector('.album-detail-play').addEventListener('click', () => {
       activeQueueIds = playlistTracks.map(track => track.id);
@@ -6053,6 +6119,93 @@ async function deleteAllDetectedDuplicateCopies(button) {
     savePlaybackState();
   }
 
+  // Dynamic artwork backgrounds are presentation-only: they never touch the
+  // media element or Web Audio graph. Palette work is deliberately small and
+  // cached in memory so rapid track changes do not repeatedly sample images.
+  const artworkPaletteCache = new Map();
+  const stageArtworkBackdrop = document.getElementById('stageArtworkBackdrop');
+
+  function applyArtworkPalette(image, cacheKey, targetElement = stagePanel, variablePrefix = 'stage-artwork'){
+    if (!image || !image.naturalWidth || !image.naturalHeight) return;
+    let palette = artworkPaletteCache.get(cacheKey);
+    if (!palette){
+      try{
+        const canvas = document.createElement('canvas');
+        canvas.width = 24;
+        canvas.height = 24;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+        context.drawImage(image, 0, 0, 24, 24);
+        const pixels = context.getImageData(0, 0, 24, 24).data;
+        let totalR = 0, totalG = 0, totalB = 0, totalWeight = 0;
+        let vividR = 0, vividG = 0, vividB = 0, vividWeight = 0;
+        for (let i = 0; i < pixels.length; i += 4){
+          const alpha = pixels[i + 3] / 255;
+          if (alpha < 0.35) continue;
+          const red = pixels[i], green = pixels[i + 1], blue = pixels[i + 2];
+          const max = Math.max(red, green, blue), min = Math.min(red, green, blue);
+          const saturation = max ? (max - min) / max : 0;
+          const weight = alpha * (0.35 + saturation);
+          totalR += red * alpha; totalG += green * alpha; totalB += blue * alpha; totalWeight += alpha;
+          if (saturation > 0.22 && max > 35){
+            vividR += red * weight; vividG += green * weight; vividB += blue * weight; vividWeight += weight;
+          }
+        }
+        if (!totalWeight) return;
+        const average = [totalR, totalG, totalB].map(value => Math.round(value / totalWeight));
+        const vivid = vividWeight
+          ? [vividR, vividG, vividB].map(value => Math.round(value / vividWeight))
+          : average;
+        const toCss = rgb => `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        palette = { primary: toCss(vivid), secondary: toCss(average) };
+        artworkPaletteCache.set(cacheKey, palette);
+        if (artworkPaletteCache.size > 48) artworkPaletteCache.delete(artworkPaletteCache.keys().next().value);
+      }catch(error){
+        // Some remote artwork servers do not allow canvas pixel access.
+        // The image can still be displayed; the stage simply keeps its theme fallback.
+        return;
+      }
+    }
+    targetElement.style.setProperty(`--${variablePrefix}-color-a`, palette.primary);
+    targetElement.style.setProperty(`--${variablePrefix}-color-b`, palette.secondary);
+  }
+
+  function updateArtworkBackground(track, artworkUrl, isVideoThumb){
+    const enabled = settings.dynamicArtworkBackground !== false &&
+      settings.appPreset !== 'spotify' && track && track.kind !== 'video' &&
+      artworkUrl && !isVideoThumb;
+    stagePanel.classList.toggle('artwork-background-enabled', !!enabled);
+    if (!enabled){
+      if (stageArtworkBackdrop.getAttribute('src')) stageArtworkBackdrop.removeAttribute('src');
+      stageArtworkBackdrop.style.opacity = '';
+      stagePanel.style.removeProperty('--stage-artwork-color-a');
+      stagePanel.style.removeProperty('--stage-artwork-color-b');
+      return;
+    }
+    if (stageArtworkBackdrop.getAttribute('src') === artworkUrl){
+      if (stageArtworkBackdrop.complete) applyArtworkPalette(stageArtworkBackdrop, artworkUrl);
+      return;
+    }
+    stageArtworkBackdrop.style.opacity = '0';
+    stageArtworkBackdrop.onload = () => {
+      if (stageArtworkBackdrop.getAttribute('src') === artworkUrl) {
+        applyArtworkPalette(stageArtworkBackdrop, artworkUrl);
+        stageArtworkBackdrop.style.opacity = '';
+      }
+    };
+    stageArtworkBackdrop.onerror = () => {
+      if (stageArtworkBackdrop.getAttribute('src') !== artworkUrl) return;
+      stageArtworkBackdrop.style.opacity = '0';
+      stagePanel.style.removeProperty('--stage-artwork-color-a');
+      stagePanel.style.removeProperty('--stage-artwork-color-b');
+    };
+    stageArtworkBackdrop.src = artworkUrl;
+    if (stageArtworkBackdrop.complete && stageArtworkBackdrop.naturalWidth){
+      applyArtworkPalette(stageArtworkBackdrop, artworkUrl);
+      stageArtworkBackdrop.style.opacity = '';
+    }
+  }
+
   function updateNowPlayingArt(track){
     const spotifyAlbumArt = settings.appPreset === 'spotify' && track && track.kind !== 'video'
       ? albumThumbs.get(albumKey((track.artist || '').trim() || 'Unknown Artist', (track.album || '').trim() || 'Unknown Album'))
@@ -6067,6 +6220,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
     stageVisual.classList.toggle('has-thumb-video', isVideoThumb);
     stageThumb.src = useThumb && !isVideoThumb ? effectiveUrl : '';
     npThumb.src = useThumb && !isVideoThumb ? effectiveUrl : '';
+    updateArtworkBackground(track, effectiveUrl, isVideoThumb);
     const videoUrl = isVideoThumb ? effectiveUrl : '';
     if (stageThumbVideo.src !== videoUrl){ stageThumbVideo.src = videoUrl; }
     if (npThumbVideo.src !== videoUrl){ npThumbVideo.src = videoUrl; }

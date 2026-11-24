@@ -1,0 +1,44 @@
+name: Package source archive
+on:
+  push:
+    branches:
+      - feature/editor-chat-sidebar-customization
+    paths-ignore:
+      - package-lock.json
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Synchronize the existing npm lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Install dependencies for tests
+        run: npm ci --ignore-scripts
+      - name: Check JavaScript syntax
+        run: find . -path './node_modules' -prune -o -name '*.js' -print0 | xargs -0 -n1 node --check
+      - name: Run test suite
+        run: npm test
+      - name: Commit corrected lockfile when needed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- package-lock.json; then
+            git add package-lock.json
+            git commit -m "chore: synchronize npm lockfile"
+            git push
+          fi
+      - name: Upload complete source tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: Local-AI-Runner-Editor-Milestone
+          path: |
+            .
+            !.git/**
+            !node_modules/**
+            !.github/**
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14
