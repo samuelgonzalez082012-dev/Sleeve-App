@@ -9,6 +9,13 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // Local network features expose narrow host/discovery/pairing operations only.
+  localNetworkGetHostStatus: () => ipcRenderer.invoke('network:host-status'),
+  localNetworkStartHost: () => ipcRenderer.invoke('network:host-start'),
+  localNetworkStopHost: () => ipcRenderer.invoke('network:host-stop'),
+  localNetworkDiscover: (timeoutMs) => ipcRenderer.invoke('network:discover', timeoutMs),
+  localNetworkPair: (payload) => ipcRenderer.invoke('network:pair', payload),
+  localNetworkRevokeDevice: (deviceId) => ipcRenderer.invoke('network:device-revoke', deviceId),
   getMediaFileUrl: (filePath) =>
   ipcRenderer.invoke('media:file-url', filePath),
   splitStems: (filePath) => ipcRenderer.invoke('stems:split', filePath),
