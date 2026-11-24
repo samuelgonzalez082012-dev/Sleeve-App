@@ -39,6 +39,7 @@ ipcMain.handle('network:device-revoke', async (_event, deviceId) => ({
 // The renderer publishes a metadata-only snapshot. File paths are validated
 // in the main process and are never returned by the network API.
 ipcMain.handle('network:library-sync', async (event, payload = {}) => {
+  payload = payload && typeof payload === 'object' ? payload : {};
   if (!mainWindow || event.sender !== mainWindow.webContents) {
     throw new Error('Library sync is only available to the primary Sleeve window.');
   }
