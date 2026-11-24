@@ -77,7 +77,7 @@ body .main-content.lyrics-page-open > #albumDetail,
 body .main-content.lyrics-page-open > #amazonHomeWrap,
 body .main-content.lyrics-page-open > #cardGrid,
 body .main-content.lyrics-page-open > #paginationControls,
-body .main-content.lyrics-page-open > #emptyMain {
+body .main-content.lyrics-page-open > #stagePanel {
     display: none !important;
 }
 
@@ -1920,4 +1920,12 @@ body.preset-sleeve [hidden],
 body.preset-spotify [hidden],
 body.preset-amazonMusic [hidden] {
     display: none !important;
+}
+
+/* Keep Spotify's right-hand Now Playing panel visible on the lyrics page */
+@media (min-width: 1180px) {
+    body.preset-spotify.spotify-now-playing
+    .main-content.lyrics-page-open > #stagePanel {
+        display: flex !important;
+    }
 }
