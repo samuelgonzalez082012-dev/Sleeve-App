@@ -2042,6 +2042,14 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 .artist-profile-tag{padding:5px 9px;border:1px solid rgba(143,216,247,.18);border-radius:999px;background:rgba(143,216,247,.07);color:var(--accent-ice);font-size:10px}
 .artist-profile-discography-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:25px clamp(18px,3vw,30px) 0;padding:19px 0 20px;border-top:1px solid var(--line)}
 .artist-profile-discography-heading h3{margin:5px 0 0;font-size:20px;letter-spacing:-.025em}
+.artist-release-filters{display:flex;flex-wrap:wrap;gap:7px;margin:0 clamp(18px,3vw,30px) 8px}
+.artist-release-filter{padding:7px 12px;border:1px solid var(--line-bright);border-radius:999px;background:transparent;color:var(--text-dim);font:inherit;font-size:10px;font-weight:650;cursor:pointer;transition:background .15s ease,color .15s ease,border-color .15s ease}
+.artist-release-filter:hover:not(:disabled){border-color:var(--accent-ice);color:var(--text)}
+.artist-release-filter.active{border-color:var(--accent-ice);background:rgba(143,216,247,.13);color:var(--accent-ice)}
+.artist-release-filter:disabled{opacity:.42;cursor:not-allowed}
+.artist-release-filter-note{margin:0 clamp(18px,3vw,30px) 12px;color:var(--text-dimmer);font-size:10px;line-height:1.45}
+.artist-release-card-meta{margin-top:5px;color:var(--text-dimmer);font-size:10px}
+.artist-release-card-meta span{padding:0 3px;color:var(--text-dim)}
 .artist-profile-discography-heading>span{padding-bottom:2px;color:var(--text-dim);font-size:11px;white-space:nowrap}
 @media(max-width:620px){
   .artist-profile-hero{min-height:300px;padding:22px 18px}
@@ -2060,6 +2068,9 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
   .artist-profile-stat strong{font-size:19px}
   .artist-profile-stat span{font-size:10px}
   .artist-profile-discography-heading{align-items:flex-start;flex-direction:column;margin-left:18px;margin-right:18px}
+  .artist-release-filters,.artist-release-filter-note{margin-left:18px;margin-right:18px}
+  .artist-release-filters{gap:6px}
+  .artist-release-filter{padding:7px 10px}
 }
 @media(prefers-reduced-motion:reduce){
   .artist-profile-action{transition:none}
