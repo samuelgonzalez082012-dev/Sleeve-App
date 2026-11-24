@@ -1620,6 +1620,270 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   const videoSizeButtons = document.querySelectorAll('[data-video-size]');
   const videoPipBtn = document.getElementById('videoPipBtn');
 
+  // ---------- Paired Sleeve library browsing and playback ----------
+  const networkHostStartBtn = document.getElementById('networkHostStartBtn');
+  const networkHostStopBtn = document.getElementById('networkHostStopBtn');
+  const networkHostStatus = document.getElementById('networkHostStatus');
+  const networkPairCodeWrap = document.getElementById('networkPairCodeWrap');
+  const networkPairCode = document.getElementById('networkPairCode');
+  const networkPairCodeExpiry = document.getElementById('networkPairCodeExpiry');
+  const networkPairedDevices = document.getElementById('networkPairedDevices');
+  const networkDiscoverBtn = document.getElementById('networkDiscoverBtn');
+  const networkDiscoveredSelect = document.getElementById('networkDiscoveredSelect');
+  const networkPairCodeInput = document.getElementById('networkPairCodeInput');
+  const networkPairBtn = document.getElementById('networkPairBtn');
+  const networkPairStatus = document.getElementById('networkPairStatus');
+  const networkRemoteServerSelect = document.getElementById('networkRemoteServerSelect');
+  const networkRemoteSection = document.getElementById('networkRemoteSection');
+  const networkRemoteQuality = document.getElementById('networkRemoteQuality');
+  const networkRemoteSearch = document.getElementById('networkRemoteSearch');
+  const networkRemoteLoadBtn = document.getElementById('networkRemoteLoadBtn');
+  const networkRemoteStatus = document.getElementById('networkRemoteStatus');
+  const networkRemoteResults = document.getElementById('networkRemoteResults');
+  let networkDiscoveredServers = [];
+  let networkPairedServers = [];
+  let nextRemoteTrackId = -1000000000;
+
+  function networkStatusText(element, message, isError = false){
+    if (!element) return;
+    element.textContent = message || '';
+    element.style.color = isError ? 'var(--accent-red, #e58b8b)' : '';
+  }
+
+  function renderNetworkDevices(devices){
+    if (!networkPairedDevices) return;
+    networkPairedDevices.replaceChildren();
+    if (!devices.length) {
+      const empty = document.createElement('div');
+      empty.className = 'network-status';
+      empty.textContent = 'No devices are paired to this host yet.';
+      networkPairedDevices.appendChild(empty);
+      return;
+    }
+    devices.filter(device => !device.revokedAt).forEach(device => {
+      const row = document.createElement('div');
+      row.className = 'network-device-row';
+      const meta = document.createElement('span');
+      const name = document.createElement('strong');
+      name.textContent = device.name || 'Sleeve device';
+      const date = document.createElement('small');
+      date.textContent = device.lastSeenAt ? 'Last connected ' + new Date(device.lastSeenAt).toLocaleString() : 'Paired ' + new Date(device.pairedAt).toLocaleDateString();
+      meta.append(name, date);
+      const revoke = document.createElement('button');
+      revoke.type = 'button';
+      revoke.textContent = 'Revoke';
+      revoke.addEventListener('click', async () => {
+        try {
+          await window.electronAPI.localNetworkRevokeDevice(device.id);
+          await refreshNetworkHostStatus();
+        } catch (error) { networkStatusText(networkHostStatus, error.message, true); }
+      });
+      row.append(meta, revoke);
+      networkPairedDevices.appendChild(row);
+    });
+  }
+
+  async function refreshNetworkHostStatus(){
+    if (!window.electronAPI?.localNetworkGetHostStatus) return;
+    try {
+      const status = await window.electronAPI.localNetworkGetHostStatus();
+      networkHostStatus.textContent = status.running
+        ? 'Sharing at ' + (status.addresses || []).join(', ') + ':' + status.port
+        : 'Sharing is off.';
+      networkPairCodeWrap.hidden = !status.running || !status.pairingCode;
+      networkPairCode.textContent = status.pairingCode || '------';
+      networkPairCodeExpiry.textContent = status.pairingCodeExpiresAt
+        ? 'Expires ' + new Date(status.pairingCodeExpiresAt).toLocaleTimeString()
+        : '';
+      networkHostStartBtn.disabled = Boolean(status.running);
+      networkHostStopBtn.disabled = !status.running;
+      renderNetworkDevices(status.pairedDevices || []);
+    } catch (error) { networkStatusText(networkHostStatus, error.message, true); }
+  }
+
+  async function refreshPairedNetworkServers(){
+    if (!window.electronAPI?.localNetworkGetPairedServers) return;
+    try {
+      networkPairedServers = await window.electronAPI.localNetworkGetPairedServers();
+      const previous = networkRemoteServerSelect.value;
+      networkRemoteServerSelect.replaceChildren();
+      if (!networkPairedServers.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No paired libraries';
+        networkRemoteServerSelect.appendChild(option);
+      } else {
+        networkPairedServers.forEach(server => {
+          const option = document.createElement('option');
+          option.value = server.serverId;
+          option.textContent = server.name + ' · ' + server.address;
+          networkRemoteServerSelect.appendChild(option);
+        });
+        if (networkPairedServers.some(server => server.serverId === previous)) networkRemoteServerSelect.value = previous;
+      }
+    } catch (error) { networkStatusText(networkPairStatus, error.message, true); }
+  }
+
+  if (networkHostStartBtn) networkHostStartBtn.addEventListener('click', async () => {
+    networkHostStartBtn.disabled = true;
+    networkStatusText(networkHostStatus, 'Starting local sharing…');
+    try { await window.electronAPI.localNetworkStartHost(); await refreshNetworkHostStatus(); }
+    catch (error) { networkStatusText(networkHostStatus, error.message, true); networkHostStartBtn.disabled = false; }
+  });
+  if (networkHostStopBtn) networkHostStopBtn.addEventListener('click', async () => {
+    networkHostStopBtn.disabled = true;
+    try { await window.electronAPI.localNetworkStopHost(); await refreshNetworkHostStatus(); }
+    catch (error) { networkStatusText(networkHostStatus, error.message, true); networkHostStopBtn.disabled = false; }
+  });
+  if (networkDiscoverBtn) networkDiscoverBtn.addEventListener('click', async () => {
+    networkDiscoverBtn.disabled = true;
+    networkStatusText(networkPairStatus, 'Searching this local network…');
+    try {
+      networkDiscoveredServers = await window.electronAPI.localNetworkDiscover(2200);
+      networkDiscoveredSelect.replaceChildren();
+      if (!networkDiscoveredServers.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No Sleeve devices found';
+        networkDiscoveredSelect.appendChild(option);
+      } else {
+        networkDiscoveredServers.forEach((server, index) => {
+          const option = document.createElement('option');
+          option.value = String(index);
+          option.textContent = server.name + ' · ' + server.address;
+          networkDiscoveredSelect.appendChild(option);
+        });
+      }
+      networkStatusText(networkPairStatus, networkDiscoveredServers.length
+        ? 'Found ' + networkDiscoveredServers.length + ' Sleeve device(s).'
+        : 'No devices found. Check that both computers are on the same Wi-Fi and sharing is enabled.');
+    } catch (error) { networkStatusText(networkPairStatus, error.message, true); }
+    finally { networkDiscoverBtn.disabled = false; }
+  });
+  if (networkPairBtn) networkPairBtn.addEventListener('click', async () => {
+    const server = networkDiscoveredServers[Number(networkDiscoveredSelect.value)];
+    const code = networkPairCodeInput.value.trim();
+    if (!server) return networkStatusText(networkPairStatus, 'Find and select a Sleeve device first.', true);
+    if (!/^\\d{6}$/.test(code)) return networkStatusText(networkPairStatus, 'Enter the six-digit code shown on the host.', true);
+    networkPairBtn.disabled = true;
+    try {
+      const paired = await window.electronAPI.localNetworkPair({
+        address: server.address, port: server.port, code, deviceName: 'Sleeve desktop'
+      });
+      networkPairCodeInput.value = '';
+      networkStatusText(networkPairStatus, 'Paired with ' + paired.name + '. You can browse its library below.');
+      await refreshPairedNetworkServers();
+      networkRemoteServerSelect.value = paired.serverId;
+    } catch (error) { networkStatusText(networkPairStatus, error.message, true); }
+    finally { networkPairBtn.disabled = false; }
+  });
+
+  function renderRemoteNetworkRows(items, section, serverId){
+    networkRemoteResults.replaceChildren();
+    if (!items.length) {
+      networkStatusText(networkRemoteStatus, 'No matching items found.');
+      return;
+    }
+    items.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'network-remote-row';
+      const meta = document.createElement('span');
+      meta.className = 'network-remote-meta';
+      const title = document.createElement('strong');
+      title.textContent = item.title || item.name || item.artist || 'Untitled';
+      const subtitle = document.createElement('small');
+      subtitle.textContent = section === 'tracks'
+        ? [item.artist, item.album].filter(Boolean).join(' · ')
+        : section === 'albums' ? (item.artist || '') + ' · ' + item.trackCount + ' tracks'
+        : section === 'artists' ? item.albumCount + ' albums · ' + item.trackCount + ' tracks'
+        : section === 'playlists' ? item.trackCount + ' tracks'
+        : section === 'genres' ? 'Genre' : '';
+      meta.append(title, subtitle);
+      row.appendChild(meta);
+      const action = document.createElement('button');
+      action.type = 'button';
+      action.textContent = section === 'tracks' ? 'Play' : 'Open';
+      action.className = section === 'tracks' ? 'network-remote-play' : '';
+      action.addEventListener('click', async () => {
+        action.disabled = true;
+        try {
+          if (section === 'tracks') await playRemoteNetworkTrack(item, serverId);
+          else if (section === 'playlists') {
+            const result = await window.electronAPI.localNetworkGetRemotePlaylistTracks({ serverId, playlistId: item.id, options: { limit: 200 } });
+            renderRemoteNetworkRows(result.items || [], 'tracks', serverId);
+            networkStatusText(networkRemoteStatus, 'Playlist: ' + item.name);
+          } else {
+            const options = section === 'artists' ? { artist: item.name, limit: 200 }
+              : section === 'albums' ? { artist: item.artist, album: item.title, limit: 200 }
+              : { genre: item, limit: 200 };
+            const result = await window.electronAPI.localNetworkGetRemoteLibrary({ serverId, section: 'tracks', options });
+            renderRemoteNetworkRows(result.items || [], 'tracks', serverId);
+            networkStatusText(networkRemoteStatus, 'Showing tracks from ' + (item.name || item.title || item));
+          }
+        } catch (error) { networkStatusText(networkRemoteStatus, error.message, true); }
+        finally { action.disabled = false; }
+      });
+      row.appendChild(action);
+      networkRemoteResults.appendChild(row);
+    });
+    networkStatusText(networkRemoteStatus, 'Loaded ' + items.length + ' item(s).');
+  }
+
+  async function playRemoteNetworkTrack(item, serverId){
+    const quality = networkRemoteQuality.value || 'original';
+    const stream = await window.electronAPI.localNetworkGetRemoteStreamUrl({
+      serverId, trackId: item.id, quality
+    });
+    const track = {
+      id: nextRemoteTrackId--,
+      title: item.title || 'Untitled',
+      artist: item.artist || '',
+      album: item.album || '',
+      year: item.year || '',
+      genre: item.genre || '',
+      duration: item.duration || null,
+      trackNum: item.trackNum || null,
+      kind: 'audio',
+      url: stream,
+      sourcePath: '',
+      thumbUrl: null,
+      remoteNetworkTrack: true,
+      _playMarkedForSession: false,
+      playCount: 0
+    };
+    playlist.push(track);
+    const index = playlist.length - 1;
+    networkStatusText(networkRemoteStatus, 'Loading ' + track.title + '…');
+    playTrackAt(index, true, [track.id]);
+    networkStatusText(networkRemoteStatus, 'Playing ' + track.title + ' from ' + (networkPairedServers.find(server => server.serverId === serverId)?.name || 'paired Sleeve'));
+  }
+
+  async function loadRemoteNetworkLibrary(){
+    const serverId = networkRemoteServerSelect.value;
+    if (!serverId) return networkStatusText(networkRemoteStatus, 'Pair with a Sleeve library first.', true);
+    const section = networkRemoteSection.value || 'tracks';
+    const options = { limit: 100, offset: 0 };
+    if (section === 'tracks' && networkRemoteSearch.value.trim()) options.q = networkRemoteSearch.value.trim();
+    networkRemoteLoadBtn.disabled = true;
+    networkRemoteResults.replaceChildren();
+    networkStatusText(networkRemoteStatus, 'Loading shared ' + section + '…');
+    try {
+      const result = await window.electronAPI.localNetworkGetRemoteLibrary({ serverId, section, options });
+      const items = section === 'genres' ? (result.items || []) : (result.items || []);
+      renderRemoteNetworkRows(items, section, serverId);
+    } catch (error) { networkStatusText(networkRemoteStatus, error.message, true); }
+    finally { networkRemoteLoadBtn.disabled = false; }
+  }
+  if (networkRemoteLoadBtn) networkRemoteLoadBtn.addEventListener('click', loadRemoteNetworkLibrary);
+  if (networkRemoteSearch) networkRemoteSearch.addEventListener('keydown', event => {
+    if (event.key === 'Enter') loadRemoteNetworkLibrary();
+  });
+  if (networkRemoteSection) networkRemoteSection.addEventListener('change', () => {
+    networkRemoteSearch.placeholder = networkRemoteSection.value === 'tracks' ? 'Search shared tracks' : 'Search is available in Tracks';
+  });
+  refreshNetworkHostStatus();
+  refreshPairedNetworkServers();
+
   function setVideoMode(mode){
     const allowed = ['compact', 'standard', 'large', 'wide'];
     const selected = allowed.includes(mode) ? mode : 'standard';
@@ -4554,7 +4818,7 @@ const titleVariants = [...new Set([
     track._playMarkedForSession = true;
     track.playCount = (track.playCount || 0) + 1;
     track.lastPlayedAt = Date.now();
-    dbPut(track);
+    if (!track.remoteNetworkTrack) dbPut(track);
   }
 
   // ---------- Playlists ----------
