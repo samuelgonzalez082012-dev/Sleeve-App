@@ -2252,3 +2252,42 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 @media(prefers-reduced-motion:reduce){
   .artist-catalog-primary,.artist-catalog-refresh,.artist-catalog-open-local,.artist-catalog-open-external{transition:none}
 }
+
+/* Phase 6.3 — release details and artist relationships */
+.artist-catalog-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.artist-catalog-details-button,.artist-release-details-refresh,.artist-relationships-load,.artist-relationships-refresh{
+  padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg-elevated-2);
+  color:var(--text-dim);font-size:9px;cursor:pointer
+}
+.artist-release-details{
+  grid-column:1/-1;min-width:0;margin-top:8px;padding:10px;border:1px solid var(--line);
+  border-radius:9px;background:var(--bg-elevated-2)
+}
+.artist-release-details-heading{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;margin-bottom:8px}
+.artist-release-details-heading strong{color:var(--text);font-size:10px}
+.artist-release-details-heading>span{color:var(--text-dim);font-size:9px}
+.artist-release-track-list{display:flex;flex-direction:column;gap:5px;margin:0;padding:0;list-style:none}
+.artist-release-track-list li{display:flex;align-items:center;gap:8px;min-width:0;padding:5px 0;border-bottom:1px solid var(--line)}
+.artist-release-track-number,.artist-release-track-list time{flex:0 0 auto;color:var(--text-dimmer);font-size:9px;font-variant-numeric:tabular-nums}
+.artist-release-track-title{display:flex;flex:1;flex-direction:column;gap:2px;min-width:0;color:var(--text);font-size:10px}
+.artist-release-track-title small{overflow:hidden;color:var(--text-dim);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.artist-release-details-empty,.artist-release-details-error p,.artist-relationships-note,.artist-relationships-error{color:var(--text-dim);font-size:10px;line-height:1.5}
+.artist-release-details-refresh{margin-top:9px}
+.artist-relationships-section{display:flex;flex-direction:column;gap:12px;margin-top:16px;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--bg-elevated)}
+.artist-relationships-heading h3{margin:3px 0 0;color:var(--text);font-size:15px}
+.artist-relationships-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.artist-relationship-card{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--bg-elevated-2)}
+.artist-relationship-card>div{display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.artist-relationship-card strong{overflow:hidden;color:var(--text);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.artist-relationship-card span{overflow:hidden;color:var(--text-dim);font-size:9px;text-overflow:ellipsis;white-space:nowrap}
+.artist-relationship-card button{flex:0 0 auto;padding:6px 8px;font-size:9px}
+.artist-relationships-refresh{align-self:flex-start}
+@media(max-width:650px){
+  .artist-relationships-section{padding:15px 16px}
+  .artist-relationships-list{grid-template-columns:1fr}
+  .artist-catalog-actions{justify-content:flex-start}
+  .artist-release-details-heading{flex-direction:column}
+}
+@media(prefers-reduced-motion:reduce){
+  .artist-catalog-details-button,.artist-release-details-refresh,.artist-relationships-load,.artist-relationships-refresh{transition:none}
+}
