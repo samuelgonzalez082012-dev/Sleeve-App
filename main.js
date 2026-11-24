@@ -9,6 +9,72 @@ const { spawn } = require('node:child_process')
 const https = require('node:https')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
+const os = require('node:os')
+const { LocalNetworkService } = require('./services/local-network-service')
+const { AUDIO_EXTENSIONS } = require('./services/local-library-streaming');
+let mainWindow = null;
+
+let localNetworkService = null
+function getLocalNetworkService() {
+  if (!localNetworkService) {
+    localNetworkService = new LocalNetworkService({
+      userDataPath: app.getPath('userData'),
+      deviceName: `Sleeve — ${os.hostname()}`,
+      ffmpegPathProvider: findFfmpegForEnhancement
+    })
+  }
+  return localNetworkService
+}
+
+// Local network hosting and pairing are owned by the Electron main process.
+ipcMain.handle('network:host-status', async () => getLocalNetworkService().getStatus())
+ipcMain.handle('network:host-start', async () => getLocalNetworkService().startHost())
+ipcMain.handle('network:host-stop', async () => getLocalNetworkService().stopHost())
+ipcMain.handle('network:discover', async (_event, timeoutMs) => getLocalNetworkService().discoverServers(timeoutMs))
+ipcMain.handle('network:pair', async (_event, payload) => getLocalNetworkService().pairWithServer(payload))
+ipcMain.handle('network:device-revoke', async (_event, deviceId) => ({
+  ok: getLocalNetworkService().revokeDevice(deviceId)
+}))
+
+// The renderer publishes a metadata-only snapshot. File paths are validated
+// in the main process and are never returned by the network API.
+ipcMain.handle('network:paired-servers', async () => getLocalNetworkService().getPairedServers());
+ipcMain.handle('network:remote-library', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemoteLibrary(payload.serverId, payload.section, payload.options || {})
+);
+ipcMain.handle('network:remote-playlist-tracks', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemotePlaylistTracks(payload.serverId, payload.playlistId, payload.options || {})
+);
+ipcMain.handle('network:remote-stream-url', async (_event, payload = {}) =>
+  getLocalNetworkService().getRemoteStreamUrl(payload.serverId, payload.trackId, payload.quality || 'original')
+);
+
+ipcMain.handle('network:library-sync', async (event, payload = {}) => {
+  payload = payload && typeof payload === 'object' ? payload : {};
+  if (!mainWindow || event.sender !== mainWindow.webContents) {
+    throw new Error('Library sync is only available to the primary Sleeve window.');
+  }
+  const incoming = Array.isArray(payload.tracks) ? payload.tracks.slice(0, 20000) : [];
+  const tracks = [];
+  for (const item of incoming) {
+    if (!item || !Number.isSafeInteger(Number(item.id)) || typeof item.sourcePath !== 'string' ||
+        !item.sourcePath.trim() || item.sourcePath.length > 4096 || item.kind === 'video') continue;
+    const resolved = resolveSourcePath(item.sourcePath);
+    try {
+      const linkStat = fs.lstatSync(resolved);
+      if (!linkStat.isFile() || linkStat.isSymbolicLink()) continue;
+      const extension = path.extname(resolved).toLowerCase();
+      if (!AUDIO_EXTENSIONS.has(extension)) continue;
+      tracks.push({
+        id: Number(item.id), path: path.resolve(resolved), kind: item.kind,
+        title: item.title, artist: item.artist, album: item.album,
+        year: item.year, genre: item.genre, duration: item.duration, trackNum: item.trackNum
+      });
+    } catch (_) {}
+  }
+  const playlists = Array.isArray(payload.playlists) ? payload.playlists.slice(0, 2000) : [];
+  return getLocalNetworkService().setLibrarySnapshot(tracks, playlists);
+})
 
 // Where Demucs source files get resolved to and where split stems get
 // written. Resolving/hashing is shared by the split, find-existing, and
@@ -426,7 +492,7 @@ ipcMain.handle('shell:show-in-folder', async (_event, filePath) => {
 
 function createWindow () {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     icon: path.join(__dirname, 'Icon.ico'),
@@ -437,6 +503,7 @@ function createWindow () {
 
   // and load the index.html of the app.
   mainWindow.loadFile('index.html')
+  mainWindow.on('closed', () => { mainWindow = null; })
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
@@ -514,6 +581,13 @@ app.whenReady().then(() => {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay in the app when there's
 // no windows open. This behavior is not required on non-macOS platforms.
+app.on('before-quit', () => {
+  if (localNetworkService) {
+    localNetworkService.stopHost().catch(() => {});
+    localNetworkService.stopRemoteProxy().catch(() => {});
+  }
+})
+
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })

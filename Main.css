@@ -2252,3 +2252,27 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 @media(prefers-reduced-motion:reduce){
   .artist-catalog-primary,.artist-catalog-refresh,.artist-catalog-open-local,.artist-catalog-open-external{transition:none}
 }
+
+
+/* Local network sharing and remote library controls */
+.network-settings-section{display:flex;flex-direction:column;gap:9px}
+.network-action-row,.network-browse-controls{display:flex;gap:8px;align-items:center}
+.network-action-row>* ,.network-browse-controls>*{flex:1;min-width:0}
+.network-status{min-height:18px;color:var(--text-dim);font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.network-pair-code{display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg-elevated)}
+.network-pair-code[hidden]{display:none}
+.network-pair-code span,.network-pair-code small{color:var(--text-dim);font-size:10px}
+.network-pair-code strong{font-size:26px;letter-spacing:.22em;font-variant-numeric:tabular-nums}
+.network-security-note{padding:9px;border-left:2px solid var(--accent-ice);background:var(--bg-elevated)}
+.network-code-input{width:100%;min-width:0;padding:10px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elevated);color:var(--text);font:inherit;font-size:12px}
+.network-device-list,.network-remote-list{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto}
+.network-device-row,.network-remote-row{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elevated);min-width:0}
+.network-device-row>span,.network-remote-meta{display:flex;flex-direction:column;gap:3px;min-width:0}
+.network-device-row strong,.network-remote-meta strong{font-size:11px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.network-device-row small,.network-remote-meta small{font-size:9px;color:var(--text-dim)}
+.network-device-row button,.network-remote-row button{flex:0 0 auto;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--text);font:inherit;font-size:10px;cursor:pointer}
+.network-device-row button:hover,.network-remote-row button:hover{border-color:var(--accent-ice);background:var(--bg-card-hover)}
+.network-remote-row{align-items:center}
+.network-remote-meta{flex:1}
+.network-remote-row .network-remote-play{background:var(--bg-elevated-2)}
+@media(max-width:520px){.network-action-row,.network-browse-controls{flex-direction:column;align-items:stretch}.network-action-row>* ,.network-browse-controls>*{width:100%}}
