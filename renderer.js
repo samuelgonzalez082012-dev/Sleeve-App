@@ -512,14 +512,80 @@ function stopStemPlayback() {
   hideStemMixerUI();
 }
 
+function syncStemMixerPlacement(expandSidebar = false) {
+  const mixer = document.getElementById('stemMixer');
+  if (!mixer) return;
+
+  const useSpotifySidebar = document.body.classList.contains('preset-spotify');
+  let section = document.getElementById('spotifyStemMixerSection');
+
+  if (useSpotifySidebar) {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'spotifyStemMixerSection';
+      section.className = 'spotify-stem-mixer-section';
+      section.innerHTML = `
+        <button type="button" class="spotify-stem-mixer-toggle" id="spotifyStemMixerToggle"
+          aria-expanded="true" aria-controls="spotifyStemMixerContent">
+          <span class="spotify-stem-mixer-title"><span class="spotify-stem-mixer-dot"></span>Stem Mixer</span>
+          <span class="spotify-stem-mixer-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="spotify-stem-mixer-content" id="spotifyStemMixerContent"></div>
+      `;
+      const toggle = section.querySelector('#spotifyStemMixerToggle');
+      const content = section.querySelector('#spotifyStemMixerContent');
+      toggle.addEventListener('click', () => {
+        const opening = content.hidden;
+        content.hidden = !opening;
+        toggle.setAttribute('aria-expanded', String(opening));
+      });
+      const addButton = document.getElementById('addBtn');
+      if (addButton && addButton.parentElement === sidebar) sidebar.insertBefore(section, addButton);
+      else sidebar.appendChild(section);
+    }
+    const content = section.querySelector('#spotifyStemMixerContent');
+    if (mixer.parentElement !== content) content.appendChild(mixer);
+    if (expandSidebar) {
+      content.hidden = false;
+      section.querySelector('#spotifyStemMixerToggle').setAttribute('aria-expanded', 'true');
+    }
+    mixer.style.width = '100%';
+    mixer.style.maxWidth = 'none';
+    mixer.style.flexBasis = 'auto';
+    mixer.style.marginTop = '0';
+    mixer.style.padding = '12px';
+  } else {
+    const stage = document.getElementById('stagePanel') || document.body;
+    if (mixer.parentElement !== stage) stage.appendChild(mixer);
+    if (section) section.remove();
+    mixer.style.width = 'min(100%,560px)';
+    mixer.style.maxWidth = '560px';
+    mixer.style.flexBasis = '100%';
+    mixer.style.marginTop = '14px';
+    mixer.style.padding = '16px';
+  }
+}
+
 function showStemMixerUI() {
   const mixer = document.getElementById('stemMixer');
-  if (mixer) mixer.style.display = '';
+  if (mixer) {
+    syncStemMixerPlacement(true);
+    mixer.style.display = '';
+  }
 }
 
 function hideStemMixerUI() {
   const mixer = document.getElementById('stemMixer');
   if (mixer) mixer.style.display = 'none';
+}
+
+// Keep the mixer attached to the active layout when the user changes appearance
+// presets while a separated track is already loaded.
+if (document.body && window.MutationObserver) {
+  const stemMixerThemeObserver = new MutationObserver(() => syncStemMixerPlacement());
+  stemMixerThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 }
 
 function updateStemGain(name) {
@@ -794,11 +860,34 @@ function createStemMixerUI() {
     #stemMixer .stem-mix-toggle{height:25px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg-elevated);color:var(--text-dim);font-size:10px;cursor:pointer}
     #stemMixer .stem-mix-toggle.active{border-color:var(--accent-blue-bright);background:color-mix(in srgb,var(--accent-blue) 35%,var(--bg-elevated));color:var(--text)}
     #stemMixer .stem-mix-footnote{font-size:10px;color:var(--text-dimmer);margin-top:12px}
+    body.preset-spotify .spotify-stem-mixer-section{order:8;flex:0 0 auto;margin:4px 0 8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+    body.preset-spotify .spotify-stem-mixer-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:#fff;font:600 13px var(--sans);cursor:pointer}
+    body.preset-spotify .spotify-stem-mixer-toggle:hover{background:rgba(255,255,255,.08)}
+    body.preset-spotify .spotify-stem-mixer-title{display:flex;align-items:center;gap:9px}
+    body.preset-spotify .spotify-stem-mixer-dot{width:8px;height:8px;border-radius:50%;background:#1ed760;box-shadow:0 0 9px rgba(30,215,96,.45)}
+    body.preset-spotify .spotify-stem-mixer-chevron{font-size:17px;color:#b3b3b3;transition:transform .15s ease}
+    body.preset-spotify .spotify-stem-mixer-toggle[aria-expanded="false"] .spotify-stem-mixer-chevron{transform:rotate(-90deg)}
+    body.preset-spotify .spotify-stem-mixer-content{min-width:0;padding:4px 0 0}
+    body.preset-spotify #stemMixer{background:#202020!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:10px!important;color:#fff;overflow:hidden}
+    body.preset-spotify #stemMixer .stem-mix-heading{color:#fff}
+    body.preset-spotify #stemMixer .stem-preset-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    body.preset-spotify #stemMixer .stem-preset-field{grid-column:1/-1}
+    body.preset-spotify #stemMixer .stem-preset-field select{width:100%;height:34px;background:#282828;color:#fff;border-color:rgba(255,255,255,.12)}
+    body.preset-spotify #stemMixer .stem-preset-toolbar button{height:30px;background:#282828;color:#fff;border-color:rgba(255,255,255,.12)}
+    body.preset-spotify #stemMixer .stem-preset-toolbar button:hover:not(:disabled){background:#333}
+    body.preset-spotify #stemMixer .stem-mix-row{grid-template-columns:48px minmax(35px,1fr) 34px 38px 38px;gap:4px;margin:12px 0}
+    body.preset-spotify #stemMixer .stem-mix-name{font-size:11px;color:#eee}
+    body.preset-spotify #stemMixer .stem-mix-value{font-size:10px;color:#b3b3b3}
+    body.preset-spotify #stemMixer input[type=range]{accent-color:#1ed760;min-width:0}
+    body.preset-spotify #stemMixer .stem-mix-toggle{height:25px;padding:0 3px;background:#282828;border-color:rgba(255,255,255,.12);color:#b3b3b3}
+    body.preset-spotify #stemMixer .stem-mix-toggle.active{background:rgba(30,215,96,.16);border-color:#1ed760;color:#1ed760}
+    body.preset-spotify #stemMixer .stem-mix-footnote{color:#b3b3b3;line-height:1.4}
     @media(max-width:560px){#stemMixer .stem-preset-toolbar{grid-template-columns:1fr 1fr 1fr}#stemMixer .stem-preset-field{grid-column:1/-1}#stemMixer .stem-mix-row{grid-template-columns:55px minmax(45px,1fr) 38px 42px 42px;gap:5px}}
   `;
   document.head.appendChild(style);
   const parent = document.getElementById('stagePanel') || document.body;
   parent.appendChild(mixer);
+  syncStemMixerPlacement();
 
   mixer.querySelectorAll('[data-stem-volume]').forEach((slider) => {
     slider.addEventListener('input', (event) => {
