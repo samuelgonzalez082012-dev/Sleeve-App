@@ -11,6 +11,8 @@ const fs = require('node:fs')
 const crypto = require('node:crypto')
 const os = require('node:os')
 const { LocalNetworkService } = require('./services/local-network-service')
+const { AUDIO_EXTENSIONS } = require('./services/local-library-streaming');
+let mainWindow = null;
 
 let localNetworkService = null
 function getLocalNetworkService() {
