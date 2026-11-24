@@ -4558,7 +4558,7 @@ const titleVariants = [...new Set([
 
     if (!picked.length){
       alert(criterion === 'yourTaste'
-        ? "Sleeve couldn't build a Taste Mix yet. Make sure your music has genre tags, then try again."
+        ? "Sleeve couldn't build a Taste Mix yet. Add genre or artist tags, or play a few songs so Sleeve can learn from your listening history, then try again."
         : "There isn't enough listening history yet to build that playlist.");
       return null;
     }
