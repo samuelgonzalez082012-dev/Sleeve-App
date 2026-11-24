@@ -2254,6 +2254,8 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 }
 
 /* Phase 6.3 — release details and artist relationships */
+.artist-catalog-release{flex-wrap:wrap}
+.artist-release-details{flex:1 0 100%;width:100%;box-sizing:border-box}
 .artist-catalog-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .artist-catalog-details-button,.artist-release-details-refresh,.artist-relationships-load,.artist-relationships-refresh{
   padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg-elevated-2);
