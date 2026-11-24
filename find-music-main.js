@@ -287,7 +287,7 @@ async function searchArtistCatalog(payload, options = {}) {
   const artistName = String(payload.artistName || '').trim().slice(0, 240);
   if (!artistName) throw new Error('Enter an artist name to search the music catalog.');
   const cacheKey = normalizeCatalogName(artistName);
-  const cached = readTimedCache(artistCatalogSearchCache, cacheKey);
+  const cached = payload.forceRefresh === true ? null : readTimedCache(artistCatalogSearchCache, cacheKey);
   if (cached) return cached;
   if (artistCatalogSearchInFlight.has(cacheKey)) return artistCatalogSearchInFlight.get(cacheKey);
 
@@ -320,7 +320,7 @@ async function getArtistDiscography(payload, options = {}) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(artistId)) {
     throw new Error('Choose a valid MusicBrainz artist before loading its discography.');
   }
-  const cached = readTimedCache(artistDiscographyCache, artistId);
+  const cached = payload.forceRefresh === true ? null : readTimedCache(artistDiscographyCache, artistId);
   if (cached) return cached;
   if (artistDiscographyInFlight.has(artistId)) return artistDiscographyInFlight.get(artistId);
 
