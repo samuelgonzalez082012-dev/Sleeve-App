@@ -369,6 +369,53 @@
     </div>
     <div class="drawer-body">
 
+      <div class="drawer-section-title settings-customize-heading">Local Network</div>
+      <div class="drawer-section network-settings-section">
+        <div class="drawer-section-title">Share this library</div>
+        <p class="drawer-hint">Start a temporary local server so paired Sleeve devices can browse and play music from this computer.</p>
+        <div class="network-action-row">
+          <button class="add-btn" id="networkHostStartBtn" type="button">Start sharing</button>
+          <button class="drawer-reset-btn" id="networkHostStopBtn" type="button">Stop sharing</button>
+        </div>
+        <div class="network-status" id="networkHostStatus" role="status">Sharing is off.</div>
+        <div class="network-pair-code" id="networkPairCodeWrap" hidden>
+          <span>Pairing code</span><strong id="networkPairCode">------</strong>
+          <small id="networkPairCodeExpiry"></small>
+        </div>
+        <div class="network-device-list" id="networkPairedDevices"></div>
+        <div class="drawer-hint network-security-note">Local network traffic is not encrypted yet. Only share on a trusted private network. Phase 8.8 security work is still required.</div>
+      </div>
+      <div class="drawer-section network-settings-section">
+        <div class="drawer-section-title">Connect to another Sleeve</div>
+        <button class="drawer-reset-btn" id="networkDiscoverBtn" type="button">Find Sleeve devices</button>
+        <select class="audio-output-select" id="networkDiscoveredSelect" aria-label="Discovered Sleeve device">
+          <option value="">No devices found yet</option>
+        </select>
+        <input class="network-code-input" id="networkPairCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="Enter six-digit pairing code" aria-label="Pairing code">
+        <button class="add-btn" id="networkPairBtn" type="button">Pair device</button>
+        <div class="network-status" id="networkPairStatus" role="status"></div>
+      </div>
+      <div class="drawer-section network-settings-section">
+        <div class="drawer-section-title">Browse a paired library</div>
+        <select class="audio-output-select" id="networkRemoteServerSelect" aria-label="Paired Sleeve library">
+          <option value="">No paired libraries</option>
+        </select>
+        <div class="network-browse-controls">
+          <select class="audio-output-select" id="networkRemoteSection" aria-label="Library section">
+            <option value="tracks">Tracks</option><option value="albums">Albums</option>
+            <option value="artists">Artists</option><option value="genres">Genres</option>
+            <option value="playlists">Playlists</option>
+          </select>
+          <select class="audio-output-select" id="networkRemoteQuality" aria-label="Streaming quality">
+            <option value="original">Original quality</option><option value="compact">Compact · 96 kbps</option>
+          </select>
+        </div>
+        <input class="network-code-input" id="networkRemoteSearch" type="search" placeholder="Search shared tracks" aria-label="Search shared library">
+        <button class="drawer-reset-btn" id="networkRemoteLoadBtn" type="button">Load library</button>
+        <div class="network-status" id="networkRemoteStatus" role="status"></div>
+        <div class="network-remote-list" id="networkRemoteResults"></div>
+      </div>
+
       <div class="drawer-section-title settings-customize-heading">Customize</div>
 
       <div class="drawer-section">
