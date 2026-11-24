@@ -2293,3 +2293,7 @@ body.reduce-motion .visualizer-canvas{mix-blend-mode:normal;}
 @media(prefers-reduced-motion:reduce){
   .artist-catalog-details-button,.artist-release-details-refresh,.artist-relationships-load,.artist-relationships-refresh{transition:none}
 }
+
+.artist-release-editions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px}
+.artist-release-editions>strong{flex-basis:100%;color:var(--text-dim);font-size:9px}
+.artist-release-editions>button{padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--bg-elevated);color:var(--text-dim);font-size:9px;cursor:pointer}
