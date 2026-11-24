@@ -18,7 +18,8 @@ const rendererFiles = [
   'find-music-convert-ui.js',
   'spotdl-integration.js',
   'mini-player-ui.js',
-  'audio-enhancements.js'
+  'audio-enhancements.js',
+  'audio-visualizer.js'
 ];
 
 async function buildRuntime() {

@@ -587,6 +587,7 @@ function playAllStems() {
 
   Promise.allSettled(playPromises);
   setPlayingUI(true);
+  notifyVisualizerPlaybackState();
 }
 
 function pauseAllStems() {
@@ -597,6 +598,7 @@ function pauseAllStems() {
   });
 
   setPlayingUI(false);
+  notifyVisualizerPlaybackState();
 }
 
 function createStemMixerUI() {
@@ -815,6 +817,7 @@ async function playStems() {
   );
 
   setPlayingUI(true);
+  notifyVisualizerPlaybackState();
 }
 
 function pauseStems() {
@@ -825,6 +828,7 @@ function pauseStems() {
   });
 
   setPlayingUI(false);
+  notifyVisualizerPlaybackState();
 }
 
 function seekStems(time) {
@@ -832,6 +836,8 @@ function seekStems(time) {
 }
 
 Object.keys(stemAudio).forEach((name) => {
+  stemAudio[name].addEventListener('play', notifyVisualizerPlaybackState);
+  stemAudio[name].addEventListener('pause', notifyVisualizerPlaybackState);
   stemAudio[name].addEventListener('timeupdate', () => {
     if (!stemMode || name !== 'drums') return;
 
@@ -1407,7 +1413,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   }
 
   // ---------- WASM (FLAC) engine state ----------
-  let audioCtx = null, gainNode = null;
+  let audioCtx = null, gainNode = null, visualizerAnalyser = null;
   let wasmBuffer = null, wasmSource = null;
   let wasmStartCtxTime = 0, wasmOffset = 0, wasmPlaying = false, wasmRAF = null;
 
@@ -1439,11 +1445,29 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
       eqLimiterNode.attack.value = 0.01;
       eqLimiterNode.release.value = 0.22;
       gainNode.connect(eqLimiterNode);
-      eqLimiterNode.connect(audioCtx.destination);
+      visualizerAnalyser = audioCtx.createAnalyser();
+      visualizerAnalyser.fftSize = 2048;
+      visualizerAnalyser.smoothingTimeConstant = 0.82;
+      // AnalyserNode is a transparent pass-through: it observes the fully
+      // processed output without creating a second playback path.
+      eqLimiterNode.connect(visualizerAnalyser);
+      visualizerAnalyser.connect(audioCtx.destination);
+      window.__sleeveAudioAnalysis = {
+        getAnalyser: () => visualizerAnalyser,
+        getContext: () => audioCtx,
+        isPlaying: () => currentEngine === 'stems'
+          ? Object.values(stemAudio).some(audio => !audio.paused)
+          : (currentEngine === 'wasm' ? wasmPlaying : !!mediaEl && !mediaEl.paused)
+      };
+      audioCtx.addEventListener('statechange', notifyVisualizerPlaybackState);
       ensureEqFilters(audioCtx);
       rebuildEqGain();
     }
     return audioCtx;
+  }
+
+  function notifyVisualizerPlaybackState(){
+    window.dispatchEvent(new Event('sleeve-playback-state'));
   }
 
   let flacDecoderPromise = null;
@@ -1505,6 +1529,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     wasmSource = source;
     wasmPlaying = true;
     setPlayingUI(true);
+    notifyVisualizerPlaybackState();
     startWasmClock();
   }
 
@@ -1514,6 +1539,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     wasmPlaying = false;
     if (wasmSource){ wasmSource.onended = null; try{ wasmSource.stop(); }catch(e){} wasmSource = null; }
     setPlayingUI(false);
+    notifyVisualizerPlaybackState();
     stopWasmClock();
   }
 
@@ -1679,6 +1705,12 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     pattern: false,
     nowPlayingThumb: false,
     dynamicArtworkBackground: true,
+    visualizerStyle: 'off',
+    lyricsVisualizerBackground: false,
+    visualizerColor: '#72c8ff',
+    visualizerSensitivity: 1.25,
+    visualizerBarCount: 48,
+    visualizerSpeed: 1,
     artworkBackgroundBlur: 38,
     artworkBackgroundIntensity: 72,
     artworkBackgroundSaturation: 125,
@@ -2127,6 +2159,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   }
   function saveSettings(){
     try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }catch(e){}
+    window.dispatchEvent(new CustomEvent('sleeve-settings-updated', { detail: Object.assign({}, settings) }));
   }
 
   function savePlaybackState(){
@@ -2317,6 +2350,15 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     document.getElementById('artworkBackgroundIntensityValue').textContent = `${settings.artworkBackgroundIntensity ?? 72}%`;
     document.getElementById('artworkBackgroundSaturationRange').value = settings.artworkBackgroundSaturation ?? 125;
     document.getElementById('artworkBackgroundSaturationValue').textContent = `${settings.artworkBackgroundSaturation ?? 125}%`;
+    document.getElementById('visualizerStyleSelect').value = settings.visualizerStyle || 'off';
+    document.getElementById('toggleLyricsVisualizerBackground').checked = !!settings.lyricsVisualizerBackground;
+    document.getElementById('visualizerColorInput').value = settings.visualizerColor || '#72c8ff';
+    document.getElementById('visualizerSensitivityRange').value = settings.visualizerSensitivity ?? 1.25;
+    document.getElementById('visualizerSensitivityValue').textContent = `${Number(settings.visualizerSensitivity ?? 1.25).toFixed(2)}×`;
+    document.getElementById('visualizerBarCountRange').value = settings.visualizerBarCount ?? 48;
+    document.getElementById('visualizerBarCountValue').textContent = String(settings.visualizerBarCount ?? 48);
+    document.getElementById('visualizerSpeedRange').value = settings.visualizerSpeed ?? 1;
+    document.getElementById('visualizerSpeedValue').textContent = `${Number(settings.visualizerSpeed ?? 1).toFixed(1)}×`;
     document.getElementById('toggleCardShadow').checked = settings.cardShadow !== false;
     document.getElementById('toggleBoldTitles').checked = !!settings.boldTitles;
     document.getElementById('toggleHairlines').checked = settings.hairlines !== false;
@@ -2533,6 +2575,24 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     const value = Number(e.target.value);
     document.getElementById('artworkBackgroundSaturationValue').textContent = `${value}%`;
     updateSetting({ artworkBackgroundSaturation: value });
+  });
+  document.getElementById('visualizerStyleSelect').addEventListener('change', (e) => updateSetting({ visualizerStyle: e.target.value }));
+  document.getElementById('toggleLyricsVisualizerBackground').addEventListener('change', (e) => updateSetting({ lyricsVisualizerBackground: e.target.checked }));
+  document.getElementById('visualizerColorInput').addEventListener('input', (e) => updateSetting({ visualizerColor: e.target.value }));
+  document.getElementById('visualizerSensitivityRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('visualizerSensitivityValue').textContent = `${value.toFixed(2)}×`;
+    updateSetting({ visualizerSensitivity: value });
+  });
+  document.getElementById('visualizerBarCountRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('visualizerBarCountValue').textContent = String(value);
+    updateSetting({ visualizerBarCount: value });
+  });
+  document.getElementById('visualizerSpeedRange').addEventListener('input', (e) => {
+    const value = Number(e.target.value);
+    document.getElementById('visualizerSpeedValue').textContent = `${value.toFixed(1)}×`;
+    updateSetting({ visualizerSpeed: value });
   });
   document.getElementById('miniPlayerScaleRange').addEventListener('input', (e) => {
     const v = parseInt(e.target.value, 10);
@@ -6397,8 +6457,8 @@ async function deleteAllDetectedDuplicateCopies(button) {
     updateTimeDisplay(mediaEl.currentTime, mediaEl.duration);
     savePlaybackState();
   });
-  mediaEl.addEventListener('play', () => { restoreMediaAudio(); setPlayingUI(true); savePlaybackState(); });
-  mediaEl.addEventListener('pause', () => { setPlayingUI(false); savePlaybackState(); });
+  mediaEl.addEventListener('play', () => { restoreMediaAudio(); setPlayingUI(true); savePlaybackState(); notifyVisualizerPlaybackState(); });
+  mediaEl.addEventListener('pause', () => { setPlayingUI(false); savePlaybackState(); notifyVisualizerPlaybackState(); });
   mediaEl.addEventListener('ended', () => { if (settings.autoplayNext) playNext(); else setPlayingUI(false); savePlaybackState(); });
 
   // ---------- Fullscreen for music videos ----------
