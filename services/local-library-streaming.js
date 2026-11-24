@@ -120,8 +120,16 @@ class LocalLibraryStreaming {
 
     if (req.method === 'GET' && url.pathname === '/v1/library/tracks') {
       const query = safeText(url.searchParams.get('q'), 100).toLowerCase();
+      const artistFilter = safeText(url.searchParams.get('artist'), 160).toLowerCase();
+      const albumFilter = safeText(url.searchParams.get('album'), 160).toLowerCase();
+      const genreFilter = safeText(url.searchParams.get('genre'), 100).toLowerCase();
       const items = [...this.tracks.values()]
-        .filter(track => !query || [track.title, track.artist, track.album, track.genre].some(value => value.toLowerCase().includes(query)))
+        .filter(track =>
+          (!query || [track.title, track.artist, track.album, track.genre].some(value => value.toLowerCase().includes(query))) &&
+          (!artistFilter || track.artist.toLowerCase() === artistFilter) &&
+          (!albumFilter || track.album.toLowerCase() === albumFilter) &&
+          (!genreFilter || track.genre.toLowerCase() === genreFilter)
+        )
         .sort((a, b) => a.artist.localeCompare(b.artist) || a.album.localeCompare(b.album) || a.title.localeCompare(b.title))
         .map(track => this.publicTrack(track));
       return this.sendJson(res, 200, this.page(items, url));
