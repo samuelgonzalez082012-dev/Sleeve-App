@@ -9,6 +9,29 @@ const { spawn } = require('node:child_process')
 const https = require('node:https')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
+const os = require('node:os')
+const { LocalNetworkService } = require('./services/local-network-service')
+
+let localNetworkService = null
+function getLocalNetworkService() {
+  if (!localNetworkService) {
+    localNetworkService = new LocalNetworkService({
+      userDataPath: app.getPath('userData'),
+      deviceName: `Sleeve — ${os.hostname()}`
+    })
+  }
+  return localNetworkService
+}
+
+// Local network hosting and pairing are owned by the Electron main process.
+ipcMain.handle('network:host-status', async () => getLocalNetworkService().getStatus())
+ipcMain.handle('network:host-start', async () => getLocalNetworkService().startHost())
+ipcMain.handle('network:host-stop', async () => getLocalNetworkService().stopHost())
+ipcMain.handle('network:discover', async (_event, timeoutMs) => getLocalNetworkService().discoverServers(timeoutMs))
+ipcMain.handle('network:pair', async (_event, payload) => getLocalNetworkService().pairWithServer(payload))
+ipcMain.handle('network:device-revoke', async (_event, deviceId) => ({
+  ok: getLocalNetworkService().revokeDevice(deviceId)
+}))
 
 // Where Demucs source files get resolved to and where split stems get
 // written. Resolving/hashing is shared by the split, find-existing, and
@@ -514,6 +537,10 @@ app.whenReady().then(() => {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay in the app when there's
 // no windows open. This behavior is not required on non-macOS platforms.
+app.on('before-quit', () => {
+  if (localNetworkService) localNetworkService.stopHost().catch(() => {})
+})
+
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
