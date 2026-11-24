@@ -879,6 +879,29 @@ stemAudio.drums.addEventListener('ended', () => {
 });
   let playlists = []; // { id, name, type:'music'|'video', trackIds: [] }
   let nextPlaylistId = 1;
+
+  let localNetworkSyncTimer = null;
+  function scheduleLocalNetworkLibrarySync(){
+    if (!window.electronAPI?.localNetworkSyncLibrary) return;
+    clearTimeout(localNetworkSyncTimer);
+    localNetworkSyncTimer = setTimeout(() => {
+      const snapshot = {
+        tracks: playlist.map(track => ({
+          id: track.id, sourcePath: track.sourcePath || '',
+          title: track.title, artist: track.artist, album: track.album,
+          year: track.year, genre: track.genre, duration: track.duration,
+          trackNum: track.trackNum, kind: track.kind
+        })),
+        playlists: playlists.map(item => ({
+          id: item.id, name: item.name, type: item.type,
+          trackIds: Array.isArray(item.trackIds) ? item.trackIds.slice() : []
+        }))
+      };
+      window.electronAPI.localNetworkSyncLibrary(snapshot).catch(error => {
+        console.warn('Sleeve: local network library sync failed', error);
+      });
+    }, 450);
+  }
   // { type:'home' } | { type:'playlist', id } | { type:'artists' } |
   // { type:'artistAlbums', artist } | { type:'album', artist, album }
   let currentView = { type: 'home' };
@@ -1095,7 +1118,7 @@ stemAudio.drums.addEventListener('ended', () => {
     return trackWriteFlushPromise;
   }
 
-  async function dbPut(track){ queueTrackWrite(track); }
+  async function dbPut(track){ queueTrackWrite(track); scheduleLocalNetworkLibrarySync(); }
 
   async function dbGetAll(){
     const db = await openDB();
@@ -1117,6 +1140,7 @@ stemAudio.drums.addEventListener('ended', () => {
       const tx = db.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).clear();
     }catch(err){ console.warn('Sleeve: could not clear storage', err); }
+    scheduleLocalNetworkLibrarySync();
   }
 
   async function dbClearAlbumThumbs(){
@@ -1144,6 +1168,7 @@ stemAudio.drums.addEventListener('ended', () => {
       const tx = db.transaction(STORE, 'readwrite');
       tx.objectStore(STORE).delete(id);
     }catch(err){ console.warn('Sleeve: could not delete track', err); }
+    scheduleLocalNetworkLibrarySync();
   }
 
   async function dbPutPlaylist(pl){
@@ -1153,6 +1178,7 @@ stemAudio.drums.addEventListener('ended', () => {
       const tx = db.transaction(PLAYLIST_STORE, 'readwrite');
       tx.objectStore(PLAYLIST_STORE).put({ id: pl.id, name: pl.name, type: pl.type || 'music', trackIds: pl.trackIds, thumb: pl.thumb || null });
     }catch(err){ console.warn('Sleeve: could not save playlist', err); }
+    scheduleLocalNetworkLibrarySync();
   }
 
   async function dbGetAllPlaylists(){
@@ -1175,6 +1201,7 @@ stemAudio.drums.addEventListener('ended', () => {
       const tx = db.transaction(PLAYLIST_STORE, 'readwrite');
       tx.objectStore(PLAYLIST_STORE).delete(id);
     }catch(err){ console.warn('Sleeve: could not delete playlist', err); }
+    scheduleLocalNetworkLibrarySync();
   }
 
   async function dbPutAlbumThumb(key, blob, kind){
@@ -7417,6 +7444,7 @@ seekBar.addEventListener('change', () => {
     });
 
     scheduleRender();
+    scheduleLocalNetworkLibrarySync();
     if (playlist.length > 0) loadTrack(0, false);
   })();
 ;
