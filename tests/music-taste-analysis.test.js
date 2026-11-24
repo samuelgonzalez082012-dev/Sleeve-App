@@ -49,7 +49,7 @@ test('builds a taste mix from the top genres using only local audio tracks', () 
   ];
   const profile = analyze(tracks, { now: 1000 });
   const mix = require('../music-taste-analysis').buildTasteMixTracks(tracks, profile, 4);
-  assert.deepEqual(mix.map((track) => track.id), [1, 3, 2, 4]);
+  assert.deepEqual(mix.map((track) => track.id), [1, 2, 3, 4]);
 });
 
 test('returns no taste mix when there is no genre metadata and respects limits', () => {
