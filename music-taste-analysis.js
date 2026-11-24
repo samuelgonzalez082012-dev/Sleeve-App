@@ -39,13 +39,13 @@
         ? 1 - (age / recentWindowMs)
         : 0;
       bucket.plays += plays;
-      bucket.tasteWeight += usePlays ? Math.sqrt(plays) : 1;
+      bucket.tasteWeight += usePlays ? plays : 1;
       if (freshness > 0) {
         bucket.recentTrackCount += 1;
         bucket.latestPlayedAt = Math.max(bucket.latestPlayedAt, lastPlayedAt);
         // A recent listen gives a genre a meaningful chance to enter the mix,
         // without allowing one old high-play-count track to dominate forever.
-        bucket.tasteWeight += 5 * freshness;
+        bucket.tasteWeight += 10 * freshness;
       }
     }
     const rows = Array.from(buckets.values());
