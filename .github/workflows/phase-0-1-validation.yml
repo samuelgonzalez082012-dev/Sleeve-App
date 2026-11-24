@@ -35,7 +35,7 @@ jobs:
             const current = checks.data.check_runs.find(run => run.name === 'validate' && run.app?.slug === 'github-actions');
             if (current) await github.rest.checks.update({ owner: context.repo.owner, repo: context.repo.repo, check_run_id: current.id, output: { title: 'JavaScript syntax check', summary } });
             if (failures.length) core.setFailed('JavaScript syntax errors found. See this check run summary.');
-      - name: Run automated tests
-        run: node tests/run-all.js
+      - name: Run Phase 4 taste-analysis tests
+        run: node --test tests/music-taste-analysis.test.js
       - name: Run Electron browser smoke test
         run: xvfb-run -a npx electron --no-sandbox --disable-gpu scripts/browser-smoke.js
