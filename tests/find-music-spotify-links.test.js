@@ -25,3 +25,14 @@ test('bounds search input length', () => {
   const url = links.buildSpotifySearchUrl('x'.repeat(500));
   assert.equal(decodeURIComponent(url.split('/search/')[1]).length, 240);
 });
+
+test('builds a safe SpotDL launch context for a discovered artist', () => {
+  const context = links.buildSpotdlDiscoveryContext('  Björk & The Sugarcubes  ');
+  assert.deepEqual(context, {
+    artistName: 'Björk & The Sugarcubes',
+    artistSearchUrl: 'https://open.spotify.com/search/Bj%C3%B6rk%20%26%20The%20Sugarcubes'
+  });
+  assert.equal(core.isAllowedHost(new URL(context.artistSearchUrl).hostname), true);
+  assert.equal(links.buildSpotdlDiscoveryContext('   '), null);
+  assert.equal(links.buildSpotdlDiscoveryContext('x'.repeat(250)).artistName.length, 200);
+});
