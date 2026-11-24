@@ -59,3 +59,17 @@ test('returns no taste mix when there is no genre metadata and respects limits',
   const profile = api.analyze(tracks, { now: 1000 });
   assert.equal(api.buildTasteMixTracks(tracks, profile, 1).length, 1);
 });
+test('recent listening gives newly explored genres a place in the Taste Mix', () => {
+  const api = require('../music-taste-analysis');
+  const now = 1000000000;
+  const tracks = [
+    { id: 1, title: 'Old Rock', artist: 'Rock Artist', genre: 'Rock', playCount: 20, lastPlayedAt: now - 60 * 86400000 },
+    { id: 2, title: 'Old Jazz', artist: 'Jazz Artist', genre: 'Jazz', playCount: 2, lastPlayedAt: now - 60 * 86400000 },
+    { id: 3, title: 'New Electronic', artist: 'Electronic Artist', genre: 'Electronic', playCount: 1, lastPlayedAt: now - 86400000 }
+  ];
+  const profile = api.analyze(tracks, { now });
+  assert.equal(profile.genres[0].name, 'Rock');
+  assert.equal(profile.genres[1].name, 'Electronic');
+  const mix = api.buildTasteMixTracks(tracks, profile, 3);
+  assert.deepEqual(mix.map((track) => track.id), [1, 3, 2]);
+});
