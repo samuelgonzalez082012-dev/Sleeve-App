@@ -4043,7 +4043,7 @@ const titleVariants = [...new Set([
     const topPlayed=sortedByPlayed(tracks).filter(t=>(t.playCount||0)>0).slice(0,8), topArtists=[...artists].map(a=>({a,n:tracks.filter(t=>(t.artist||'Unknown Artist')===a).reduce((x,t)=>x+(t.playCount||0),0)})).sort((a,b)=>b.n-a.n).slice(0,8);
     const tasteProfile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(tracks) : null;
     const tasteProfileHtml = tasteProfile ? renderTasteProfileSections(tasteProfile) : '';
-    document.getElementById('statsLists').innerHTML=`<div><h4>Most played songs</h4>${topPlayed.length?topPlayed.map(t=>`<div class="stats-list-row"><span>${escapeHtml(t.title)}</span><span>${t.playCount||0}</span></div>`).join(''):'<div class="stats-list-row"><span>Play something to build history.</span><span>—</span></div>'}</div><div><h4>Most played artists</h4>${topArtists.length?topArtists.map(x=>`<div class="stats-list-row"><span>${escapeHtml(x.a)}</span><span>${x.n}</span></div>`).join(''):'<div class="stats-list-row"><span>No play history yet.</span><span>—</span></div>'}</div>`;
+    document.getElementById('statsLists').innerHTML=`<div><h4>Most played songs</h4>${topPlayed.length?topPlayed.map(t=>`<div class="stats-list-row"><span>${escapeHtml(t.title)}</span><span>${t.playCount||0}</span></div>`).join(''):'<div class="stats-list-row"><span>Play something to build history.</span><span>—</span></div>'}</div><div><h4>Most played artists</h4>${topArtists.length?topArtists.map(x=>`<div class="stats-list-row"><span>${escapeHtml(x.a)}</span><span>${x.n}</span></div>`).join(''):'<div class="stats-list-row"><span>No play history yet.</span><span>—</span></div>'}</div>` + tasteProfileHtml;
     const settingsStatsGrid = document.getElementById('settingsStatsGrid');
     const settingsStatsLists = document.getElementById('settingsStatsLists');
     if (settingsStatsGrid) settingsStatsGrid.innerHTML = document.getElementById('statsGrid').innerHTML;
@@ -4053,7 +4053,7 @@ const titleVariants = [...new Set([
         historySection('Recently played', sortedByRecent(tracks.filter(t => t.lastPlayedAt)), t => formatRelativeTime(t.lastPlayedAt), 'Nothing has been played yet.') +
         historySection('Most played', sortedByPlayed(tracks.filter(t => (t.playCount || 0) > 0)), t => `${t.playCount || 0} plays`, 'Nothing has been played yet.') +
         historySection('Never played', tracks.filter(t => (t.playCount || 0) === 0).sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0)), () => 'never', 'Every song has been played.') +
-        historySection('Recently added', sortedByAdded(tracks), t => formatRelativeTime(t.addedAt), 'No songs have been added yet.');
+        historySection('Recently added', sortedByAdded(tracks), t => formatRelativeTime(t.addedAt), 'No songs have been added yet.') + tasteProfileHtml;
     }
   }
 
