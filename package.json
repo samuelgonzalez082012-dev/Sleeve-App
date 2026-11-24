@@ -3,10 +3,14 @@
   "productName": "snobbish-marketing-sail-0ov8g",
   "description": "My Electron application description",
   "keywords": [],
-  "main": "./main.js",
+  "main": "./app-main.js",
   "version": "1.0.1",
   "author": "samue",
   "scripts": {
+    "build:runtime": "node scripts/build-runtime.js",
+    "prestart": "npm run build:runtime",
+    "prepackage": "npm run build:runtime",
+    "premake": "npm run build:runtime",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make",
@@ -19,7 +23,8 @@
     "@electron-forge/maker-rpm": "^7.11.2",
     "@electron-forge/maker-squirrel": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
-    "electron": "43.4.0"
+    "electron": "43.4.0",
+    "esbuild": "^0.25.12"
   },
   "config": {},
   "license": "MIT"

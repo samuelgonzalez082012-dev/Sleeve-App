@@ -1594,6 +1594,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     stageCloseBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       stagePanel.classList.add('stage-closed');
+      document.body.classList.remove('spotify-now-playing');
     });
   }
   const stageTitle = document.getElementById('stageTitle');
@@ -1689,6 +1690,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
     reduceMotion: false,
     videoSize: 'standard',
     detailedAlbumView: false,
+    detailedPlaylistView: false,
     albumTrackOrder: true,
     albumArtAsTrackThumb: false,
     thumbRadius: 10,
@@ -1742,41 +1744,17 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
   // defaults it fills in.
   const APP_PRESETS = {
     sleeve: {
-      accent: 'cyan',
-      theme: 'navy',
-      font: 'serif',
-      cardStyle: 'normal',
-      radius: 10,
-      cardShadow: true,
-      boldTitles: false,
-      rowDensity: 'comfortable',
-      activeGlow: false,
+      topPageNavigation: false,
+      showStage: true,
     },
     spotify: {
-  accent: 'green',
-  theme: 'charcoal',
-  font: 'sans',
-  cardStyle: 'flat',
-  radius: 8,
-  cardShadow: false,
-  boldTitles: true,
-  rowDensity: 'compact',
-  activeGlow: true,
-  topPageNavigation: true,
-  showStage: true,
-},
-   amazonMusic: {
-  accent: 'cyan',
-  theme: 'midnight',
-  font: 'sans',
-  cardStyle: 'normal',
-  radius: 12,
-  cardShadow: true,
-  boldTitles: false,
-  rowDensity: 'comfortable',
-  activeGlow: false,
-topPageNavigation: true,
-},
+      topPageNavigation: true,
+      showStage: true,
+    },
+    amazonMusic: {
+      topPageNavigation: false,
+      showStage: true,
+    },
 };
 
 
@@ -2267,6 +2245,7 @@ topPageNavigation: true,
     document.body.classList.toggle('preset-sleeve', settings.appPreset === 'sleeve');
     document.body.classList.toggle('preset-spotify', settings.appPreset === 'spotify');
     document.body.classList.toggle('preset-amazonMusic', settings.appPreset === 'amazonMusic');
+    document.body.classList.toggle('spotify-now-playing', settings.appPreset === 'spotify' && settings.showStage && !stagePanel.classList.contains('stage-closed'));
     
     cardGrid.classList.toggle('view-list', settings.view === 'list');
     cardGrid.classList.toggle('view-shelf', settings.view === 'shelf');
@@ -2314,6 +2293,7 @@ topPageNavigation: true,
     document.getElementById('toggleAutoplay').checked = settings.autoplayNext;
     document.getElementById('toggleReduceMotion').checked = settings.reduceMotion;
     document.getElementById('toggleDetailedAlbum').checked = settings.detailedAlbumView;
+    document.getElementById('toggleDetailedPlaylist').checked = settings.detailedPlaylistView;
     document.getElementById('toggleAlbumTrackOrder').checked = settings.albumTrackOrder;
     document.getElementById('toggleAlbumArtThumb').checked = settings.albumArtAsTrackThumb;
     document.getElementById('toggleCompactCards').checked = !!settings.compactCards;
@@ -2350,8 +2330,16 @@ topPageNavigation: true,
   function applyPreset(key){
     const preset = APP_PRESETS[key];
     if (!preset) return;
+    if (key === 'amazonMusic'){
+      currentView = { type: 'home' };
+      amazonHomeFilter = null;
+      amazonMusicPage = 1;
+    }
     updateSetting(Object.assign({ appPreset: key }, preset));
+    applyTopPageNavigation();
     syncDrawerControls();
+    updateLyricsToggleVisibility();
+    scheduleRender(searchInput.value);
   }
 
   // Drawer open/close
@@ -2363,6 +2351,20 @@ topPageNavigation: true,
     document.getElementById('navArtists'),
     document.getElementById('navBrowse')
   ];
+  const spotifyLibrarySidebar = document.querySelector('.sidebar');
+  document.querySelectorAll('.spotify-library-filter').forEach(button => {
+    button.addEventListener('click', () => {
+      const selectedSection = button.dataset.librarySection;
+      spotifyLibrarySidebar.classList.toggle('spotify-library-tracks', selectedSection === 'tracks');
+      spotifyLibrarySidebar.classList.toggle('spotify-library-albums', selectedSection === 'albums');
+      document.querySelectorAll('.spotify-library-filter').forEach(filter => {
+        const selected = filter === button;
+        filter.classList.toggle('active', selected);
+        filter.setAttribute('aria-pressed', String(selected));
+      });
+      if (selectedSection === 'albums') renderSpotifyAlbumList();
+    });
+  });
   const customizeDrawer = document.getElementById('customizeDrawer');
   const drawerOverlay = document.getElementById('drawerOverlay');
   const drawerClose = document.getElementById('drawerClose');
@@ -2472,6 +2474,10 @@ topPageNavigation: true,
   document.getElementById('toggleReduceMotion').addEventListener('change', (e) => updateSetting({ reduceMotion: e.target.checked }));
   document.getElementById('toggleDetailedAlbum').addEventListener('change', (e) => {
     updateSetting({ detailedAlbumView: e.target.checked });
+    scheduleRender(searchInput.value);
+  });
+  document.getElementById('toggleDetailedPlaylist').addEventListener('change', (e) => {
+    updateSetting({ detailedPlaylistView: e.target.checked });
     scheduleRender(searchInput.value);
   });
   document.getElementById('toggleAlbumTrackOrder').addEventListener('change', (e) => {
@@ -2779,7 +2785,7 @@ startAudioOutputMonitoring();
       if (Number.isFinite(probe.duration)){
         track.duration = probe.duration;
         dbPut(track);
-        if (currentView.type === 'album') scheduleRender(searchInput.value);
+        if (currentView.type === 'album' || currentView.type === 'playlist') scheduleRender(searchInput.value);
       }
     }, { once: true });
     probe.addEventListener('error', () => {}, { once: true });
@@ -3092,8 +3098,11 @@ startAudioOutputMonitoring();
   function renderAlbumDetail(artistName, albumName, visible){
     const key = albumKey(artistName, albumName);
     const art = albumThumbs.get(key);
+    const spotifyPreset = settings.appPreset === 'spotify';
     const albumTracks = playlist
-      .filter(t => t.kind !== 'video' && (t.artist || 'Unknown Artist') === artistName && (t.album || 'Unknown Album') === albumName)
+      .filter(t => t.kind !== 'video'
+        && ((t.artist || '').trim() || 'Unknown Artist') === artistName
+        && ((t.album || '').trim() || 'Unknown Album') === albumName)
       .sort((a, b) => settings.albumTrackOrder
         ? (a.trackNum || Number.MAX_SAFE_INTEGER) - (b.trackNum || Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title)
         : playlist.indexOf(a) - playlist.indexOf(b));
@@ -3106,12 +3115,19 @@ startAudioOutputMonitoring();
     const meta = [years[0] || '', genres[0] || '', `${albumTracks.length} track${albumTracks.length === 1 ? '' : 's'}`, totalDuration ? formatTime(totalDuration) : 'Runtime pending']
       .filter(Boolean).join('  •  ');
     const artInner = albumArtMarkup(art, albumName);
+    const spotifyBackdrop = spotifyPreset && art
+      ? `<div class="spotify-album-backdrop" aria-hidden="true">${art.kind === 'video'
+        ? `<video src="${escapeHtml(art.url)}" muted loop autoplay playsinline></video>`
+        : `<img src="${escapeHtml(art.url)}" alt="">`}</div>`
+      : '';
 
     albumTracks.forEach(track => probeDuration(track));
     albumDetail.innerHTML = `
-      <section class="album-detail-hero">
+      <section class="album-detail-hero${spotifyPreset ? ' spotify-album-hero' : ''}">
+        ${spotifyBackdrop}
         <button class="album-detail-art" type="button" title="Set album thumbnail">${artInner}</button>
         <div class="album-detail-info">
+          ${spotifyPreset ? '<div class="spotify-album-type">Album</div>' : ''}
           <div class="album-detail-title">${escapeHtml(albumName)}</div>
           <button class="album-detail-artist" type="button">${escapeHtml(artistName)}</button>
           <div class="album-detail-metaline">${escapeHtml(meta)}</div>
@@ -3121,7 +3137,7 @@ startAudioOutputMonitoring();
           </div>
         </div>
       </section>
-      <section class="album-track-table" aria-label="Tracks">
+      <section class="album-track-table${spotifyPreset ? ' spotify-album-tracks' : ''}" aria-label="Tracks">
         <div class="album-track-header"><span>#</span><span>Title</span><span>Artist</span><span>Year</span><span>Genre</span><span>Time</span></div>
         ${visibleTracks.map(t => {
           const number = t.trackNum || albumTracks.indexOf(t) + 1;
@@ -3156,6 +3172,72 @@ startAudioOutputMonitoring();
     albumDetail.querySelectorAll('.album-track-row').forEach(row => row.addEventListener('click', () => {
       activeQueueIds = albumTracks.map(track => track.id);
       playTrackAt(playlist.findIndex(track => track.id === Number(row.dataset.trackId)), true);
+    }));
+  }
+
+  function renderPlaylistDetail(activePlaylist, visible){
+    const libraryIndices = new Map(playlist.map((track, index) => [track.id, index]));
+    const tracksById = new Map(playlist.map(track => [track.id, track]));
+    const playlistTracks = activePlaylist.trackIds
+      .map(id => tracksById.get(id))
+      .filter(Boolean);
+    const playlistTrackNumbers = new Map(playlistTracks.map((track, index) => [track.id, index + 1]));
+    const visibleTracks = visible.map(({ t }) => t);
+    const totalDuration = playlistTracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+    const meta = [`${playlistTracks.length} track${playlistTracks.length === 1 ? '' : 's'}`, totalDuration ? formatTime(totalDuration) : 'Runtime pending']
+      .join('  •  ');
+    const artInner = activePlaylist.thumb
+      ? `<img src="${escapeHtml(activePlaylist.thumb)}" alt="${escapeHtml(activePlaylist.name)}">`
+      : iconFor(activePlaylist.type === 'video' ? 'video' : 'audio');
+
+    playlistTracks.forEach(track => probeDuration(track));
+    albumDetail.innerHTML = `
+      <section class="album-detail-hero">
+        <button class="album-detail-art" type="button" title="Set playlist artwork">${artInner}</button>
+        <div class="album-detail-info">
+          <div class="album-detail-title">${escapeHtml(activePlaylist.name)}</div>
+          <div class="album-detail-metaline">${escapeHtml(meta)}</div>
+          <div class="album-detail-actions">
+            <button class="album-detail-play" type="button"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Play</button>
+            <button class="album-detail-shuffle" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg> Shuffle</button>
+          </div>
+        </div>
+      </section>
+      <section class="album-track-table playlist-track-table" aria-label="Playlist tracks">
+        <div class="album-track-header playlist-track-header"><span aria-hidden="true"></span><span>#</span><span>Title</span><span>Artist</span><span>Year</span><span>Genre</span><span>Time</span></div>
+        ${visibleTracks.map(t => {
+          const albumArt = albumThumbs.get(albumKey((t.artist || '').trim() || 'Unknown Artist', (t.album || '').trim() || 'Unknown Album'));
+          const trackArt = t.thumbUrl
+            ? (t.thumbKind === 'video' ? `<video src="${t.thumbUrl}" muted loop autoplay playsinline preload="metadata"></video>` : `<img src="${t.thumbUrl}" loading="lazy" decoding="async" alt="">`)
+            : (albumArt ? albumArtMarkup(albumArt, t.title) : iconFor(t.kind));
+          return `<div class="album-track-row playlist-track-row${libraryIndices.get(t.id) === currentIndex ? ' active' : ''}" data-track-id="${t.id}">
+          <span class="playlist-track-cover" aria-hidden="true">${trackArt}</span>
+          <span class="album-track-num">${playlistTrackNumbers.get(t.id)}</span>
+          <span class="album-track-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title)}</span>
+          <span class="album-track-artist">${escapeHtml(t.artist || '—')}</span>
+          <span class="album-track-year">${escapeHtml(t.year || '—')}</span>
+          <span class="album-track-genre">${escapeHtml(t.genre || '—')}</span>
+          <span class="album-track-duration">${t.duration ? formatTime(t.duration) : '--:--'}</span>
+        </div>`;
+        }).join('')}
+      </section>`;
+
+    albumDetail.querySelector('.album-detail-art').addEventListener('click', () => openPlaylistThumbPicker(activePlaylist));
+    albumDetail.querySelector('.album-detail-play').addEventListener('click', () => {
+      activeQueueIds = playlistTracks.map(track => track.id);
+      if (playlistTracks.length) playTrackAt(libraryIndices.get(playlistTracks[0].id), true);
+    });
+    albumDetail.querySelector('.album-detail-shuffle').addEventListener('click', () => {
+      activeQueueIds = playlistTracks.map(track => track.id);
+      for (let i = activeQueueIds.length - 1; i > 0; i--){
+        const j = Math.floor(Math.random() * (i + 1));
+        [activeQueueIds[i], activeQueueIds[j]] = [activeQueueIds[j], activeQueueIds[i]];
+      }
+      if (activeQueueIds.length) playTrackAt(libraryIndices.get(activeQueueIds[0]), true);
+    });
+    albumDetail.querySelectorAll('.album-track-row').forEach(row => row.addEventListener('click', () => {
+      activeQueueIds = playlistTracks.map(track => track.id);
+      playTrackAt(libraryIndices.get(Number(row.dataset.trackId)), true);
     }));
   }
 
@@ -3199,6 +3281,10 @@ startAudioOutputMonitoring();
   const lyricsToggleBtn = document.getElementById('lyricsToggleBtn');
   const lyricsPanel = document.getElementById('lyricsPanel');
   const lyricsPanelLines = document.getElementById('lyricsPanelLines');
+  const lyricsPageBtn = document.getElementById('playerLyricsBtn');
+  const lyricsPageTitle = document.getElementById('lyricsPageTitle');
+  const lyricsPageArtist = document.getElementById('lyricsPageArtist');
+  const mainContent = document.querySelector('.main-content');
   let lyricsFetchAttempts = new Map(); // Track which tracks we've already tried to fetch for
 
   const lyricsModalOverlay = document.getElementById('lyricsModalOverlay');
@@ -3219,6 +3305,7 @@ startAudioOutputMonitoring();
 
   let lyricsEditTrackId = null;
   let lyricsPanelOpen = false;
+  let lyricsPageOpen = false;
   let syncLines = []; // [{ text, time: null|number }]
   let syncCursor = 0;
   let currentLyricsParsed = null;
@@ -3429,16 +3516,44 @@ const titleVariants = [...new Set([
   function updateLyricsToggleVisibility(){
     const track = currentIndex !== -1 ? playlist[currentIndex] : null;
     lyricsToggleBtn.style.display = track ? 'inline-block' : 'none';
+    lyricsPageBtn.disabled = !track;
     if (!track){
+      closeLyricsPage();
       lyricsPanelOpen = false;
       lyricsPanel.classList.remove('open');
       lyricsToggleBtn.classList.remove('active');
     }
   }
 
+  function setLyricsPageOpen(open){
+    lyricsPageOpen = open;
+    mainContent.classList.toggle('lyrics-page-open', open);
+    lyricsPageBtn.classList.toggle('active', open);
+    lyricsPageBtn.setAttribute('aria-pressed', String(open));
+    lyricsPageBtn.title = open ? 'Hide lyrics' : 'Show lyrics';
+    lyricsPageBtn.setAttribute('aria-label', lyricsPageBtn.title);
+
+    lyricsPanelOpen = open;
+    lyricsPanel.classList.toggle('open', open);
+    lyricsToggleBtn.classList.toggle('active', open);
+    if (open) renderLyricsPanel();
+  }
+
+  function closeLyricsPage(){
+    if (lyricsPageOpen) setLyricsPageOpen(false);
+  }
+
+  lyricsPageBtn.addEventListener('click', () => {
+    if (currentIndex === -1) return;
+    setLyricsPageOpen(!lyricsPageOpen);
+  });
+
   function renderLyricsPanel(){
     const track = currentIndex !== -1 ? playlist[currentIndex] : null;
     currentActiveLine = -1;
+    lyricsPageTitle.textContent = track ? track.title : 'Lyrics';
+    lyricsPageArtist.textContent = track ? (track.artist || 'Unknown artist') : '';
+    lyricsPanelLines.classList.remove('timed');
     if (!track || !track.lyrics){
       currentLyricsParsed = null;
       lyricsPanelLines.innerHTML = `<div class="lyrics-empty">No lyrics yet for this song. <a id="lyricsEmptyAddLink">Add lyrics</a></div>`;
@@ -3448,6 +3563,7 @@ const titleVariants = [...new Set([
     }
     const parsed = parseLyrics(track.lyrics);
     currentLyricsParsed = parsed;
+    lyricsPanelLines.classList.toggle('timed', parsed.timed);
     if (parsed.lines.length === 0){
       lyricsPanelLines.innerHTML = `<div class="lyrics-empty">No lyrics yet for this song. <a id="lyricsEmptyAddLink">Add lyrics</a></div>`;
       const link = document.getElementById('lyricsEmptyAddLink');
@@ -3952,7 +4068,9 @@ const titleVariants = [...new Set([
       return pl ? pl.trackIds.slice() : [];
     }
     if (currentView.type === 'album'){
-      return playlist.filter(t => t.kind !== 'video' && (t.artist || 'Unknown Artist') === currentView.artist && (t.album || 'Unknown Album') === currentView.album)
+      return playlist.filter(t => t.kind !== 'video'
+        && ((t.artist || '').trim() || 'Unknown Artist') === currentView.artist
+        && ((t.album || '').trim() || 'Unknown Album') === currentView.album)
         .sort((a,b) => settings.albumTrackOrder
           ? (a.trackNum || Number.MAX_SAFE_INTEGER) - (b.trackNum || Number.MAX_SAFE_INTEGER) || a.title.localeCompare(b.title)
           : playlist.indexOf(a) - playlist.indexOf(b)).map(t => t.id);
@@ -4469,7 +4587,64 @@ if (!t) return false;
     const fr=new FileReader(); fr.onload=async()=>{pl.thumb=fr.result; await dbPutPlaylist(pl); scheduleRender(searchInput.value);}; fr.readAsDataURL(file);
   });
 
+  function renderSpotifyAlbumList(){
+    const container = document.getElementById('spotifyAlbumList');
+    if (!container) return;
+    if (settings.appPreset !== 'spotify' || !spotifyLibrarySidebar.classList.contains('spotify-library-albums')){
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = '';
+
+    const albums = new Map();
+    playlist.forEach(track => {
+      if (track.kind === 'video') return;
+      const artist = (track.artist || '').trim() || 'Unknown Artist';
+      const name = (track.album || '').trim() || 'Unknown Album';
+      const key = albumKey(artist, name);
+      if (!albums.has(key)) albums.set(key, { artist, name, tracks: [] });
+      albums.get(key).tracks.push(track);
+    });
+
+    Array.from(albums.values())
+      .sort((a, b) => a.name.localeCompare(b.name) || a.artist.localeCompare(b.artist))
+      .forEach(album => {
+        const art = albumThumbs.get(albumKey(album.artist, album.name));
+        const fallbackTrack = album.tracks.find(track => track.thumbUrl);
+        const artUrl = art ? art.url : (fallbackTrack ? fallbackTrack.thumbUrl : '');
+        const artKind = art ? art.kind : (fallbackTrack ? fallbackTrack.thumbKind : '');
+        const artMarkup = !artUrl
+          ? NOTE_ICON
+          : (artKind === 'video'
+            ? `<video src="${escapeHtml(artUrl)}" muted loop playsinline preload="metadata"></video>`
+            : `<img src="${escapeHtml(artUrl)}" loading="lazy" decoding="async" alt="">`);
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'spotify-album-item'
+          + (currentView.type === 'album' && currentView.artist === album.artist && currentView.album === album.name ? ' active' : '');
+        item.innerHTML = `
+          <span class="spotify-album-thumb">${artMarkup}</span>
+          <span class="spotify-album-meta">
+            <span class="spotify-album-name">${escapeHtml(album.name)}</span>
+            <span class="spotify-album-artist">${escapeHtml(album.artist)} · ${album.tracks.length} track${album.tracks.length === 1 ? '' : 's'}</span>
+          </span>`;
+        item.addEventListener('click', () => {
+          currentView = { type: 'album', artist: album.artist, album: album.name };
+          scheduleRender(searchInput.value);
+        });
+        container.appendChild(item);
+      });
+
+    if (albums.size === 0){
+      const empty = document.createElement('div');
+      empty.className = 'empty-shelf';
+      empty.textContent = 'No albums found yet.';
+      container.appendChild(empty);
+    }
+  }
+
   function renderPlaylistList(){
+    renderSpotifyAlbumList();
     navHome.classList.toggle('active', currentView.type === 'home');
     navArtists.classList.toggle('active', currentView.type === 'artists' || currentView.type === 'artistAlbums' || currentView.type === 'album');
     navBrowse.classList.toggle('active', currentView.type === 'browse' || currentView.type === 'browseGroup');
@@ -4590,24 +4765,65 @@ if (!t) return false;
     if(m<1)return 'just now'; if(m<60)return `${m}m ago`; if(h<24)return `${h}h ago`; if(day<30)return `${day}d ago`; return new Date(ts).toLocaleDateString();
   }
 
- // ---------- Amazon Music preset home ----------
+  // ---------- Amazon Music preset home ----------
+  let amazonHomeFilter = null;
+  let amazonMusicPage = 1;
+  const AMAZON_MUSIC_PAGE_SIZE = 50;
+
   function renderAmazonMusicHome(query){
     const oldWrap = document.getElementById('amazonHomeWrap');
     if (oldWrap) oldWrap.remove();
 
-    const active = settings.appPreset === 'amazonMusic'
-      && currentView.type === 'home'
-      && !query;
-
+    const active = settings.appPreset === 'amazonMusic';
     document.body.classList.toggle('amazon-home-active', active);
     if (!active) return;
 
     const mainContent = cardGrid?.parentElement;
     if (!mainContent) return;
 
+    const musicTracks = playlist.filter(track => track.kind !== 'video');
+    const matchesQuery = track => !query || matchesTrackQuery(track, query);
+    const filterTracks = (tracks) => tracks
+      .filter(matchesQuery)
+      .filter(track => {
+        if (!amazonHomeFilter) return true;
+        const artist = (track.artist || '').trim() || 'Unknown Artist';
+        const album = (track.album || '').trim();
+        const genre = (track.genre || '').trim() || 'Unknown Genre';
+        const year = (track.year || '').toString().trim() || 'Unknown Year';
+        if (amazonHomeFilter.type === 'artist') return artist === amazonHomeFilter.value;
+        if (amazonHomeFilter.type === 'album') {
+          return artist === amazonHomeFilter.artist && album === amazonHomeFilter.value;
+        }
+        if (amazonHomeFilter.type === 'genre') return genre === amazonHomeFilter.value;
+        if (amazonHomeFilter.type === 'year') return year === amazonHomeFilter.value;
+        if (amazonHomeFilter.type === 'playlist') {
+          return (amazonHomeFilter.trackIds || []).includes(track.id);
+        }
+        return true;
+      });
+
     const wrap = document.createElement('div');
     wrap.id = 'amazonHomeWrap';
     wrap.className = 'amazon-home-wrap';
+
+    const tools = document.createElement('div');
+    tools.className = 'amazon-home-tools';
+    tools.innerHTML = `
+      <div>
+        <h1>Your Music</h1>
+        <p>Artists, albums, and your collection in one place.</p>
+      </div>
+      <div class="amazon-home-actions">
+        <button type="button" class="amazon-action-btn" data-action="add-media">Add media</button>
+        <button type="button" class="amazon-action-btn" data-action="add-folder">Add folder</button>
+        <button type="button" class="amazon-action-btn amazon-settings-btn" data-action="settings" aria-label="Settings" title="Settings">Settings</button>
+      </div>
+    `;
+    tools.querySelector('[data-action="add-media"]').addEventListener('click', () => fileInput.click());
+    tools.querySelector('[data-action="add-folder"]').addEventListener('click', () => folderInput.click());
+    tools.querySelector('[data-action="settings"]').addEventListener('click', openDrawer);
+    wrap.appendChild(tools);
 
     const addSection = (title, label, className, buildContent) => {
       const section = document.createElement('section');
@@ -4622,40 +4838,113 @@ if (!t) return false;
       wrap.appendChild(section);
     };
 
-    // 1. Artists — full-width row across the main page.
-    const artists = getArtists().slice().sort((a, b) => a.name.localeCompare(b.name));
+    const setFilter = (filter) => {
+      amazonHomeFilter = filter;
+      amazonMusicPage = 1;
+      renderAmazonMusicHome(searchInput.value.trim().toLowerCase());
+      document.getElementById('amazonYourMusic')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const filterButton = (type, value, label, extra = {}, chip = true) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = chip ? 'amazon-filter-chip' : '';
+      button.textContent = label;
+      button.setAttribute('aria-pressed', String(
+        amazonHomeFilter?.type === type
+        && amazonHomeFilter.value === value
+        && (type !== 'album' || amazonHomeFilter.artist === extra.artist)
+      ));
+      button.addEventListener('click', () => setFilter({ type, value, ...extra }));
+      return button;
+    };
+
+    const artists = getArtists()
+      .map(artist => ({
+        ...artist,
+        plays: artist.tracks.reduce((total, track) => total + (track.playCount || 0), 0)
+      }))
+      .filter(artist => !query || artist.name.toLowerCase().includes(query) || artist.tracks.some(matchesQuery))
+      .sort((a, b) => b.plays - a.plays || a.name.localeCompare(b.name));
+
     addSection('Artists', `${artists.length} artists`, 'amazon-artists-section', (section) => {
       const row = document.createElement('div');
       row.className = 'amazon-artist-row';
 
-      artists.forEach(({ name, tracks }) => {
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'amazon-artist-card';
+      artists.forEach(({ name, tracks, plays }) => {
+        const card = filterButton('artist', name, '', { artist: name }, false);
+        card.classList.add('amazon-artist-card');
 
         const entry = artistThumbs.get(name);
         const art = entry
-          ? `<img src="${entry.url}" loading="lazy" decoding="async" alt="">`
+          ? albumArtMarkup(entry, name)
           : `<div class="amazon-artist-placeholder">${PERSON_ICON}</div>`;
 
-        card.innerHTML = `${art}<span class="name">${escapeHtml(name)}</span><span class="meta">${tracks.length} track${tracks.length === 1 ? '' : 's'}</span>`;
-
-        card.addEventListener('click', () => {
-          currentView = { type: 'artistAlbums', artist: name };
-          scheduleRender(searchInput.value);
-        });
+        card.innerHTML = `${art}<span class="name">${escapeHtml(name)}</span><span class="meta">${plays} plays</span>`;
 
         row.appendChild(card);
       });
 
       if (!artists.length){
-        row.innerHTML = '<div class="empty-shelf">No artists yet.</div>';
+        row.innerHTML = `<div class="empty-shelf">${musicTracks.length ? 'No artists match your search.' : 'No artists yet.'}</div>`;
       }
 
       section.appendChild(row);
     });
 
-    // 2. Playlists — full-width row under Artists.
+    const albumArtist = amazonHomeFilter?.type === 'artist'
+      ? amazonHomeFilter.value
+      : (amazonHomeFilter?.type === 'album' ? amazonHomeFilter.artist : null);
+    const albumSource = albumArtist
+      ? musicTracks.filter(track => ((track.artist || '').trim() || 'Unknown Artist') === albumArtist)
+      : musicTracks;
+    const albumMap = new Map();
+    albumSource.forEach(track => {
+      const artist = (track.artist || '').trim() || 'Unknown Artist';
+      const name = (track.album || '').trim();
+      if (!name) return;
+      const key = albumKey(artist, name);
+      if (!albumMap.has(key)) albumMap.set(key, { name, artist, tracks: [] });
+      albumMap.get(key).tracks.push(track);
+    });
+    const albums = Array.from(albumMap.values())
+      .map(album => ({
+        ...album,
+        plays: album.tracks.reduce((total, track) => total + (track.playCount || 0), 0)
+      }))
+      .filter(album => !query || album.name.toLowerCase().includes(query)
+        || album.artist.toLowerCase().includes(query)
+        || album.tracks.some(matchesQuery))
+      .sort((a, b) => b.plays - a.plays
+        || a.artist.localeCompare(b.artist)
+        || a.name.localeCompare(b.name));
+
+    addSection('Albums', `${albums.length} albums`, 'amazon-albums-section', (section) => {
+      const row = document.createElement('div');
+      row.className = 'amazon-album-row';
+
+      albums.forEach(album => {
+        const card = filterButton('album', album.name, '', { artist: album.artist }, false);
+        card.classList.add('amazon-album-card');
+        const albumArtwork = albumThumbs.get(albumKey(album.artist, album.name));
+        const trackArtwork = album.tracks.find(track => track.thumbUrl);
+        const artEntry = albumArtwork
+          || (trackArtwork ? { url: trackArtwork.thumbUrl, kind: trackArtwork.thumbKind } : null)
+          || albumArtForTrack(album.tracks[0]);
+        const art = artEntry
+          ? albumArtMarkup(artEntry, album.name)
+          : `<div class="amazon-album-placeholder">♫</div>`;
+        card.innerHTML = `
+          <div class="amazon-album-art">${art}</div>
+          <span class="name">${escapeHtml(album.name)}</span>
+          <span class="meta">${escapeHtml(album.artist)} · ${album.plays} plays</span>
+        `;
+        row.appendChild(card);
+      });
+
+      if (!albums.length) row.innerHTML = `<div class="empty-shelf">${musicTracks.length ? 'No albums match your search.' : 'No albums found yet.'}</div>`;
+      section.appendChild(row);
+    });
+
     const musicPlaylists = playlists
       .filter(pl => (pl.type || 'music') === 'music')
       .slice()
@@ -4665,60 +4954,72 @@ if (!t) return false;
       const row = document.createElement('div');
       row.className = 'amazon-playlist-row';
 
-      musicPlaylists.forEach((pl) => {
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'amazon-playlist-card';
+      musicPlaylists.forEach(pl => {
+        const card = filterButton('playlist', pl.name, '', { trackIds: pl.trackIds.slice() }, false);
+        card.classList.add('amazon-playlist-card');
+        const firstTrack = pl.trackIds
+          .map(id => playlist.find(track => track.id === id))
+          .find(Boolean);
+        const artEntry = firstTrack?.thumbUrl
+          ? { url: firstTrack.thumbUrl, kind: firstTrack.thumbKind }
+          : (firstTrack ? albumArtForTrack(firstTrack) : null);
+        const art = artEntry
+          ? albumArtMarkup(artEntry, pl.name)
+          : `<div class="amazon-playlist-placeholder">♫</div>`;
 
-        const art = pl.thumb
-          ? `<img src="${pl.thumb}" loading="lazy" decoding="async" alt="">`
-          : `<div class="amazon-playlist-art" style="display:flex;align-items:center;justify-content:center;background:#162231;color:#6280a0;font-size:30px;">♫</div>`;
-
-        card.innerHTML = `<div class="amazon-playlist-art">${art}</div><span class="name">${escapeHtml(pl.name)}</span><span class="meta">${pl.trackIds.length} track${pl.trackIds.length === 1 ? '' : 's'}</span>`;
-
-        card.addEventListener('click', () => {
-          currentView = { type: 'playlist', id: pl.id };
-          queueIds = pl.trackIds.slice();
-          activeQueueIds = queueIds.slice();
-          if (shuffleEnabled) queueIds = shuffleArray(queueIds);
-          scheduleRender(searchInput.value);
-        });
-
+        card.innerHTML = `
+          <div class="amazon-playlist-art">${art}</div>
+          <span class="name">${escapeHtml(pl.name)}</span>
+          <span class="meta">${pl.trackIds.length} track${pl.trackIds.length === 1 ? '' : 's'}</span>
+        `;
         row.appendChild(card);
       });
 
-      if (!musicPlaylists.length){
-        row.innerHTML = '<div class="empty-shelf">No music playlists yet.</div>';
-      }
-
+      if (!musicPlaylists.length) row.innerHTML = '<div class="empty-shelf">No playlists yet.</div>';
       section.appendChild(row);
     });
 
-    // 3. Your Library — full-width song list beneath playlists.
-    const songs = playlist
-      .filter(track => track.kind !== 'video')
+    const songs = filterTracks(musicTracks)
       .slice()
-      .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+      .sort((a, b) => (a.title || '').localeCompare(b.title || '')
+        || (a.artist || '').localeCompare(b.artist || ''));
     const songIds = songs.map(track => track.id);
+    const totalMusicPages = Math.max(1, Math.ceil(songs.length / AMAZON_MUSIC_PAGE_SIZE));
+    amazonMusicPage = Math.min(amazonMusicPage, totalMusicPages);
+    const pageStart = (amazonMusicPage - 1) * AMAZON_MUSIC_PAGE_SIZE;
+    const pageSongs = songs.slice(pageStart, pageStart + AMAZON_MUSIC_PAGE_SIZE);
 
-    addSection('Your Library', `${songs.length} songs`, 'amazon-library-section', (section) => {
+    addSection('Your Music', `${songs.length} songs · Page ${amazonMusicPage} of ${totalMusicPages}`, 'amazon-library-section', (section) => {
+      section.id = 'amazonYourMusic';
+      const activeFilter = amazonHomeFilter;
+      if (activeFilter){
+        const filterLabel = activeFilter.type === 'album'
+          ? `${activeFilter.artist} · ${activeFilter.value}`
+          : activeFilter.value;
+        const filterBar = document.createElement('div');
+        filterBar.className = 'amazon-active-filter';
+        filterBar.innerHTML = `<span>Filtered by ${escapeHtml(filterLabel)}</span><button type="button">Clear filter</button>`;
+        filterBar.querySelector('button').addEventListener('click', () => setFilter(null));
+        section.appendChild(filterBar);
+      }
+
       const list = document.createElement('div');
       list.className = 'amazon-library';
 
-      songs.forEach((track) => {
+      pageSongs.forEach((track) => {
         const row = document.createElement('div');
         row.className = 'amazon-library-row';
 
-        const artUrl = track.thumbUrl || '';
-        const art = artUrl
-          ? `<img src="${artUrl}" loading="lazy" decoding="async" alt="">`
-          : iconFor(track.kind);
+        const artEntry = track.thumbUrl
+          ? { url: track.thumbUrl, kind: track.thumbKind }
+          : albumArtForTrack(track);
+        const art = artEntry ? albumArtMarkup(artEntry, track.title) : iconFor(track.kind);
 
         row.innerHTML = `
           <div class="amazon-library-art">${art}</div>
           <div class="amazon-library-title">${escapeHtml(track.title)}</div>
           <div class="amazon-library-sub">${escapeHtml(track.artist || 'Unknown Artist')} · ${escapeHtml(track.album || 'Unknown Album')}</div>
-          <div class="amazon-library-kind">${escapeHtml(track.kind === 'flac' ? 'FLAC' : 'Audio')}</div>
+          <div class="amazon-library-meta">${escapeHtml([track.year, track.genre].filter(Boolean).join(' · ') || (track.kind === 'flac' ? 'FLAC' : 'Audio'))}</div>
         `;
 
         row.addEventListener('click', () => {
@@ -4730,11 +5031,64 @@ if (!t) return false;
       });
 
       if (!songs.length){
-        list.innerHTML = '<div class="empty-shelf">Nothing added to your library yet.</div>';
+        list.innerHTML = musicTracks.length
+          ? '<div class="empty-shelf">No songs match your search or filter.</div>'
+          : '<div class="empty-shelf">Nothing added to your library yet.</div>';
       }
 
       section.appendChild(list);
+
+      if (songs.length > AMAZON_MUSIC_PAGE_SIZE){
+        const pagination = document.createElement('nav');
+        pagination.className = 'amazon-music-pagination';
+        pagination.setAttribute('aria-label', 'Your Music pages');
+
+        const previous = document.createElement('button');
+        previous.type = 'button';
+        previous.textContent = 'Previous';
+        previous.disabled = amazonMusicPage === 1;
+        previous.addEventListener('click', () => {
+          amazonMusicPage -= 1;
+          renderAmazonMusicHome(searchInput.value.trim().toLowerCase());
+          document.getElementById('amazonYourMusic')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+
+        const pageLabel = document.createElement('span');
+        const first = pageStart + 1;
+        const last = Math.min(pageStart + AMAZON_MUSIC_PAGE_SIZE, songs.length);
+        pageLabel.textContent = `${first}–${last} of ${songs.length}`;
+
+        const next = document.createElement('button');
+        next.type = 'button';
+        next.textContent = 'Next';
+        next.disabled = amazonMusicPage === totalMusicPages;
+        next.addEventListener('click', () => {
+          amazonMusicPage += 1;
+          renderAmazonMusicHome(searchInput.value.trim().toLowerCase());
+          document.getElementById('amazonYourMusic')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+
+        pagination.append(previous, pageLabel, next);
+        section.appendChild(pagination);
+      }
     });
+
+    const addFacetSection = (title, facets, type) => {
+      addSection(title, `${facets.length} ${title.toLowerCase()}`, `amazon-${type}-section`, section => {
+        const row = document.createElement('div');
+        row.className = 'amazon-facet-row';
+        facets
+          .filter(facet => !query || facet.name.toLowerCase().includes(query) || facet.tracks.some(matchesQuery))
+          .forEach(facet => {
+            row.appendChild(filterButton(type, facet.name, `${facet.name} · ${facet.tracks.length}`));
+          });
+        if (!row.childElementCount) row.innerHTML = `<div class="empty-shelf">No ${title.toLowerCase()} found.</div>`;
+        section.appendChild(row);
+      });
+    };
+
+    addFacetSection('Genres', getGenres(), 'genre');
+    addFacetSection('Years', getYears(), 'year');
 
     mainContent.insertBefore(wrap, cardGrid);
   }
@@ -5121,6 +5475,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
 
 
   function renderAll(query, opts){
+    if (settings.appPreset === 'amazonMusic') currentView = { type: 'home' };
     renderPlaylistList();
     const skipSidebar = !!(opts && opts.skipSidebar);
     query = (query || '').toLowerCase();
@@ -5154,7 +5509,9 @@ async function deleteAllDetectedDuplicateCopies(button) {
       ? activePlaylist.trackIds.map(id => playlist.findIndex(t => t.id === id)).filter(i => i !== -1)
       : (isAlbum
           ? playlist.map((t, i) => ({ t, i }))
-              .filter(({ t }) => t.kind !== 'video' && (t.artist || 'Unknown Artist') === currentView.artist && (t.album || 'Unknown Album') === currentView.album)
+              .filter(({ t }) => t.kind !== 'video'
+                && ((t.artist || '').trim() || 'Unknown Artist') === currentView.artist
+                && ((t.album || '').trim() || 'Unknown Album') === currentView.album)
               .map(({ i }) => i)
           : (isBrowseGroup
               ? playlist.map((t, i) => ({ t, i }))
@@ -5224,12 +5581,14 @@ async function deleteAllDetectedDuplicateCopies(button) {
       : baseIndices.length > 0;
 
     const useDetailedAlbum = isAlbum && settings.detailedAlbumView && baseIndices.length > 0;
+    const useDetailedPlaylist = !!(activePlaylist && settings.detailedPlaylistView && baseIndices.length > 0);
+    const useDetailedPage = useDetailedAlbum || useDetailedPlaylist;
 
-    greeting.style.display = useDetailedAlbum ? 'none' : '';
-    subhead.style.display = useDetailedAlbum ? 'none' : '';
-    albumDetail.style.display = useDetailedAlbum ? 'flex' : 'none';
-    emptyMain.style.display = useDetailedAlbum ? 'none' : (hasAnyInView ? 'none' : 'block');
-    cardGrid.style.display = useDetailedAlbum ? 'none' : (hasAnyInView ? 'grid' : 'none');
+    greeting.style.display = useDetailedPage ? 'none' : '';
+    subhead.style.display = useDetailedPage ? 'none' : '';
+    albumDetail.style.display = useDetailedPage ? 'flex' : 'none';
+    emptyMain.style.display = useDetailedPage ? 'none' : (hasAnyInView ? 'none' : 'block');
+    cardGrid.style.display = useDetailedPage ? 'none' : (hasAnyInView ? 'grid' : 'none');
 
     if (isArtists){
       subhead.textContent = artistsData.length
@@ -5349,10 +5708,10 @@ async function deleteAllDetectedDuplicateCopies(button) {
 
     // Track whether the page currently on screen is even one that uses
     // the virtualized flat track-card grid (home/playlist/album/browseGroup)
-    // — Artists, Browse's own top-level list, and album/artist detail
+    // — Artists, Browse's own top-level list, and album/playlist/artist detail
     // pages never go through that path, so scroll on those pages should
     // never trigger a virtualization re-render at all.
-    const isFlatTrackView = !useDetailedAlbum && !isArtists && !isArtistAlbums && !isBrowse;
+    const isFlatTrackView = !useDetailedPage && !isArtists && !isArtistAlbums && !isBrowse;
 
     // Home can optionally be organized into sections (by album, date
     // added, artist, or genre) instead of one flat list. Grouped mode
@@ -5493,6 +5852,8 @@ async function deleteAllDetectedDuplicateCopies(button) {
 
     if (useDetailedAlbum){
       renderAlbumDetail(currentView.artist, currentView.album, visible);
+    } else if (useDetailedPlaylist){
+      renderPlaylistDetail(activePlaylist, visible);
     } else if (isArtists){
       pagedItems.forEach(({ name, tracks }) => {
         const entry = artistThumbs.get(name);
@@ -5626,11 +5987,13 @@ async function deleteAllDetectedDuplicateCopies(button) {
     if (typeof window.updatePaginationControls === 'function') {
       window.updatePaginationControls(paginationSource ? paginationSource.length : 0);
     }
+    renderAmazonMusicHome(query);
   }
 
   let searchDebounceTimer = null;
   searchInput.addEventListener('input', () => {
     clearTimeout(searchDebounceTimer);
+    if (settings.appPreset === 'amazonMusic') amazonMusicPage = 1;
     searchDebounceTimer = setTimeout(() => scheduleRender(searchInput.value), 70);
   });
 
@@ -5679,7 +6042,9 @@ async function deleteAllDetectedDuplicateCopies(button) {
     npTitle.textContent = track.title;
     npSub.textContent = `${index + 1} of ${playlist.length}`;
     stageTitle.textContent = track.title;
-    stageSub.textContent = `${index + 1} of ${playlist.length}`;
+    stageSub.textContent = settings.appPreset === 'spotify'
+      ? ((track.artist || '').trim() || (track.kind === 'video' ? 'Video' : 'Unknown artist'))
+      : `${index + 1} of ${playlist.length}`;
     stageBadge.style.display = 'inline-block';
     stageBadge.textContent = track.kind === 'video' ? 'Video' : (track.kind === 'flac' ? 'FLAC · decoded in-browser' : 'Audio');
     updateNowPlayingArt(track);
@@ -5689,9 +6054,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
   }
 
   function updateNowPlayingArt(track){
-    const albumArtEntry = albumArtForTrack(track);
+    const spotifyAlbumArt = settings.appPreset === 'spotify' && track && track.kind !== 'video'
+      ? albumThumbs.get(albumKey((track.artist || '').trim() || 'Unknown Artist', (track.album || '').trim() || 'Unknown Album'))
+      : null;
+    const albumArtEntry = spotifyAlbumArt || albumArtForTrack(track);
     const effectiveUrl = (track && track.thumbUrl) ? track.thumbUrl : (albumArtEntry ? albumArtEntry.url : '');
-    const useThumb = !!(settings.nowPlayingThumb && track && track.kind !== 'video' && effectiveUrl);
+    const useThumb = !!((settings.nowPlayingThumb || settings.appPreset === 'spotify') && track && track.kind !== 'video' && effectiveUrl);
     const isVideoThumb = useThumb && ((track.thumbUrl && track.thumbKind === 'video') || (!track.thumbUrl && albumArtEntry && albumArtEntry.kind === 'video'));
     npArt.classList.toggle('has-thumb', useThumb && !isVideoThumb);
     npArt.classList.toggle('has-thumb-video', isVideoThumb);
@@ -5730,6 +6098,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
     renderQueue();
     const isVideo = track.kind === 'video';
     stagePanel.classList.remove('stage-closed');
+    document.body.classList.toggle('spotify-now-playing', settings.appPreset === 'spotify' && settings.showStage);
     stagePanel.classList.toggle('has-video', isVideo);
     mediaEl.controls = isVideo;
     restoreMediaAudio();

@@ -25,9 +25,20 @@ findExistingStemsForSource: (filePath) =>
 verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
   showItemInFolder: (path) => ipcRenderer.invoke('shell:show-in-folder', path),
   checkSpotdl: () => ipcRenderer.invoke('spotdl:check'),
-  startSpotdlDownload: (url) => ipcRenderer.invoke('spotdl:start', url),
+  startSpotdlDownload: (url, options) => ipcRenderer.invoke('spotdl:start', url, options || {}),
+  enhanceSpotdlDownload: () => ipcRenderer.invoke('spotdl:enhance'),
   cancelSpotdlDownload: () => ipcRenderer.invoke('spotdl:cancel'),
   openSpotdlFolder: () => ipcRenderer.invoke('spotdl:open-folder'),
+  checkAiRestoration: () => ipcRenderer.invoke('ai-restoration:check'),
+  setupAiRestoration: () => ipcRenderer.invoke('ai-restoration:setup-sonicmaster'),
+  installAiRestorationDependencies: () => ipcRenderer.invoke('ai-restoration:install-dependencies'),
+  restoreAiAudioFile: () => ipcRenderer.invoke('ai-restoration:restore-file'),
+  onAiRestorationProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('ai-restoration:progress', listener);
+    return () => ipcRenderer.removeListener('ai-restoration:progress', listener);
+  },
   onSpotdlProgress: (callback) => {
     if (typeof callback !== 'function') return () => {};
     const listener = (_event, payload) => callback(payload);

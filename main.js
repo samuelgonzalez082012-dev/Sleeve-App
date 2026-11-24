@@ -1,12 +1,12 @@
 
 
-
 // Modules to control application life and create native browser window
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('node:path')
 const http = require('node:http')
 // main.js — add near your other requires
 const { spawn } = require('node:child_process')
+const https = require('node:https')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
 
@@ -424,7 +424,6 @@ ipcMain.handle('shell:show-in-folder', async (_event, filePath) => {
 
 
 
-
 function createWindow () {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -432,7 +431,7 @@ function createWindow () {
     height: 800,
     icon: path.join(__dirname, 'Icon.ico'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
+      preload: path.join(__dirname, 'app-preload.js')
     }
   })
 
@@ -506,15 +505,15 @@ app.whenReady().then(() => {
   createWindow()
 
   app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
+    // On macOS it's common to re-create an app window when its
+    // dock icon is clicked and there are no other open windows.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// for applications and their menu bar to stay in the app when there's
+// no windows open. This behavior is not required on non-macOS platforms.
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit()
 })
@@ -539,12 +538,399 @@ require('./find-music-public-metadata-main').registerFindMusicPublicMetadataHand
 // Find Music conversion of user-selected local media using a user-installed FFmpeg binary.
 require('./find-music-convert-main').registerFindMusicConvertHandlers({ ipcMain, app, dialog, shell });
 
+// Optional AI music restoration: official SonicMaster integration.
+// The app downloads the upstream code and a SHA-256-verified 3.45 GB checkpoint
+// only after the user explicitly starts setup in Settings.
+const AI_RESTORATION_DIR = path.join(app.getPath('userData'), 'ai-restoration', 'sonicmaster');
+const AI_RESTORATION_CONFIG_PATH = path.join(app.getPath('userData'), 'ai-restoration-config.json');
+const SONICMASTER_REVISION = 'ab32b2d456e461b6bbc188d666caf2eabefa2f31';
+const SONICMASTER_CHECKPOINT_URL = 'https://huggingface.co/amaai-lab/SonicMaster/resolve/main/model.safetensors';
+const SONICMASTER_CHECKPOINT_SHA256 = 'd6af20753f79824321b62a797780ff04ff277590804793f56bd83a2f3b7a5ed4';
+const SONICMASTER_FILES = [
+  ['infer_single.py', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/infer_single.py`],
+  ['model.py', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/model.py`],
+  ['utils.py', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/utils.py`],
+  ['configs/tangoflux_config.yaml', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/configs/tangoflux_config.yaml`],
+  ['requirements_sonic.txt', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/requirements_sonic.txt`],
+  ['LICENSE', `https://raw.githubusercontent.com/AMAAI-Lab/SonicMaster/${SONICMASTER_REVISION}/LICENSE`]
+];
+let aiSetupActive = false;
+let aiSetupRequest = null;
+
+function readAiRestorationConfig() {
+  try { return JSON.parse(fs.readFileSync(AI_RESTORATION_CONFIG_PATH, 'utf8')); }
+  catch (_) { return {}; }
+}
+
+function saveAiRestorationConfig(config) {
+  fs.mkdirSync(path.dirname(AI_RESTORATION_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(AI_RESTORATION_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+}
+
+function aiProgress(sender, payload) {
+  try { if (sender && !sender.isDestroyed()) sender.send('ai-restoration:progress', payload); }
+  catch (_) {}
+}
+
+function isTrustedAiDownloadHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return host === 'raw.githubusercontent.com' || host === 'huggingface.co' ||
+    host === 'hf.co' || host.endsWith('.huggingface.co') || host.endsWith('.hf.co');
+}
+
+function downloadTrustedAiAsset(sourceUrl, destination, sender, label) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let received = 0;
+    let total = 0;
+    let request = null;
+    let output = null;
+    const temporary = `${destination}.download`;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      try { if (request) request.destroy(); } catch (_) {}
+      try { if (output) output.destroy(); } catch (_) {}
+      try { fs.unlinkSync(temporary); } catch (_) {}
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    const fetch = (urlString, redirects = 0) => {
+      if (settled) return;
+      if (redirects > 8) return fail(new Error(`${label}: too many redirects.`));
+      let parsed;
+      try { parsed = new URL(urlString); } catch (_) { return fail(new Error(`${label}: invalid download URL.`)); }
+      if (parsed.protocol !== 'https:' || !isTrustedAiDownloadHost(parsed.hostname)) {
+        return fail(new Error(`${label}: blocked untrusted download host.`));
+      }
+      request = https.get(parsed, { headers: { 'User-Agent': 'Sleeve-Audio-Restoration/1.0' } }, (response) => {
+        const status = response.statusCode || 0;
+        if ([301, 302, 303, 307, 308].includes(status)) {
+          const next = response.headers.location;
+          response.resume();
+          if (!next) return fail(new Error(`${label}: server returned an empty redirect.`));
+          fetch(new URL(next, parsed).toString(), redirects + 1);
+          return;
+        }
+        if (status !== 200) {
+          response.resume();
+          return fail(new Error(`${label}: server returned HTTP ${status}.`));
+        }
+        total = Number(response.headers['content-length']) || 0;
+        received = 0;
+        try { fs.mkdirSync(path.dirname(destination), { recursive: true }); }
+        catch (error) { response.resume(); return fail(error); }
+        output = fs.createWriteStream(temporary);
+        response.on('data', (chunk) => {
+          received += chunk.length;
+          const percent = total > 0 ? Math.min(100, Math.round(received / total * 100)) : null;
+          aiProgress(sender, {
+            phase: label,
+            message: total > 0
+              ? `${label}: ${(received / 1073741824).toFixed(2)} / ${(total / 1073741824).toFixed(2)} GB (${percent}%)`
+              : `${label}: ${(received / 1048576).toFixed(0)} MB downloaded`,
+            percent,
+            receivedBytes: received,
+            totalBytes: total
+          });
+        });
+        response.once('error', fail);
+        output.once('error', fail);
+        output.once('finish', () => {
+          if (settled) return;
+          output.close(() => {
+            try { fs.renameSync(temporary, destination); }
+            catch (error) { return fail(error); }
+            settled = true;
+            resolve({ bytes: received, totalBytes: total });
+          });
+        });
+        response.pipe(output);
+      });
+      request.setTimeout(45000, () => request.destroy(new Error(`${label}: download timed out.`)));
+      request.once('error', fail);
+    };
+    fetch(sourceUrl);
+  });
+}
+
+function sha256File(filePath) {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const input = fs.createReadStream(filePath);
+    input.on('data', chunk => hash.update(chunk));
+    input.once('error', reject);
+    input.once('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+function checkSonicMasterFiles(config) {
+  const bootstrapPython = config.pythonSetupPath || config.pythonPath;
+  const required = [bootstrapPython, config.scriptPath, config.checkpointPath, config.configPath, config.requirementsPath];
+  const filesReady = required.every(target => {
+    try { return typeof target === 'string' && Boolean(target) && fs.statSync(target).isFile(); }
+    catch (_) { return false; }
+  });
+  return { filesReady, configured: Boolean(bootstrapPython || config.scriptPath || config.checkpointPath) };
+}
+
+function runPythonCheck(pythonPath, code) {
+  return new Promise((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let child;
+    let settled = false;
+    const finish = (result) => { if (settled) return; settled = true; resolve(result); };
+    try {
+      child = spawn(pythonPath, ['-c', code], { windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.on('data', chunk => stdout = (stdout + chunk.toString()).slice(-5000));
+      child.stderr.on('data', chunk => stderr = (stderr + chunk.toString()).slice(-5000));
+      child.once('error', error => finish({ ok: false, error: error.message }));
+      child.once('close', code => finish({ ok: code === 0, stdout: stdout.trim(), error: stderr.trim() }));
+    } catch (error) { finish({ ok: false, error: error.message }); }
+  });
+}
+
+async function checkAiRestorationConfig() {
+  const config = readAiRestorationConfig();
+  const paths = checkSonicMasterFiles(config);
+  if (!paths.filesReady) {
+    return {
+      available: false,
+      filesReady: false,
+      runtimeReady: false,
+      message: 'SonicMaster is not set up yet. Use “Set up SonicMaster” in Settings. The model checkpoint is about 3.45 GB and is downloaded only after you start setup.'
+    };
+  }
+  try { if (!config.pythonPath || !fs.statSync(config.pythonPath).isFile()) {
+    return {
+      available: false,
+      filesReady: true,
+      runtimeReady: false,
+      venvReady: false,
+      message: 'SonicMaster source and model files are ready. Install AI dependencies to create an isolated Python environment and install the model packages.'
+    };
+  }} catch (_) {
+    return {
+      available: false,
+      filesReady: true,
+      runtimeReady: false,
+      venvReady: false,
+      message: 'SonicMaster source and model files are ready. Install AI dependencies to create an isolated Python environment and install the model packages.'
+    };
+  }
+  const code = "import importlib.util,json; names=['torch','torchaudio','transformers','diffusers','accelerate','datasets','soundfile','safetensors','yaml']; print(json.dumps({name: bool(importlib.util.find_spec(name)) for name in names}))";
+  const runtime = await runPythonCheck(config.pythonPath, code);
+  if (!runtime.ok) {
+    return { available: false, filesReady: true, runtimeReady: false, message: runtime.error || 'Could not inspect the selected Python environment.' };
+  }
+  let modules = {};
+  try { modules = JSON.parse(runtime.stdout); } catch (_) {}
+  const missing = Object.keys(modules).filter(name => !modules[name]);
+  const runtimeReady = missing.length === 0;
+  return {
+    available: runtimeReady,
+    filesReady: true,
+    runtimeReady,
+    missingModules: missing,
+    message: runtimeReady
+      ? 'SonicMaster files and required Python modules are present. The text encoder and Stable Audio VAE may still download additional model data on the first restoration.'
+      : `SonicMaster model files are ready, but Python dependencies are missing: ${missing.join(', ')}. Use “Install AI dependencies” to install the official requirements.`
+  };
+}
+
+ipcMain.handle('ai-restoration:check', async () => checkAiRestorationConfig());
+
+ipcMain.handle('ai-restoration:setup-sonicmaster', async (event) => {
+  if (aiSetupActive) return { ok: false, error: 'SonicMaster setup is already running.' };
+  aiSetupActive = true;
+  aiSetupRequest = event && event.sender;
+  try {
+    const owner = event && event.sender ? BrowserWindow.fromWebContents(event.sender) : undefined;
+    const picked = await dialog.showOpenDialog(owner, {
+      title: 'Choose Python 3.10–3.12 for the pinned SonicMaster PyTorch requirements',
+      properties: ['openFile'],
+      filters: [{ name: 'Python executable', extensions: process.platform === 'win32' ? ['exe'] : ['*'] }]
+    });
+    if (picked.canceled || !picked.filePaths || !picked.filePaths[0]) return { cancelled: true };
+    const pythonSetupPath = picked.filePaths[0];
+    const probe = await runPythonCheck(pythonSetupPath, "import sys,json; print(json.dumps(list(sys.version_info[:3])))");
+    if (!probe.ok) throw new Error(`Selected Python could not be started: ${probe.error || 'unknown error'}`);
+    let pythonVersion;
+    try { pythonVersion = JSON.parse(probe.stdout); } catch (_) { pythonVersion = []; }
+    if (pythonVersion[0] !== 3 || pythonVersion[1] < 10 || pythonVersion[1] > 12) {
+      throw new Error('SonicMaster’s pinned PyTorch 2.4.0 dependencies require Python 3.10, 3.11, or 3.12. Select one of those Python versions.');
+    }
+    const modelDir = AI_RESTORATION_DIR;
+    await fs.promises.mkdir(path.join(modelDir, 'configs'), { recursive: true });
+    aiProgress(aiSetupRequest, { phase: 'source', message: 'Downloading official SonicMaster inference files…' });
+    for (const [relativePath, url] of SONICMASTER_FILES) {
+      const destination = path.join(modelDir, relativePath);
+      await downloadTrustedAiAsset(url, destination, aiSetupRequest, `SonicMaster source: ${relativePath}`);
+    }
+    const checkpointPath = path.join(modelDir, 'model.safetensors');
+    let checkpointReady = false;
+    try { checkpointReady = fs.statSync(checkpointPath).isFile() && (await sha256File(checkpointPath)) === SONICMASTER_CHECKPOINT_SHA256; }
+    catch (_) { checkpointReady = false; }
+    if (!checkpointReady) {
+      try { await fs.promises.unlink(checkpointPath); } catch (_) {}
+      aiProgress(aiSetupRequest, { phase: 'checkpoint', message: 'Downloading the official SonicMaster checkpoint (about 3.45 GB)…' });
+      await downloadTrustedAiAsset(SONICMASTER_CHECKPOINT_URL, checkpointPath, aiSetupRequest, 'SonicMaster model checkpoint');
+      const digest = await sha256File(checkpointPath);
+      if (digest !== SONICMASTER_CHECKPOINT_SHA256) {
+        try { await fs.promises.unlink(checkpointPath); } catch (_) {}
+        throw new Error('SonicMaster checkpoint SHA-256 verification failed. The partial or invalid file was deleted.');
+      }
+    }
+    const venvDirectory = path.join(modelDir, '.venv');
+    const venvPythonPath = process.platform === 'win32'
+      ? path.join(venvDirectory, 'Scripts', 'python.exe')
+      : path.join(venvDirectory, 'bin', 'python');
+    const config = {
+      provider: 'SonicMaster',
+      pythonSetupPath,
+      pythonPath: venvPythonPath,
+      venvDirectory,
+      modelDir,
+      scriptPath: path.join(modelDir, 'infer_single.py'),
+      checkpointPath,
+      configPath: path.join(modelDir, 'configs', 'tangoflux_config.yaml'),
+      requirementsPath: path.join(modelDir, 'requirements_sonic.txt')
+    };
+    saveAiRestorationConfig(config);
+    const status = await checkAiRestorationConfig();
+    aiProgress(aiSetupRequest, { phase: 'complete', message: status.message, percent: 100 });
+    return { ok: true, ...status };
+  } catch (error) {
+    const message = error && error.message ? error.message : 'SonicMaster setup failed.';
+    aiProgress(aiSetupRequest, { phase: 'error', message });
+    return { ok: false, error: message };
+  } finally {
+    aiSetupActive = false;
+    aiSetupRequest = null;
+  }
+});
+
+function runAiSetupCommand(executable, args, cwd, sender, phase) {
+  return new Promise((resolve) => {
+    let child;
+    let output = '';
+    let settled = false;
+    const finish = value => { if (settled) return; settled = true; resolve(value); };
+    try {
+      child = spawn(executable, args, {
+        cwd, windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe']
+      });
+      const consume = chunk => {
+        const value = chunk.toString();
+        output = (output + value).slice(-10000);
+        const lastLine = value.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0];
+        if (lastLine) aiProgress(sender, { phase, message: lastLine.slice(-220) });
+      };
+      child.stdout.on('data', consume);
+      child.stderr.on('data', consume);
+      child.once('error', error => finish({ ok: false, error: error.message, output }));
+      child.once('close', code => finish({ ok: code === 0, error: code === 0 ? '' : `Process exited with code ${code}`, output }));
+    } catch (error) { finish({ ok: false, error: error.message, output }); }
+  });
+}
+
+ipcMain.handle('ai-restoration:install-dependencies', async (event) => {
+  const config = readAiRestorationConfig();
+  const paths = checkSonicMasterFiles(config);
+  if (!paths.filesReady) return { ok: false, error: 'Set up SonicMaster model files first.' };
+  if (aiSetupActive) return { ok: false, error: 'Another AI setup task is running.' };
+  aiSetupActive = true;
+  const sender = event && event.sender;
+  try {
+    aiProgress(sender, { phase: 'dependencies', message: 'Creating an isolated Python environment for SonicMaster…' });
+    try { await fs.promises.access(config.pythonPath); }
+    catch (_) {
+      const venvResult = await runAiSetupCommand(config.pythonSetupPath, ['-m', 'venv', config.venvDirectory], config.modelDir, sender, 'dependencies');
+      if (!venvResult.ok) throw new Error(`Could not create the isolated Python environment: ${venvResult.error}. ${venvResult.output.split(/\r?\n/).slice(-5).join(' ')}`);
+    }
+    const pythonProbe = await runPythonCheck(config.pythonPath, 'import sys; print(sys.version.split()[0])');
+    if (!pythonProbe.ok) throw new Error(`The isolated Python environment could not start: ${pythonProbe.error || 'unknown error'}`);
+    aiProgress(sender, { phase: 'dependencies', message: 'Installing the official SonicMaster requirements and explicit inference dependencies. This can download several GB of packages.' });
+    const result = await runAiSetupCommand(config.pythonPath, ['-m', 'pip', 'install', '--disable-pip-version-check', '-r', config.requirementsPath, 'soundfile', 'safetensors', 'PyYAML'], config.modelDir, sender, 'dependencies');
+    if (!result.ok) throw new Error(`${result.error}. ${result.output.split(/\r?\n/).slice(-7).join(' ')}`);
+    const status = await checkAiRestorationConfig();
+    aiProgress(sender, { phase: 'complete', message: status.message, percent: 100 });
+    return { ok: true, ...status };
+  } catch (error) {
+    const message = error && error.message ? error.message : 'Could not install SonicMaster dependencies.';
+    aiProgress(sender, { phase: 'error', message });
+    return { ok: false, error: message };
+  } finally { aiSetupActive = false; }
+});
+
+ipcMain.handle('ai-restoration:restore-file', async (event) => {
+  const config = readAiRestorationConfig();
+  const status = await checkAiRestorationConfig();
+  if (!status.available) throw new Error(status.message);
+  const owner = event && event.sender ? BrowserWindow.fromWebContents(event.sender) : undefined;
+  const picked = await dialog.showOpenDialog(owner, {
+    title: 'Choose a local audio file to restore',
+    properties: ['openFile'],
+    filters: [{ name: 'Audio files', extensions: ['wav', 'flac', 'mp3', 'm4a', 'opus', 'ogg', 'aac'] }]
+  });
+  if (picked.canceled || !picked.filePaths || !picked.filePaths[0]) return { cancelled: true };
+  const inputPath = path.resolve(picked.filePaths[0]);
+  const outputDirectory = path.join(app.getPath('music'), 'Sleeve Restored');
+  await fs.promises.mkdir(outputDirectory, { recursive: true });
+  const baseName = path.basename(inputPath, path.extname(inputPath)).replace(/[<>:"/\\|?*\x00-\x1f]/g, ' ').slice(0, 100) || 'Restored Audio';
+  let outputPath = path.join(outputDirectory, `${baseName} (SonicMaster).wav`);
+  for (let suffix = 2; fs.existsSync(outputPath); suffix += 1) outputPath = path.join(outputDirectory, `${baseName} (SonicMaster ${suffix}).wav`);
+  const args = [
+    config.scriptPath,
+    '--ckpt', config.checkpointPath,
+    '--input', inputPath,
+    '--prompt', 'Restore this music recording. Reduce unwanted distortion, clipping, reverberation, and tonal imbalance while preserving the original musical performance and arrangement.',
+    '--output', outputPath,
+    '--config', config.configPath
+  ];
+  aiProgress(event && event.sender, { phase: 'inference', message: 'Running SonicMaster inference. Model loading and first-run VAE/text-encoder downloads may take time.' });
+  return new Promise((resolve, reject) => {
+    let stderr = '';
+    let stdout = '';
+    let child;
+    let settled = false;
+    const finish = (error, result) => { if (settled) return; settled = true; error ? reject(error) : resolve(result); };
+    try {
+      child = spawn(config.pythonPath, args, { cwd: config.modelDir, windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+      child.stdout.on('data', chunk => {
+        const line = chunk.toString().trim().split(/\r?\n/).filter(Boolean).slice(-1)[0];
+        stdout = (stdout + chunk.toString()).slice(-5000);
+        if (line) aiProgress(event && event.sender, { phase: 'inference', message: line.slice(-220) });
+      });
+      child.stderr.on('data', chunk => {
+        const text = chunk.toString();
+        stderr = (stderr + text).slice(-8000);
+        const line = text.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0];
+        if (line) aiProgress(event && event.sender, { phase: 'inference', message: line.slice(-220) });
+      });
+      child.once('error', error => finish(error));
+      child.once('close', code => {
+        if (code === 0 && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 0) {
+          const message = `SonicMaster restoration finished. Your original is unchanged. Output: ${outputPath}`;
+          aiProgress(event && event.sender, { phase: 'complete', message, percent: 100 });
+          finish(null, { cancelled: false, outputPath, message });
+        } else {
+          const message = stderr.trim().split(/\r?\n/).slice(-6).join(' ') || stdout.trim().split(/\r?\n/).slice(-3).join(' ') || `SonicMaster exited with code ${code}.`;
+          aiProgress(event && event.sender, { phase: 'error', message });
+          finish(new Error(message));
+        }
+      });
+    } catch (error) { finish(error); }
+  });
+});
+
 // ---------- spotDL download integration ----------
 // This block uses the existing Electron main-process imports (app, ipcMain,
 // shell, path, fs and spawn). Do not expose child_process to the renderer.
 const SPOTDL_DOWNLOAD_FOLDER_NAME = 'Sleeve Downloads';
 let spotdlResolvedCommand = null;
 let activeSpotdlJob = null;
+let pendingSpotdlEnhancement = null;
 
 function getSpotdlDownloadDirectory() {
   return path.join(app.getPath('music'), SPOTDL_DOWNLOAD_FOLDER_NAME);
@@ -645,11 +1031,174 @@ function countSpotdlAudioFiles(root) {
     try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (_) { continue; }
     for (const entry of entries) {
       const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(fullPath);
+      if (entry.isDirectory()) { if (entry.name.toLowerCase() !== 'enhanced') stack.push(fullPath); }
       else if (entry.isFile() && extensions.test(entry.name)) count += 1;
     }
   }
   return count;
+}
+
+function snapshotSpotdlFiles(directory) {
+  const files = new Map();
+  let entries = [];
+  try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch (_) {}
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.(mp3|flac|ogg|opus|m4a|wav|aac)$/i.test(entry.name)) continue;
+    const fullPath = path.join(directory, entry.name);
+    try {
+      const stat = fs.statSync(fullPath);
+      files.set(fullPath, { size: stat.size, mtimeMs: stat.mtimeMs });
+    } catch (_) {}
+  }
+  return files;
+}
+
+function getFfmpegCandidates() {
+  const executable = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+  let configured = '';
+  try {
+    const settingsPath = path.join(app.getPath('userData'), 'find-music-convert.json');
+    const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    if (typeof saved.ffmpegPath === 'string') configured = saved.ffmpegPath;
+  } catch (_) {}
+
+  return [...new Set([
+    process.env.FFMPEG_PATH || '',
+    configured,
+    app.isPackaged && process.resourcesPath ? path.join(process.resourcesPath, 'ffmpeg', executable) : '',
+    path.join(__dirname, executable),
+    path.join(__dirname, 'vendor', 'ffmpeg', executable),
+    executable
+  ].filter(Boolean))];
+}
+
+function probeFfmpeg(binary) {
+  return new Promise((resolve) => {
+    let output = '';
+    let child;
+    let settled = false;
+    const finish = (available) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(Boolean(available) && /ffmpeg version/i.test(output));
+    };
+    const timer = setTimeout(() => {
+      try { if (child) child.kill(); } catch (_) {}
+      finish(false);
+    }, 4000);
+
+    try {
+      child = spawn(binary, ['-version'], {
+        windowsHide: true,
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+      child.stdout.on('data', (chunk) => { output = (output + chunk.toString()).slice(0, 3000); });
+      child.stderr.on('data', (chunk) => { output = (output + chunk.toString()).slice(0, 3000); });
+      child.once('error', () => finish(false));
+      child.once('close', (code) => finish(code === 0));
+    } catch (_) {
+      finish(false);
+    }
+  });
+}
+
+async function findFfmpegForEnhancement() {
+  for (const candidate of getFfmpegCandidates()) {
+    if (await probeFfmpeg(candidate)) return candidate;
+  }
+  throw new Error('FFmpeg was not found. Configure it in Find Music → Convert or add FFmpeg to PATH. The original downloads are still available.');
+}
+
+function uniqueEnhancedOutput(directory, baseName, extension) {
+  let output = path.join(directory, `${baseName} (Enhanced)${extension}`);
+  for (let suffix = 2; fs.existsSync(output); suffix += 1) {
+    output = path.join(directory, `${baseName} (Enhanced ${suffix})${extension}`);
+  }
+  return output;
+}
+
+function transcodeEnhancedCopy(ffmpeg, source, temporaryOutput, extension, job) {
+  const ext = extension.toLowerCase();
+  let codecArgs;
+  if (ext === '.m4a' || ext === '.m4b' || ext === '.aac') codecArgs = ['-c:a', 'aac', '-b:a', '256k'];
+  else if (ext === '.opus' || ext === '.ogg' || ext === '.oga') codecArgs = ['-c:a', 'libopus', '-b:a', '160k'];
+  else if (ext === '.mp3') codecArgs = ['-c:a', 'libmp3lame', '-q:a', '2'];
+  else if (ext === '.flac') codecArgs = ['-c:a', 'flac', '-compression_level', '5'];
+  else if (ext === '.wav') codecArgs = ['-c:a', 'pcm_s16le'];
+  else throw new Error(`Smart enhancement does not support ${ext || 'this format'}.`);
+
+  const args = [
+    '-hide_banner', '-nostdin', '-y', '-i', source,
+    '-map', '0:a:0', '-vn',
+    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11,alimiter=limit=0.95:level=false',
+    '-map_metadata', '0',
+    ...codecArgs,
+    '-nostats', temporaryOutput
+  ];
+
+  return new Promise((resolve, reject) => {
+    let stderr = '';
+    let child;
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      if (job && job.enhanceProc === child) job.enhanceProc = null;
+      error ? reject(error) : resolve();
+    };
+    try {
+      child = spawn(ffmpeg, args, {
+        windowsHide: true,
+        shell: false,
+        stdio: ['ignore', 'ignore', 'pipe']
+      });
+      if (job) job.enhanceProc = child;
+      child.stderr.on('data', (chunk) => { stderr = (stderr + chunk.toString()).slice(-5000); });
+      child.once('error', (error) => finish(error));
+      child.once('close', (code) => {
+        finish(code === 0 ? null : new Error(stderr.trim().split(/\r?\n/).slice(-3).join(' ') || `FFmpeg exited with code ${code}`));
+      });
+    } catch (error) {
+      finish(error);
+    }
+  });
+}
+
+function getNewSpotdlFiles(downloadDirectory, beforeFiles) {
+  const afterFiles = snapshotSpotdlFiles(downloadDirectory);
+  return [...afterFiles.entries()].filter(([filePath, current]) => {
+    const previous = beforeFiles.get(filePath);
+    return !previous || previous.size !== current.size || previous.mtimeMs !== current.mtimeMs;
+  });
+}
+
+async function enhanceNewSpotdlFiles(downloadDirectory, beforeFiles, sender, job) {
+  const newFiles = getNewSpotdlFiles(downloadDirectory, beforeFiles);
+  if (!newFiles.length) throw new Error('No newly downloaded audio files were found to enhance.');
+
+  const ffmpeg = await findFfmpegForEnhancement();
+  const enhancedDirectory = path.join(downloadDirectory, 'Enhanced');
+  await fs.promises.mkdir(enhancedDirectory, { recursive: true });
+
+  let created = 0;
+  for (const [sourcePath] of newFiles) {
+    const extension = path.extname(sourcePath);
+    const baseName = path.basename(sourcePath, extension);
+    const outputPath = uniqueEnhancedOutput(enhancedDirectory, baseName, extension);
+    const tempPath = path.join(enhancedDirectory, `.${path.basename(outputPath, extension)}.${Date.now()}.tmp${extension}`);
+    try {
+      await transcodeEnhancedCopy(ffmpeg, sourcePath, tempPath, extension, job);
+      await fs.promises.rename(tempPath, outputPath);
+      created += 1;
+      sendSpotdlProgress(sender, { status: 'enhancing', message: `Enhanced copy created: ${path.basename(outputPath)}` });
+    } catch (error) {
+      try { await fs.promises.unlink(tempPath); } catch (_) {}
+      throw new Error(`Could not enhance ${path.basename(sourcePath)}: ${error.message || error}`);
+    }
+  }
+  return created;
 }
 
 ipcMain.handle('spotdl:check', async () => {
@@ -663,10 +1212,13 @@ ipcMain.handle('spotdl:check', async () => {
   };
 });
 
-ipcMain.handle('spotdl:start', async (event, rawUrl) => {
+ipcMain.handle('spotdl:start', async (event, rawUrl, options = {}) => {
+  const requestedFormat = ['m4a', 'opus', 'mp3'].includes(String(options && options.format || '').toLowerCase())
+    ? String(options.format).toLowerCase() : 'm4a';
   const spotifyUrl = validateSpotdlUrl(rawUrl);
   if (!spotifyUrl) return { ok: false, error: 'Enter a valid HTTPS Spotify link.' };
-  if (activeSpotdlJob) return { ok: false, error: 'A spotDL download is already running.' };
+  if (activeSpotdlJob) return { ok: false, error: 'A spotDL job is already running.' };
+  pendingSpotdlEnhancement = null;
 
   const command = await findSpotdlCommand();
   if (!command) {
@@ -688,14 +1240,15 @@ ipcMain.handle('spotdl:start', async (event, rawUrl) => {
     ...command.prefixArgs,
     'download',
     spotifyUrl,
-    '--format', 'mp3',
+    '--format', requestedFormat,
+    ...(requestedFormat === 'mp3' ? [] : ['--bitrate', 'disable']),
     '--output', outputTemplate
   ];
 
   return new Promise((resolve) => {
     let settled = false;
     let textBuffer = '';
-    const job = { proc: null, sender: event.sender, cancelled: false, resolve: null };
+    const job = { proc: null, enhanceProc: null, sender: event.sender, cancelled: false, resolve: null, enhancing: false, beforeFiles: snapshotSpotdlFiles(downloadDir) };
     activeSpotdlJob = job;
 
     const finish = (result) => {
@@ -739,7 +1292,7 @@ ipcMain.handle('spotdl:start', async (event, rawUrl) => {
       sendSpotdlProgress(job.sender, { status: 'error', message: error.message });
       finish({ ok: false, error: `Could not start spotDL: ${error.message}` });
     });
-    job.proc.once('close', (code) => {
+    job.proc.once('close', async (code) => {
       if (textBuffer.trim()) publishLine(textBuffer);
       if (job.cancelled) {
         sendSpotdlProgress(job.sender, { status: 'cancelled', message: 'Download cancelled.' });
@@ -747,8 +1300,18 @@ ipcMain.handle('spotdl:start', async (event, rawUrl) => {
         return;
       }
       if (code === 0) {
-        sendSpotdlProgress(job.sender, { status: 'done', downloadDir, count: countSpotdlAudioFiles(downloadDir) });
-        finish({ ok: true, downloadDir });
+        const newFileCount = getNewSpotdlFiles(downloadDir, job.beforeFiles).length;
+        pendingSpotdlEnhancement = newFileCount > 0
+          ? { downloadDir, beforeFiles: job.beforeFiles, createdAt: Date.now() }
+          : null;
+        sendSpotdlProgress(job.sender, {
+          status: 'done',
+          downloadDir,
+          count: countSpotdlAudioFiles(downloadDir),
+          newFileCount,
+          enhancementAvailable: Boolean(pendingSpotdlEnhancement)
+        });
+        finish({ ok: true, downloadDir, newFileCount, enhancementAvailable: Boolean(pendingSpotdlEnhancement) });
       } else {
         const message = `spotDL stopped with exit code ${code}. Check the output above; common causes are a network error, an unavailable match, or missing dependencies.`;
         sendSpotdlProgress(job.sender, { status: 'error', message });
@@ -760,8 +1323,41 @@ ipcMain.handle('spotdl:start', async (event, rawUrl) => {
   });
 });
 
+
+
+ipcMain.handle('spotdl:enhance', async (event) => {
+  if (activeSpotdlJob) return { ok: false, error: 'Another spotDL job is still running.' };
+  if (!pendingSpotdlEnhancement) return { ok: false, error: 'There is no recent download available to enhance.' };
+
+  const pending = pendingSpotdlEnhancement;
+  const job = { proc: null, enhanceProc: null, sender: event.sender, cancelled: false, enhancing: true };
+  activeSpotdlJob = job;
+  sendSpotdlProgress(job.sender, {
+    status: 'enhancing',
+    message: 'Creating separate enhanced copies with FFmpeg. The downloaded originals will not be changed.'
+  });
+
+  try {
+    const enhancedCount = await enhanceNewSpotdlFiles(pending.downloadDir, pending.beforeFiles, job.sender, job);
+    pendingSpotdlEnhancement = null;
+    sendSpotdlProgress(job.sender, {
+      status: 'enhance-done',
+      downloadDir: pending.downloadDir,
+      enhancedCount
+    });
+    return { ok: true, downloadDir: pending.downloadDir, enhancedCount };
+  } catch (error) {
+    const message = error && error.message ? error.message : 'FFmpeg enhancement failed.';
+    sendSpotdlProgress(job.sender, { status: 'enhance-error', message, downloadDir: pending.downloadDir });
+    return { ok: false, error: message };
+  } finally {
+    if (activeSpotdlJob === job) activeSpotdlJob = null;
+  }
+});
+
 ipcMain.handle('spotdl:cancel', async () => {
   const job = activeSpotdlJob;
+  if (job && job.enhancing) return { ok: false, error: 'The download has finished; the enhancement step cannot be cancelled.' };
   if (!job || !job.proc || !job.proc.pid) return { ok: false, error: 'No active spotDL download.' };
   job.cancelled = true;
   sendSpotdlProgress(job.sender, { status: 'cancelling', message: 'Stopping the download…' });
@@ -796,19 +1392,21 @@ ipcMain.handle('spotdl:open-folder', async () => {
 
 app.on('before-quit', () => {
   const job = activeSpotdlJob;
-  if (!job || !job.proc || !job.proc.pid) return;
+  if (!job) return;
   job.cancelled = true;
+  const child = job.enhancing ? job.enhanceProc : job.proc;
+  if (!child || !child.pid) return;
   try {
     if (process.platform === 'win32') {
-      const killer = spawn('taskkill', ['/pid', String(job.proc.pid), '/t', '/f'], {
+      const killer = spawn('taskkill', ['/pid', String(child.pid), '/t', '/f'], {
         windowsHide: true,
         shell: false,
         stdio: 'ignore'
       });
       killer.unref();
     } else {
-      try { process.kill(-job.proc.pid, 'SIGTERM'); }
-      catch (_) { job.proc.kill('SIGTERM'); }
+      try { process.kill(-child.pid, 'SIGTERM'); }
+      catch (_) { child.kill('SIGTERM'); }
     }
   } catch (_) {}
 });

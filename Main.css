@@ -715,6 +715,15 @@
     gap:14px; padding:11px 16px; align-items:center; cursor:pointer; border-radius:6px;
     transition: background 0.12s var(--ease);
   }
+  .playlist-track-header, .playlist-track-row{
+    grid-template-columns: 38px 36px 1.4fr 1fr 60px 130px 56px;
+  }
+  .playlist-track-cover{
+    width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    overflow:hidden; border-radius:6px; background:var(--bg-elevated-2);
+  }
+  .playlist-track-cover img, .playlist-track-cover video{ width:100%; height:100%; object-fit:cover; }
+  .playlist-track-cover svg{ width:16px; height:16px; color:var(--text-dimmer); }
   .album-track-row:nth-child(even){ background: rgba(255,255,255,0.025); }
   .album-track-row:hover{ background: var(--bg-card-hover); }
   .album-track-row.active{ background: rgba(23,171,232,0.14); }
@@ -727,6 +736,8 @@
   .album-track-duration{ font-size:12.5px; color: var(--text-dim); text-align:right; font-variant-numeric: tabular-nums; }
   @media (max-width: 760px){
     .album-track-header, .album-track-row{ grid-template-columns: 30px 1fr 56px; }
+    .playlist-track-header, .playlist-track-row{ grid-template-columns: 30px 30px 1fr 56px; }
+    .playlist-track-cover{ width:30px; height:30px; }
     .album-track-artist, .album-track-year, .album-track-genre{ display:none; }
     .album-detail-hero{ flex-direction:column; align-items:flex-start; }
   }
@@ -1018,6 +1029,7 @@
     margin-bottom:28px; transition: max-height 0.25s var(--ease);
   }
   .lyrics-panel.open{ display:block; max-height:340px; }
+  .lyrics-page-header{ display:none; }
   .lyrics-panel-lines{
     max-height:340px; overflow-y:auto; padding:22px 26px;
     display:flex; flex-direction:column; gap:12px;

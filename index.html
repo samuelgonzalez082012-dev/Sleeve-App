@@ -38,22 +38,32 @@
         </button>
       </nav>
 
-      <div class="sidebar-section-label playlist-section-label">
-        <span>Music playlists</span>
+      <div class="spotify-library-heading">
+        <strong>Your Library</strong>
+      </div>
+      <div class="spotify-library-filters" role="group" aria-label="Library sections">
+        <button class="spotify-library-filter active" type="button" aria-pressed="true" data-library-section="playlists">Playlists</button>
+        <button class="spotify-library-filter" type="button" aria-pressed="false" data-library-section="albums">Albums</button>
+        <button class="spotify-library-filter" type="button" aria-pressed="false" data-library-section="tracks">Tracks</button>
+      </div>
+      <div class="spotify-album-list" id="spotifyAlbumList" aria-label="Albums"></div>
+
+      <div class="sidebar-section-label playlist-section-label music-playlists-header">
+        <span class="default-sidebar-label">Music playlists</span>
+        <span class="spotify-sidebar-label">Playlists</span>
         <div class="playlist-section-actions">
           <button class="playlist-new-btn" id="generateSmartPlaylistBtn" title="Generate a playlist" aria-label="Generate a playlist">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="m15 4 5 5"/>
-    <path d="M13.5 5.5 4 15a2 2 0 0 0 0 3l1 1a2 2 0 0 0 3 0l9.5-9.5"/>
-    <path d="m18 2 .45 1.55L20 4l-1.55.45L18 6l-.45-1.55L16 4l1.55-.45L18 2Z"/>
-  </svg>
-</button>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m15 4 5 5"/>
+              <path d="M13.5 5.5 4 15a2 2 0 0 0 0 3l1 1a2 2 0 0 0 3 0l9.5-9.5"/>
+              <path d="m18 2 .45 1.55L20 4l-1.55.45L18 6l-.45-1.55L16 4l1.55-.45L18 2Z"/>
+            </svg>
+          </button>
           <button class="playlist-new-btn" id="newMusicPlaylistBtn" title="New music playlist">+</button>
         </div>
       </div>
       <div class="playlist-list" id="musicPlaylistList"></div>
-      <div class="sidebar-section-label playlist-section-label">
+      <div class="sidebar-section-label playlist-section-label video-playlists-header">
         <span>Video playlists</span>
         <button class="playlist-new-btn" id="newVideoPlaylistBtn" title="New video playlist">+</button>
       </div>
@@ -76,8 +86,11 @@
       <input type="file" id="playlistThumbInput" accept="image/*" style="display:none">
       <input type="file" id="artistThumbInput" accept="image/*" style="display:none">
 
-      <div class="sidebar-section-label">Your Library</div>
-      <div class="track-list" id="trackListSidebar">
+      <div class="sidebar-section-label library-track-header">
+        <span class="default-sidebar-label">Your Library</span>
+        <span class="spotify-sidebar-label">Tracks</span>
+      </div>
+      <div class="track-list library-track-list" id="trackListSidebar">
         <div class="empty-shelf" id="emptyShelfSidebar">Nothing added yet.</div>
       </div>
 
@@ -136,6 +149,11 @@
         </div>
 
         <div class="lyrics-panel" id="lyricsPanel">
+          <div class="lyrics-page-header">
+            <div class="lyrics-page-eyebrow">Now playing</div>
+            <h2 id="lyricsPageTitle">Lyrics</h2>
+            <div id="lyricsPageArtist"></div>
+          </div>
           <div class="lyrics-panel-lines" id="lyricsPanelLines"></div>
         </div>
 
@@ -263,6 +281,9 @@
     </div>
 
     <div class="player-right">
+      <button class="player-lyrics-btn" id="playerLyricsBtn" type="button" title="Show lyrics" aria-label="Show lyrics" aria-pressed="false" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      </button>
       <button class="queue-panel-btn" id="playerQueueBtn" type="button" title="Show queue" aria-label="Show queue">☷</button>
       <button class="eq-trigger" id="eqTrigger" type="button" title="Equalizer" aria-label="Open equalizer" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v16M12 4v16M18 4v16"/><path d="M3 8h6M9 15h6M15 10h6"/></svg>
@@ -355,7 +376,7 @@
           <button type="button" data-value="spotify">Spotify-inspired</button>
           <button type="button" data-value="amazonMusic">Amazon Music-inspired</button>
         </div>
-        <div class="drawer-hint">Presets are a starting point — every setting below still overrides them.</div>
+        <div class="drawer-hint">Presets control page organization and layout. The color and appearance settings below always stay yours.</div>
       </div>
 
       <div class="drawer-section">
@@ -575,6 +596,10 @@
           <label class="switch"><input type="checkbox" id="toggleDetailedAlbum"><span class="switch-track"></span></label>
         </div>
         <div class="drawer-toggle-row">
+          <span>Detailed playlist page</span>
+          <label class="switch"><input type="checkbox" id="toggleDetailedPlaylist"><span class="switch-track"></span></label>
+        </div>
+        <div class="drawer-toggle-row">
           <span>Order album tracks by #</span>
           <label class="switch"><input type="checkbox" id="toggleAlbumTrackOrder" checked><span class="switch-track"></span></label>
         </div>
@@ -701,9 +726,7 @@
     </div>
   </div>
  
-<script src="./duplicate-detection.js"></script>
-<script src="./renderer.js"></script>
- <script src="./playlist-import.js"></script>
+<script src="./app-renderer.js"></script>
 
 <div class="dupe-modal-overlay" id="dupeModalOverlay" role="dialog" aria-modal="true" aria-labelledby="dupeModalTitle" aria-hidden="true" hidden>
   <div class="dupe-modal-box">
@@ -712,12 +735,5 @@
     <div class="dupe-group-list" id="dupeGroupList"></div>
   </div>
 </div>
-  <script src="./find-music.js"></script>
-  <script src="./find-music-watch-ui.js"></script>
-  <script src="./find-music-download-ui.js"></script>
-  <script src="./find-music-import-core.js"></script>
-  <script src="./find-music-import-ui.js"></script>
-  <script src="./find-music-convert-ui.js"></script>
-  <script src="./spotdl-integration.js"></script>
 </body>
 </html>

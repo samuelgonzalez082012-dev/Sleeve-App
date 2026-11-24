@@ -4,6 +4,9 @@ node_modules/
 # Electron Forge / builds
 out/
 dist/
+app-main.js
+app-preload.js
+app-renderer.js
 
 # Python
 python/venv/

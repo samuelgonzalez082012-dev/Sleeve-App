@@ -18,6 +18,135 @@
 
 
 /* ============================================================
+   SHARED LYRICS PAGE
+   ============================================================ */
+
+.player-lyrics-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.15s var(--ease), background 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.player-lyrics-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.player-lyrics-btn:hover,
+.player-lyrics-btn.active {
+    border-color: var(--accent-blue-bright);
+    background: color-mix(in srgb, var(--accent-blue-bright) 12%, transparent);
+    color: var(--accent-blue-bright);
+}
+
+.player-lyrics-btn:disabled {
+    cursor: default;
+    opacity: 0.4;
+}
+
+.player-lyrics-btn:disabled:hover {
+    border-color: var(--line);
+    background: transparent;
+    color: var(--text-dim);
+}
+
+body .main-content.lyrics-page-open {
+    display: flex !important;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: 8px 0 16px;
+}
+
+body .main-content.lyrics-page-open > #dupeBanner,
+body .main-content.lyrics-page-open > #greeting,
+body .main-content.lyrics-page-open > #subhead,
+body .main-content.lyrics-page-open > #viewBackBtn,
+body .main-content.lyrics-page-open > #stagePanel,
+body .main-content.lyrics-page-open > #browseSwitch,
+body .main-content.lyrics-page-open > #albumDetail,
+body .main-content.lyrics-page-open > #amazonHomeWrap,
+body .main-content.lyrics-page-open > #cardGrid,
+body .main-content.lyrics-page-open > #paginationControls,
+body .main-content.lyrics-page-open > #emptyMain {
+    display: none !important;
+}
+
+body .main-content.lyrics-page-open > #lyricsPanel.open {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    max-height: none;
+    margin: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+body .main-content.lyrics-page-open .lyrics-page-header {
+    display: block;
+    padding: 22px clamp(24px, 8vw, 112px) 8px;
+}
+
+body .lyrics-page-eyebrow {
+    margin-bottom: 6px;
+    color: var(--text-dimmer);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+body .lyrics-page-header h2 {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: clamp(22px, 3vw, 32px);
+}
+
+body #lyricsPageArtist {
+    margin-top: 4px;
+    color: var(--text-dim);
+    font-size: 13px;
+}
+
+body .main-content.lyrics-page-open .lyrics-panel-lines {
+    flex: 1;
+    max-height: none;
+    justify-content: flex-start;
+    gap: 18px;
+    overflow-y: auto;
+    padding: 16px clamp(24px, 8vw, 112px) 48px;
+}
+
+body .main-content.lyrics-page-open .lyrics-line {
+    font-family: var(--serif);
+    font-size: clamp(24px, 3.8vw, 40px);
+    font-weight: 600;
+    line-height: 1.28;
+}
+
+body .main-content.lyrics-page-open .lyrics-panel-lines:not(.timed) .lyrics-line {
+    color: var(--text);
+    opacity: 0.92;
+}
+
+body .main-content.lyrics-page-open .lyrics-line.active {
+    color: var(--accent-blue-bright);
+    opacity: 1;
+}
+
+/* ============================================================
    SLEEVE DEFAULT
    ============================================================ */
 
@@ -204,6 +333,687 @@ body.preset-spotify .text-muted {
     color: #b3b3b3;
 }
 
+body:not(.preset-spotify) .spotify-library-heading,
+body:not(.preset-spotify) .spotify-library-filters,
+body:not(.preset-spotify) .spotify-sidebar-label,
+body:not(.preset-spotify) .spotify-album-list {
+    display: none;
+}
+
+body.preset-spotify {
+    --player-h: 76px;
+}
+
+body.preset-spotify .sidebar {
+    gap: 12px;
+    padding: 16px 10px 10px;
+    background: #121212;
+    border-right: 0;
+}
+
+body.preset-spotify .brand h1 {
+    font-family: var(--sans);
+    font-size: 16px;
+}
+
+body.preset-spotify .spotify-library-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 30px;
+    padding: 0 10px;
+    color: #fff;
+    font-size: 15px;
+}
+
+body.preset-spotify .spotify-library-filters {
+    display: flex;
+    gap: 8px;
+    padding: 0 4px;
+}
+
+body.preset-spotify .spotify-library-filter {
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 20px;
+    background: #232323;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+body.preset-spotify .spotify-library-filter:hover {
+    background: #2d2d2d;
+}
+
+body.preset-spotify .spotify-library-filter.active {
+    background: #fff;
+    color: #121212;
+}
+
+body.preset-spotify .sidebar .playlist-section-label {
+    margin-top: 0;
+    padding: 2px 10px 0;
+    color: #b3b3b3;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: none;
+}
+
+body.preset-spotify .sidebar .library-track-header {
+    padding: 2px 10px 0;
+    color: #b3b3b3;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+body.preset-spotify .default-sidebar-label {
+    display: none;
+}
+
+body.preset-spotify .spotify-sidebar-label {
+    display: inline;
+}
+
+body.preset-spotify .sidebar .playlist-list {
+    gap: 2px;
+}
+
+body.preset-spotify .sidebar .playlist-item {
+    min-height: 52px;
+    padding: 6px 8px;
+    gap: 10px;
+    border-radius: 5px;
+    color: #b3b3b3;
+}
+
+body.preset-spotify .sidebar .playlist-item:hover,
+body.preset-spotify .sidebar .playlist-item.active {
+    background: #1f1f1f;
+    color: #fff;
+}
+
+body.preset-spotify .sidebar .playlist-thumb-wrap {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+    border-radius: 3px;
+}
+
+body.preset-spotify .sidebar .playlist-item-count {
+    display: none;
+}
+
+body.preset-spotify .sidebar .library-track-list {
+    min-height: 0;
+}
+
+body.preset-spotify .sidebar:not(.spotify-library-tracks) .library-track-header,
+body.preset-spotify .sidebar:not(.spotify-library-tracks) .library-track-list,
+body.preset-spotify .sidebar:not(.spotify-library-albums) .spotify-album-list,
+body.preset-spotify .sidebar.spotify-library-tracks .music-playlists-header,
+body.preset-spotify .sidebar.spotify-library-tracks .video-playlists-header,
+body.preset-spotify .sidebar.spotify-library-tracks .playlist-list,
+body.preset-spotify .sidebar.spotify-library-albums .music-playlists-header,
+body.preset-spotify .sidebar.spotify-library-albums .video-playlists-header,
+body.preset-spotify .sidebar.spotify-library-albums .playlist-list,
+body.preset-spotify .sidebar.spotify-library-albums .library-track-header,
+body.preset-spotify .sidebar.spotify-library-albums .library-track-list {
+    display: none;
+}
+
+body.preset-spotify .sidebar.spotify-library-albums .spotify-album-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+}
+
+body.preset-spotify .spotify-album-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 52px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #b3b3b3;
+    text-align: left;
+    cursor: pointer;
+}
+
+body.preset-spotify .spotify-album-item:hover,
+body.preset-spotify .spotify-album-item.active {
+    background: #1f1f1f;
+    color: #fff;
+}
+
+body.preset-spotify .spotify-album-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: #282828;
+}
+
+body.preset-spotify .spotify-album-thumb img,
+body.preset-spotify .spotify-album-thumb video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+body.preset-spotify .spotify-album-thumb svg {
+    width: 17px;
+    height: 17px;
+    color: #b3b3b3;
+}
+
+body.preset-spotify .spotify-album-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 3px;
+}
+
+body.preset-spotify .spotify-album-name,
+body.preset-spotify .spotify-album-artist {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+body.preset-spotify .spotify-album-name {
+    color: #fff;
+    font-size: 12.5px;
+}
+
+body.preset-spotify .spotify-album-artist {
+    color: #b3b3b3;
+    font-size: 10.5px;
+}
+
+body.preset-spotify .sidebar .library-track-list .track-item {
+    min-height: 52px;
+    padding: 6px 8px;
+    gap: 10px;
+    border-radius: 5px;
+}
+
+body.preset-spotify .sidebar .library-track-list .track-thumb {
+    width: 40px;
+    height: 40px;
+    border-radius: 3px;
+}
+
+body.preset-spotify .sidebar .library-track-list .track-title {
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+body.preset-spotify .sidebar .library-track-list .track-sub {
+    font-size: 11px;
+}
+
+body.preset-spotify .sidebar .add-btn {
+    margin: 0 4px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: #232323;
+    color: #fff;
+    font-size: 12px;
+}
+
+body.preset-spotify .sidebar .add-btn:hover {
+    background: #2d2d2d;
+    box-shadow: none;
+}
+
+body.preset-spotify .sidebar .add-btn-secondary {
+    color: #b3b3b3;
+}
+
+body.preset-spotify .sidebar .sidebar-footer {
+    gap: 5px;
+    padding: 8px 10px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+body.preset-spotify .sidebar .save-note {
+    display: none;
+}
+
+/* Spotify-inspired desktop layout: library, content, and now-playing panel. */
+@media (min-width: 1180px) {
+    body.preset-spotify.spotify-now-playing .main {
+        margin-right: 324px;
+    }
+
+    body.preset-spotify.spotify-now-playing .main-topbar {
+        padding: 14px 24px;
+    }
+
+    body.preset-spotify.spotify-now-playing .main-content {
+        padding: 6px 24px 40px;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel {
+        position: fixed;
+        z-index: 4;
+        top: 12px;
+        right: 12px;
+        bottom: calc(var(--player-h) + 12px);
+        width: 300px;
+        max-height: none;
+        display: flex;
+        flex-direction: column;
+        flex-wrap: nowrap;
+        align-items: stretch;
+        align-content: flex-start;
+        gap: 14px;
+        margin: 0;
+        padding: 16px;
+        overflow-y: auto;
+        background: #181818;
+        border: 0;
+        border-radius: 8px;
+        box-shadow: none;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel .stage-visual,
+    body.preset-spotify.spotify-now-playing .stage-panel.video-compact .stage-visual,
+    body.preset-spotify.spotify-now-playing .stage-panel.video-standard .stage-visual,
+    body.preset-spotify.spotify-now-playing .stage-panel.video-large .stage-visual,
+    body.preset-spotify.spotify-now-playing .stage-panel.video-wide .stage-visual {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1;
+        flex-shrink: 0;
+        border-radius: 4px;
+        box-shadow: none;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel.video-wide .stage-text {
+        width: auto;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel .stage-text {
+        width: 100%;
+        flex: 0 0 auto;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel .stage-title {
+        font-family: var(--sans);
+        font-size: 16px;
+        font-weight: 700;
+    }
+
+    body.preset-spotify.spotify-now-playing .stage-panel .stage-sub {
+        font-size: 13px;
+    }
+}
+
+/* Spotify-inspired album page. */
+body.preset-spotify .spotify-album-hero {
+    position: relative;
+    isolation: isolate;
+    min-height: 270px;
+    align-items: flex-end;
+    gap: 22px;
+    overflow: hidden;
+    padding: 28px 24px;
+    background: linear-gradient(0deg, #121212 0%, rgba(18, 18, 18, 0.78) 58%, rgba(18, 18, 18, 0.28) 100%);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body.preset-spotify .spotify-album-backdrop {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+body.preset-spotify .spotify-album-backdrop::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    background: linear-gradient(90deg, rgba(18, 18, 18, 0.28), rgba(18, 18, 18, 0.72)),
+        linear-gradient(0deg, #121212 0%, transparent 100%);
+}
+
+body.preset-spotify .spotify-album-backdrop img,
+body.preset-spotify .spotify-album-backdrop video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(26px) saturate(1.35);
+    opacity: 0.75;
+    transform: scale(1.12);
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-art {
+    width: 190px;
+    height: 190px;
+    border-radius: 3px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-info {
+    position: relative;
+    z-index: 1;
+}
+
+body.preset-spotify .spotify-album-hero {
+    margin: -6px -24px 0;
+}
+
+body.preset-spotify .spotify-album-type {
+    margin-bottom: 5px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-title {
+    font-family: var(--sans);
+    font-size: clamp(26px, 3vw, 38px);
+    font-weight: 800;
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-artist {
+    color: #fff;
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-metaline {
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-play {
+    width: 52px;
+    height: 52px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    background: #1ed760;
+    color: #000;
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-play:hover {
+    background: #3be477;
+}
+
+body.preset-spotify .spotify-album-hero .album-detail-shuffle {
+    border: 0;
+    background: transparent;
+    color: #b3b3b3;
+}
+
+body.preset-spotify .spotify-album-tracks {
+    padding: 0 16px;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-header,
+body.preset-spotify .spotify-album-tracks .album-track-row {
+    grid-template-columns: 38px minmax(0, 1.5fr) minmax(0, 1fr) 64px;
+    gap: 16px;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-header {
+    padding: 8px 12px 10px;
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-header span:nth-child(5),
+body.preset-spotify .spotify-album-tracks .album-track-header span:nth-child(6),
+body.preset-spotify .spotify-album-tracks .album-track-row .album-track-year,
+body.preset-spotify .spotify-album-tracks .album-track-row .album-track-genre {
+    display: none;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-row {
+    min-height: 54px;
+    padding: 7px 12px;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-row:nth-child(even) {
+    background: transparent;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-row:hover,
+body.preset-spotify .spotify-album-tracks .album-track-row.active {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-row.active .album-track-title {
+    color: #1ed760;
+}
+
+body.preset-spotify .spotify-album-tracks .album-track-duration {
+    text-align: right;
+}
+
+/* Spotify-inspired playback bar: track, transport, then utilities. */
+body.preset-spotify .player-bar {
+    height: var(--player-h);
+    grid-template-columns: minmax(180px, 1fr) minmax(320px, 1.2fr) minmax(320px, 1fr);
+    gap: 12px;
+    padding: 0 12px;
+    background: #000;
+    border-top-color: #282828;
+}
+
+body.preset-spotify .player-bar::before {
+    display: none;
+}
+
+body.preset-spotify .np-info {
+    gap: 10px;
+}
+
+body.preset-spotify .np-art {
+    width: 48px;
+    height: 48px;
+    border-radius: 3px;
+    box-shadow: none;
+}
+
+body.preset-spotify .np-title {
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+body.preset-spotify .np-sub {
+    font-size: 11px;
+}
+
+body.preset-spotify .player-center {
+    gap: 5px;
+}
+
+body.preset-spotify .transport {
+    gap: 14px;
+}
+
+body.preset-spotify #shuffleBtn {
+    order: 0;
+}
+
+body.preset-spotify #prevBtn {
+    order: 1;
+}
+
+body.preset-spotify #playBtn {
+    order: 2;
+    width: 32px;
+    height: 32px;
+    background: #fff;
+    color: #000;
+    box-shadow: none;
+}
+
+body.preset-spotify #playBtn:hover {
+    transform: scale(1.05);
+    background: #fff;
+    color: #000;
+    box-shadow: none;
+}
+
+body.preset-spotify #nextBtn {
+    order: 3;
+}
+
+body.preset-spotify #repeatBtn {
+    order: 4;
+}
+
+body.preset-spotify .mode-btn {
+    min-width: 28px;
+    padding: 0 4px;
+    border: 0;
+    color: #b3b3b3;
+}
+
+body.preset-spotify .mode-btn:hover,
+body.preset-spotify .mode-btn.active {
+    border: 0;
+    background: transparent;
+    color: #1ed760;
+}
+
+body.preset-spotify .seek-row {
+    gap: 8px;
+}
+
+body.preset-spotify .time {
+    color: #a7a7a7;
+    font-family: var(--sans);
+    font-size: 10px;
+}
+
+body.preset-spotify input[type="range"]::-webkit-slider-thumb {
+    background: #fff;
+    box-shadow: none;
+}
+
+body.preset-spotify input[type="range"]::-moz-range-thumb {
+    background: #fff;
+}
+
+body.preset-spotify .player-right {
+    gap: 6px;
+}
+
+body.preset-spotify .player-right .mini-toggle-btn,
+body.preset-spotify .player-right .eq-trigger,
+body.preset-spotify .player-right .queue-panel-btn,
+body.preset-spotify .player-right .stem-trigger {
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #b3b3b3;
+    box-shadow: none;
+}
+
+body.preset-spotify .player-right .mini-toggle-btn:hover,
+body.preset-spotify .player-right .eq-trigger:hover,
+body.preset-spotify .player-right .queue-panel-btn:hover,
+body.preset-spotify .player-right .stem-trigger:hover {
+    background: #1f1f1f;
+    color: #fff;
+}
+
+body.preset-spotify .player-right .speed-label {
+    display: none;
+}
+
+body.preset-spotify .player-right .speed-select {
+    width: 48px;
+    padding: 4px 3px;
+    border: 0;
+    background: transparent;
+    color: #b3b3b3;
+}
+
+body.preset-spotify .vol-group {
+    gap: 5px;
+}
+
+body.preset-spotify .vol-group svg {
+    color: #b3b3b3;
+}
+
+body.preset-spotify .vol-group input[type="range"] {
+    width: 60px;
+}
+
+@media (max-width: 760px) {
+    body.preset-spotify .spotify-album-hero {
+        min-height: 0;
+        flex-direction: row;
+        align-items: flex-end;
+        padding: 20px 16px;
+    }
+
+    body.preset-spotify .spotify-album-hero .album-detail-art {
+        width: min(34vw, 140px);
+        height: auto;
+        aspect-ratio: 1;
+    }
+
+    body.preset-spotify .spotify-album-tracks {
+        padding: 0;
+    }
+
+    body.preset-spotify .spotify-album-tracks .album-track-header,
+    body.preset-spotify .spotify-album-tracks .album-track-row {
+        grid-template-columns: 30px minmax(0, 1fr) 56px;
+        gap: 10px;
+    }
+
+    body.preset-spotify .spotify-album-tracks .album-track-header span:nth-child(4),
+    body.preset-spotify .spotify-album-tracks .album-track-row .album-track-artist {
+        display: none;
+    }
+}
+
+@media (max-width: 900px) {
+    body.preset-spotify .player-bar {
+        grid-template-columns: minmax(110px, 0.8fr) minmax(180px, 1.2fr) auto;
+        gap: 8px;
+        padding: 0 8px;
+    }
+
+    body.preset-spotify .player-right {
+        min-width: 0;
+        gap: 4px;
+    }
+
+    body.preset-spotify .player-right .stem-trigger {
+        padding: 0 6px;
+        font-size: 10px;
+    }
+
+    body.preset-spotify .player-right .speed-select {
+        width: 42px;
+    }
+
+    body.preset-spotify .vol-group input[type="range"] {
+        width: 40px;
+    }
+}
+
 
 /* ============================================================
    AMAZON MUSIC-INSPIRED
@@ -228,6 +1038,472 @@ body.preset-amazonMusic {
 body.preset-amazonMusic {
     background: #101820;
     color: #f5f8fa;
+}
+
+body.preset-amazonMusic .sidebar,
+body.preset-amazonMusic .top-page-nav {
+    display: none !important;
+}
+
+body.preset-amazonMusic .main {
+    background: #101820;
+}
+
+body.preset-amazonMusic .main-topbar {
+    justify-content: flex-start;
+    padding: 14px clamp(18px, 5vw, 56px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 12, 16, 0.92);
+}
+
+body.preset-amazonMusic .search-wrap {
+    width: min(460px, 100%);
+    max-width: 100%;
+}
+
+body.preset-amazonMusic #searchInput {
+    background: #ffffff;
+    color: #17212a;
+    border-color: transparent;
+}
+
+body.preset-amazonMusic #searchInput::placeholder {
+    color: #64727c;
+}
+
+body.preset-amazonMusic .main-content {
+    width: 100%;
+    max-width: 1720px;
+    margin: 0 auto;
+    padding: 24px clamp(24px, 3.5vw, 64px) 72px;
+}
+
+body.preset-amazonMusic .main-content > #greeting,
+body.preset-amazonMusic .main-content > #subhead,
+body.preset-amazonMusic .main-content > #viewBackBtn,
+body.preset-amazonMusic .main-content > #stagePanel,
+body.preset-amazonMusic .main-content > #browseSwitch,
+body.preset-amazonMusic .main-content > #albumDetail,
+body.preset-amazonMusic .main-content > #cardGrid,
+body.preset-amazonMusic .main-content > #paginationControls,
+body.preset-amazonMusic .main-content > #emptyMain {
+    display: none !important;
+}
+
+body.preset-amazonMusic.amazon-home-active .main-content:not(.lyrics-page-open) > #lyricsPanel {
+    display: none !important;
+}
+
+body.preset-amazonMusic .amazon-home-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+}
+
+body.preset-amazonMusic .amazon-home-tools {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+body.preset-amazonMusic .amazon-home-tools h1 {
+    margin: 0;
+    font-size: clamp(28px, 2.2vw, 38px);
+    font-weight: 750;
+    letter-spacing: -0.035em;
+}
+
+body.preset-amazonMusic .amazon-home-tools p {
+    margin-top: 5px;
+    color: #aebbc3;
+    font-size: 13px;
+}
+
+body.preset-amazonMusic .amazon-home-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+body.preset-amazonMusic .amazon-action-btn {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 20px;
+    background: #16232d;
+    color: #f5f8fa;
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+body.preset-amazonMusic .amazon-action-btn:hover {
+    background: #20333f;
+    border-color: rgba(0, 168, 225, 0.55);
+}
+
+body.preset-amazonMusic .amazon-home-section {
+    min-width: 0;
+}
+
+body.preset-amazonMusic .amazon-home-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+body.preset-amazonMusic .amazon-home-heading h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 720;
+}
+
+body.preset-amazonMusic .amazon-home-heading > span {
+    color: #aebbc3;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+body.preset-amazonMusic .amazon-artist-row,
+body.preset-amazonMusic .amazon-album-row {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 2px 2px 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #42515b transparent;
+}
+
+body.preset-amazonMusic .amazon-playlist-row {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    padding: 2px 2px 12px;
+    scrollbar-width: thin;
+    scrollbar-color: #42515b transparent;
+}
+
+body.preset-amazonMusic .amazon-playlist-card {
+    display: flex;
+    flex: 0 0 168px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #f5f8fa;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.16s ease;
+}
+
+body.preset-amazonMusic .amazon-playlist-art,
+body.preset-amazonMusic .amazon-playlist-placeholder {
+    display: grid;
+    width: 168px;
+    height: 168px;
+    overflow: hidden;
+    place-items: center;
+    border-radius: 6px;
+    background: #1b2b36;
+}
+
+body.preset-amazonMusic .amazon-playlist-art img,
+body.preset-amazonMusic .amazon-playlist-art video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+body.preset-amazonMusic .amazon-playlist-placeholder {
+    color: #00a8e1;
+    font-size: 34px;
+}
+
+body.preset-amazonMusic .amazon-playlist-card .name,
+body.preset-amazonMusic .amazon-playlist-card .meta {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.preset-amazonMusic .amazon-playlist-card .name {
+    font-size: 13px;
+    font-weight: 680;
+}
+
+body.preset-amazonMusic .amazon-playlist-card .meta {
+    color: #aebbc3;
+    font-size: 11px;
+}
+
+body.preset-amazonMusic .amazon-playlist-card[aria-pressed="true"] .amazon-playlist-art {
+    outline: 2px solid #00a8e1;
+    outline-offset: 3px;
+}
+
+body.preset-amazonMusic .amazon-playlist-card:hover {
+    transform: translateY(-2px);
+}
+
+body.preset-amazonMusic .amazon-artist-card,
+body.preset-amazonMusic .amazon-album-card {
+    display: flex;
+    flex: 0 0 184px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #f5f8fa;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 0.16s ease;
+}
+
+body.preset-amazonMusic .amazon-artist-card {
+    align-items: center;
+    text-align: center;
+}
+
+body.preset-amazonMusic .amazon-artist-card > img,
+body.preset-amazonMusic .amazon-artist-card > video,
+body.preset-amazonMusic .amazon-artist-placeholder {
+    width: 132px;
+    height: 132px;
+    flex: 0 0 132px;
+    overflow: hidden;
+    border-radius: 50%;
+    background: #1b2b36;
+    object-fit: cover;
+}
+
+body.preset-amazonMusic .amazon-artist-placeholder {
+    display: grid;
+    place-items: center;
+    color: #00a8e1;
+}
+
+body.preset-amazonMusic .amazon-artist-placeholder svg {
+    width: 34px;
+    height: 34px;
+}
+
+body.preset-amazonMusic .amazon-album-art,
+body.preset-amazonMusic .amazon-album-placeholder {
+    display: grid;
+    width: 184px;
+    height: 184px;
+    overflow: hidden;
+    place-items: center;
+    border-radius: 6px;
+    background: #1b2b36;
+}
+
+body.preset-amazonMusic .amazon-album-art img,
+body.preset-amazonMusic .amazon-album-art video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+body.preset-amazonMusic .amazon-album-placeholder {
+    color: #00a8e1;
+    font-size: 34px;
+}
+
+body.preset-amazonMusic .amazon-artist-card[aria-pressed="true"] > img,
+body.preset-amazonMusic .amazon-artist-card[aria-pressed="true"] > video,
+body.preset-amazonMusic .amazon-artist-card[aria-pressed="true"] > .amazon-artist-placeholder,
+body.preset-amazonMusic .amazon-album-card[aria-pressed="true"] .amazon-album-art {
+    outline: 2px solid #00a8e1;
+    outline-offset: 3px;
+}
+
+body.preset-amazonMusic .amazon-artist-card .name,
+body.preset-amazonMusic .amazon-album-card .name {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: 680;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.preset-amazonMusic .amazon-artist-card .meta,
+body.preset-amazonMusic .amazon-album-card .meta {
+    max-width: 100%;
+    overflow: hidden;
+    color: #aebbc3;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.preset-amazonMusic .amazon-filter-chip[aria-pressed="true"] {
+    border-color: #00a8e1;
+    background: rgba(0, 168, 225, 0.16);
+    color: #ffffff;
+}
+
+body.preset-amazonMusic .amazon-library {
+    overflow: hidden;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.preset-amazonMusic .amazon-library-row {
+    display: grid;
+    grid-template-columns: 48px minmax(180px, 1.3fr) minmax(160px, 1fr) minmax(120px, 0.8fr);
+    align-items: center;
+    gap: 14px;
+    min-height: 64px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+    cursor: pointer;
+}
+
+body.preset-amazonMusic .amazon-library-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+body.preset-amazonMusic .amazon-library-art {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    overflow: hidden;
+    place-items: center;
+    border-radius: 4px;
+    background: #1b2b36;
+    color: #00a8e1;
+}
+
+body.preset-amazonMusic .amazon-library-art img,
+body.preset-amazonMusic .amazon-library-art video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+body.preset-amazonMusic .amazon-library-title,
+body.preset-amazonMusic .amazon-library-sub,
+body.preset-amazonMusic .amazon-library-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.preset-amazonMusic .amazon-library-title {
+    font-size: 13px;
+    font-weight: 650;
+}
+
+body.preset-amazonMusic .amazon-library-sub,
+body.preset-amazonMusic .amazon-library-meta {
+    color: #aebbc3;
+    font-size: 12px;
+}
+
+body.preset-amazonMusic .amazon-active-filter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px 0 12px;
+    color: #aebbc3;
+    font-size: 12px;
+}
+
+body.preset-amazonMusic .amazon-active-filter button {
+    border: 0;
+    background: transparent;
+    color: #36c7f0;
+    cursor: pointer;
+}
+
+body.preset-amazonMusic .amazon-music-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 14px 0 0;
+    color: #aebbc3;
+    font-size: 12px;
+}
+
+body.preset-amazonMusic .amazon-music-pagination button {
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 18px;
+    background: #16232d;
+    color: #f5f8fa;
+    cursor: pointer;
+}
+
+body.preset-amazonMusic .amazon-music-pagination button:hover:not(:disabled) {
+    border-color: rgba(0, 168, 225, 0.55);
+    background: #20333f;
+}
+
+body.preset-amazonMusic .amazon-music-pagination button:disabled {
+    cursor: default;
+    opacity: 0.45;
+}
+
+body.preset-amazonMusic .amazon-facet-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+body.preset-amazonMusic .amazon-filter-chip {
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 18px;
+    background: #16232d;
+    color: #e7edf1;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+body.preset-amazonMusic .amazon-filter-chip:hover {
+    background: #20333f;
+    border-color: rgba(0, 168, 225, 0.55);
+}
+
+body.preset-amazonMusic .amazon-home-section .empty-shelf {
+    padding: 20px 4px;
+    color: #aebbc3;
+}
+
+@media (max-width: 700px) {
+    body.preset-amazonMusic .amazon-home-tools {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    body.preset-amazonMusic .amazon-home-actions {
+        justify-content: flex-start;
+    }
+
+    body.preset-amazonMusic .amazon-library-row {
+        grid-template-columns: 40px minmax(0, 1fr) auto;
+        gap: 10px;
+    }
+
+    body.preset-amazonMusic .amazon-library-meta {
+        display: none;
+    }
 }
 
 
@@ -369,49 +1645,241 @@ body.preset-amazonMusic .text-muted {
 }
 
 
-/* ============================================================
-   AMAZON MUSIC HOME
-   ============================================================ */
-
-body.preset-amazonMusic .amazon-home-section {
-    background: transparent;
-}
-
-
-body.preset-amazonMusic .amazon-horizontal-row {
-    gap: 18px;
-}
-
-
-body.preset-amazonMusic .amazon-artist-card,
-body.preset-amazonMusic .amazon-playlist-card {
-    background: #182732;
-    border: 1px solid rgba(255, 255, 255, 0.055);
-    border-radius: 6px;
-    transition:
-        transform 0.16s ease,
-        background-color 0.16s ease,
-        border-color 0.16s ease;
-}
-
-
 body.preset-amazonMusic .amazon-artist-card:hover,
-body.preset-amazonMusic .amazon-playlist-card:hover {
-    background: #20333f;
-    border-color: rgba(0, 168, 225, 0.30);
+body.preset-amazonMusic .amazon-album-card:hover {
+    background: transparent;
     transform: translateY(-2px);
 }
 
-
-body.preset-amazonMusic .amazon-library-section {
-    background: transparent;
+/* Presets control organization and layout, while Settings controls appearance. */
+body.preset-spotify,
+body.preset-amazonMusic {
+    background: var(--bg);
+    color: var(--text);
 }
 
-
-body.preset-amazonMusic .amazon-song-list {
-    background: transparent;
+body.preset-spotify .sidebar,
+body.preset-spotify .main,
+body.preset-spotify .main-topbar,
+body.preset-spotify .library-panel,
+body.preset-spotify .side-panel,
+body.preset-amazonMusic .sidebar,
+body.preset-amazonMusic .main,
+body.preset-amazonMusic .main-topbar,
+body.preset-amazonMusic .library-panel,
+body.preset-amazonMusic .side-panel {
+    background: var(--bg);
 }
 
+body.preset-spotify .card,
+body.preset-spotify .album-card,
+body.preset-spotify .artist-card,
+body.preset-spotify .playlist-card,
+body.preset-spotify .track-card,
+body.preset-amazonMusic .card,
+body.preset-amazonMusic .album-card,
+body.preset-amazonMusic .artist-card,
+body.preset-amazonMusic .playlist-card,
+body.preset-amazonMusic .track-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-card);
+}
+
+body.preset-spotify .card:hover,
+body.preset-spotify .album-card:hover,
+body.preset-spotify .artist-card:hover,
+body.preset-spotify .playlist-card:hover,
+body.preset-spotify .track-card:hover,
+body.preset-amazonMusic .card:hover,
+body.preset-amazonMusic .album-card:hover,
+body.preset-amazonMusic .artist-card:hover,
+body.preset-amazonMusic .playlist-card:hover,
+body.preset-amazonMusic .track-card:hover {
+    background: var(--bg-card-hover);
+}
+
+body.preset-spotify h1,
+body.preset-spotify h2,
+body.preset-spotify h3,
+body.preset-amazonMusic h1,
+body.preset-amazonMusic h2,
+body.preset-amazonMusic h3 {
+    color: var(--text);
+}
+
+body.preset-spotify .muted,
+body.preset-spotify .secondary-text,
+body.preset-spotify .text-muted,
+body.preset-amazonMusic .muted,
+body.preset-amazonMusic .secondary-text,
+body.preset-amazonMusic .text-muted,
+body.preset-amazonMusic .amazon-home-heading > span,
+body.preset-amazonMusic .amazon-home-tools p,
+body.preset-amazonMusic .amazon-library-sub,
+body.preset-amazonMusic .amazon-library-meta {
+    color: var(--text-dim);
+}
+
+body.preset-spotify .primary,
+body.preset-spotify .primary-btn,
+body.preset-spotify .play-btn,
+body.preset-spotify .play-button,
+body.preset-spotify #playBtn,
+body.preset-amazonMusic .primary,
+body.preset-amazonMusic .primary-btn,
+body.preset-amazonMusic .play-btn,
+body.preset-amazonMusic .play-button {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+}
+
+body.preset-spotify #playBtn:hover,
+body.preset-amazonMusic .primary:hover,
+body.preset-amazonMusic .primary-btn:hover,
+body.preset-amazonMusic .play-btn:hover,
+body.preset-amazonMusic .play-button:hover {
+    background: var(--accent-blue-bright);
+    border-color: var(--accent-blue-bright);
+    color: #fff;
+}
+
+body.preset-spotify input[type="range"],
+body.preset-amazonMusic input[type="range"] {
+    accent-color: var(--accent-blue-bright);
+}
+
+body.preset-spotify .accent,
+body.preset-spotify .active,
+body.preset-spotify .selected,
+body.preset-spotify .progress-fill,
+body.preset-amazonMusic .accent,
+body.preset-amazonMusic .active,
+body.preset-amazonMusic .selected,
+body.preset-amazonMusic .progress-fill {
+    --accent-color: var(--accent-blue-bright);
+}
+
+body.preset-spotify a:hover,
+body.preset-spotify .accent-text,
+body.preset-spotify .mode-btn.active,
+body.preset-amazonMusic a:hover,
+body.preset-amazonMusic .accent-text,
+body.preset-amazonMusic .amazon-filter-chip[aria-pressed="true"] {
+    color: var(--accent-blue-bright);
+}
+
+body.preset-spotify .player-bar,
+body.preset-amazonMusic .player-bar {
+    background: var(--bg-elevated);
+}
+
+body.preset-spotify .sidebar,
+body.preset-amazonMusic .sidebar {
+    background: var(--bg-sidebar);
+}
+
+body.preset-spotify .np-art,
+body.preset-spotify .card-art,
+body.preset-amazonMusic .amazon-album-art,
+body.preset-amazonMusic .amazon-playlist-art,
+body.preset-amazonMusic .amazon-library-art {
+    border-radius: var(--radius-thumb);
+}
+
+body.preset-amazonMusic #searchInput {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border-color: var(--line);
+}
+
+body.preset-amazonMusic #searchInput::placeholder {
+    color: var(--text-dimmer);
+}
+
+body.preset-amazonMusic .amazon-action-btn,
+body.preset-amazonMusic .amazon-filter-chip,
+body.preset-amazonMusic .amazon-library-row,
+body.preset-amazonMusic .amazon-music-pagination button {
+    background: var(--bg-elevated);
+    color: var(--text);
+}
+
+/* Spotify/Amazon preset text and accent overrides follow the user's
+   Settings appearance choices instead of preset-specific colors. */
+body.preset-spotify,
+body.preset-spotify .sidebar,
+body.preset-spotify .main,
+body.preset-spotify .main-topbar,
+body.preset-spotify .main-content,
+body.preset-spotify .player-bar,
+body.preset-spotify .drawer,
+body.preset-spotify .stats-modal,
+body.preset-amazonMusic,
+body.preset-amazonMusic .sidebar,
+body.preset-amazonMusic .main,
+body.preset-amazonMusic .main-topbar,
+body.preset-amazonMusic .main-content,
+body.preset-amazonMusic .player-bar,
+body.preset-amazonMusic .drawer,
+body.preset-amazonMusic .stats-modal {
+    background-color: var(--bg);
+}
+
+body.preset-spotify .sidebar,
+body.preset-amazonMusic .sidebar {
+    background-color: var(--bg-sidebar) !important;
+}
+
+body.preset-spotify .np-title,
+body.preset-spotify h1,
+body.preset-spotify h2,
+body.preset-spotify h3,
+body.preset-amazonMusic h1,
+body.preset-amazonMusic h2,
+body.preset-amazonMusic h3,
+body.preset-amazonMusic .amazon-library-title,
+body.preset-amazonMusic .amazon-home-tools h1 {
+    color: var(--text);
+}
+
+body.preset-spotify .np-sub,
+body.preset-spotify .time,
+body.preset-spotify .sidebar *,
+body.preset-spotify .text-muted,
+body.preset-spotify .secondary-text,
+body.preset-amazonMusic .time,
+body.preset-amazonMusic .text-muted,
+body.preset-amazonMusic .secondary-text,
+body.preset-amazonMusic .amazon-library-sub,
+body.preset-amazonMusic .amazon-library-meta,
+body.preset-amazonMusic .amazon-home-tools p,
+body.preset-amazonMusic .amazon-home-heading > span {
+    color: var(--text-dim);
+}
+
+body.preset-spotify .mode-btn.active,
+body.preset-spotify .spotify-album-tracks .album-track-row.active .album-track-title,
+body.preset-spotify a:hover,
+body.preset-spotify .accent-text,
+body.preset-amazonMusic a:hover,
+body.preset-amazonMusic .accent-text,
+body.preset-amazonMusic .amazon-active-filter button {
+    color: var(--accent-blue-bright);
+}
+
+body.preset-spotify .track-item.active,
+body.preset-spotify .track-item.selected,
+body.preset-spotify .nav-item.active,
+body.preset-spotify .nav-link.active,
+body.preset-spotify .sidebar-item.active,
+body.preset-amazonMusic .track-item.active,
+body.preset-amazonMusic .track-item.selected,
+body.preset-amazonMusic .nav-item.active,
+body.preset-amazonMusic .nav-link.active,
+body.preset-amazonMusic .sidebar-item.active {
+    background: color-mix(in srgb, var(--accent-blue-bright) 14%, transparent);
+}
 
 /* ============================================================
    SHARED PRESET POLISH
