@@ -48,10 +48,12 @@ const {
   const artistName = 'Sleeve Discography Test Artist';
   const artistId = '33333333-3333-4333-8333-333333333333';
   const offsets = [];
+  let artistSearchCalls = 0;
   const catalogFetch = async (url, options) => {
     assert.equal(options.headers['User-Agent'].startsWith('Sleeve/'), true);
     const parsed = new URL(url);
     if (parsed.pathname.endsWith('/artist/')) {
+      artistSearchCalls += 1;
       assert.equal(parsed.searchParams.get('fmt'), 'json');
       return {
         ok: true, status: 200, headers: { get: () => null },
@@ -88,6 +90,10 @@ const {
   assert.equal(artistSearch.artists.length, 2);
   assert.equal(artistSearch.artists[0].exactName, true);
   assert.equal(artistSearch.artists[0].id, artistId);
+  await searchArtistCatalog({ artistName, forceRefresh: true }, {
+    fetchImpl: catalogFetch, minIntervalMs: 0, timeoutMs: 1000
+  });
+  assert.equal(artistSearchCalls, 2, 'forceRefresh should bypass the artist search cache');
 
   const discography = await getArtistDiscography({ artistId }, {
     fetchImpl: catalogFetch, minIntervalMs: 0, timeoutMs: 1000
@@ -99,6 +105,10 @@ const {
   assert.equal(discography.releaseGroups.length, 102);
   assert.deepEqual(discography.releaseGroups[0].secondaryTypes, ['Compilation', 'Live']);
   assert.ok(discography.releaseGroups[0].coverArtUrl.includes('coverartarchive.org/release-group/'));
+  await getArtistDiscography({ artistId, forceRefresh: true }, {
+    fetchImpl: catalogFetch, minIntervalMs: 0, timeoutMs: 1000
+  });
+  assert.deepEqual(offsets, [0, 100, 0, 100], 'forceRefresh should bypass the discography cache');
 
   const mappedRelease = mapReleaseGroup({
     id: artistId, title: 'Mapped Release', 'primary-type': 'EP',
