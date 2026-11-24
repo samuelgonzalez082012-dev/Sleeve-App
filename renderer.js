@@ -3177,7 +3177,7 @@ startAudioOutputMonitoring();
   // Match artist credits conservatively: normalize case/spacing, but do not
   // use substring matching or split collaboration text into guessed identities.
   function normalizeArtistCredit(value){
-    return String(value || '').normalize('NFKC').trim().replace(/\\s+/g, ' ').toLocaleLowerCase();
+    return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
   }
 
   function getArtistPlaylistAppearances(artistName){
