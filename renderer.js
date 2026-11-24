@@ -3274,7 +3274,7 @@ startAudioOutputMonitoring();
         await fetchArtistDiscography(artistName, exactCandidates[0], forceRefresh);
         return;
       }
-      artistDiscographyCache.set(key, { status: 'chooseArtist', candidates });
+      artistDiscographyCache.set(key, { status: 'chooseArtist', candidates, forceRefresh });
       refreshArtistDiscographyIfVisible(artistName);
     }catch(error){
       artistDiscographyCache.set(key, {
@@ -6465,7 +6465,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
       catalogSection.querySelectorAll('[data-catalog-artist-id]').forEach(button => {
         button.addEventListener('click', () => {
           const candidate = (catalogState.candidates || []).find(item => item.id === button.dataset.catalogArtistId);
-          if (candidate) fetchArtistDiscography(currentView.artist, candidate);
+          if (candidate) fetchArtistDiscography(currentView.artist, candidate, catalogState.forceRefresh === true);
         });
       });
       const catalogRetryButton = catalogSection.querySelector('[data-catalog-retry]');
