@@ -18,7 +18,7 @@
       <div class="find-music-section-heading">
         <div>
           <h3>Discover artists from your taste</h3>
-          <p>Use your most-listened genres to find artists you don't already have in your library.</p>
+          <p>Use your most-listened genres to find artists you don't already have in your library, then explore them on Spotify.</p>
         </div>
         <span id="fmTasteGenreCount" class="find-music-count">Uses your top genres</span>
       </div>
@@ -28,7 +28,7 @@
       </div>
       <div id="fmTasteDiscoveryStatus" class="find-music-status" role="status" aria-live="polite">Sleeve will use up to three genres from your library taste profile.</div>
       <div id="fmTasteDiscoveryResults" class="fm-taste-discovery-results" hidden></div>
-      <p class="fm-taste-disclaimer">Suggestions use MusicBrainz community tags and catalog matches. Genre tags can be incomplete or broad, so treat these as starting points to explore.</p>
+      <p class="fm-taste-disclaimer">Suggestions use MusicBrainz community tags and catalog matches. Spotify buttons open Spotify search results for the artist or their music; Sleeve does not need a Spotify login or API connection for these links.</p>
     `;
 
     content.insertBefore(section, content.firstElementChild || null);
@@ -90,15 +90,44 @@
           const meta = [artist.type, artist.country, artist.beginDate ? (artist.endDate ? `${artist.beginDate}–${artist.endDate}` : `Since ${artist.beginDate}`) : '', artist.disambiguation]
             .filter(Boolean).join(' · ');
           details.appendChild(makeText('small', '', meta || 'Artist in the MusicBrainz catalog'));
+          const actions = document.createElement('div');
+          actions.className = 'fm-taste-artist-actions';
+
           const open = document.createElement('button');
           open.type = 'button';
           open.className = 'find-music-secondary fm-taste-artist-open';
-          open.textContent = 'View artist';
+          open.textContent = 'View MusicBrainz';
           open.addEventListener('click', async () => {
             try { await api.findMusicOpenUrl(artist.musicBrainzUrl); }
             catch (error) { setStatus(error && error.message ? error.message : 'Could not open the artist profile.', 'error'); }
           });
-          card.append(details, open);
+          actions.appendChild(open);
+
+          const spotifyLinks = window.SleeveSpotifyLinks &&
+            typeof window.SleeveSpotifyLinks.buildArtistLinks === 'function'
+            ? window.SleeveSpotifyLinks.buildArtistLinks(artist.name)
+            : null;
+          if (spotifyLinks) {
+            const spotifyArtist = document.createElement('button');
+            spotifyArtist.type = 'button';
+            spotifyArtist.className = 'find-music-secondary fm-taste-artist-open fm-taste-spotify-link';
+            spotifyArtist.textContent = 'Spotify artist';
+            spotifyArtist.addEventListener('click', async () => {
+              try { await api.findMusicOpenUrl(spotifyLinks.artistUrl); }
+              catch (error) { setStatus(error && error.message ? error.message : 'Could not open Spotify search.', 'error'); }
+            });
+
+            const spotifyMusic = document.createElement('button');
+            spotifyMusic.type = 'button';
+            spotifyMusic.className = 'find-music-secondary fm-taste-artist-open fm-taste-spotify-link';
+            spotifyMusic.textContent = 'Spotify music';
+            spotifyMusic.addEventListener('click', async () => {
+              try { await api.findMusicOpenUrl(spotifyLinks.musicUrl); }
+              catch (error) { setStatus(error && error.message ? error.message : 'Could not open Spotify search.', 'error'); }
+            });
+            actions.append(spotifyArtist, spotifyMusic);
+          }
+          card.append(details, actions);
           list.appendChild(card);
         }
 
