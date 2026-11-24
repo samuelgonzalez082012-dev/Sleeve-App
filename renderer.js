@@ -6051,6 +6051,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
       const profileArtist = getArtists().find(a => a.name === currentView.artist);
       const profileTracks = profileArtist ? profileArtist.tracks : [];
       const profileAlbums = getAlbumsForArtist(currentView.artist);
+      const profileAlbumCount = profileAlbums.filter(album => album.name !== 'Unknown Album').length;
       const profileThumb = artistThumbs.get(currentView.artist);
       const profileGenres = Array.from(new Set(profileTracks
         .map(track => String(track.genre || '').trim())
@@ -6076,7 +6077,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           </div>
         </div>
         <div class="artist-profile-stats" aria-label="Collection statistics">
-          <div class="artist-profile-stat"><strong>${profileAlbums.length}</strong><span>Albums in library</span></div>
+          <div class="artist-profile-stat"><strong>${profileAlbumCount}</strong><span>Albums in library</span></div>
           <div class="artist-profile-stat"><strong>${profileTracks.length}</strong><span>Tracks</span></div>
           <div class="artist-profile-stat"><strong>${profilePlays.toLocaleString()}</strong><span>Plays</span></div>
         </div>
@@ -6102,7 +6103,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
         </div>
         <div class="artist-profile-discography-heading">
           <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Albums by ${escapeHtml(currentView.artist)}</h3></div>
-          <span>${profileAlbums.length} release group${profileAlbums.length === 1 ? '' : 's'}</span>
+          <span>${profileAlbumCount} album${profileAlbumCount === 1 ? '' : 's'}</span>
         </div>
       `;
       profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
