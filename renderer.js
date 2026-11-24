@@ -6284,10 +6284,10 @@ async function deleteAllDetectedDuplicateCopies(button) {
       // These sections use existing playlist IDs and media tracks as their source of truth.
       const artistPlaylists = getArtistPlaylistAppearances(currentView.artist);
       const artistVideos = getArtistMusicVideos(currentView.artist);
-      artistVideos.forEach(probeVideoDuration);
       const visibleArtistVideos = currentView.artistVideosExpanded
         ? artistVideos
         : artistVideos.slice(0, 4);
+      visibleArtistVideos.forEach(probeVideoDuration);
       const relatedSections = document.createElement('section');
       relatedSections.className = 'artist-related-sections';
       relatedSections.setAttribute('aria-label', 'Artist playlists and music videos');
@@ -6326,7 +6326,9 @@ async function deleteAllDetectedDuplicateCopies(button) {
           <div class="artist-music-videos">
             ${artistVideos.length ? visibleArtistVideos.map(track => {
               const artMarkup = track.thumbUrl
-                ? `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`
+                ? (track.thumbKind === 'video'
+                  ? `<video src="${escapeHtml(track.thumbUrl)}" muted loop autoplay playsinline preload="metadata" aria-hidden="true"></video>`
+                  : `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`)
                 : '<span class="artist-video-placeholder" aria-hidden="true">▣</span>';
               return `<button class="artist-video-card" type="button" data-video-track-id="${escapeHtml(String(track.id))}" aria-label="Play video ${escapeHtml(track.title || 'Untitled video')}">
                 <span class="artist-video-art">${artMarkup}<span class="artist-video-play" aria-hidden="true">▶</span></span>
