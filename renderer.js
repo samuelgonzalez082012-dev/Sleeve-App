@@ -3208,6 +3208,8 @@ startAudioOutputMonitoring();
   }
 
   const artistDiscographyCache = new Map();
+  const releaseDetailsUiCache = new Map();
+  const artistRelationshipsUiCache = new Map();
 
   function normalizeDiscographyTitle(value){
     return String(value || '').normalize('NFKD')
@@ -3238,6 +3240,65 @@ startAudioOutputMonitoring();
       .filter(album => normalizeDiscographyTitle(album.name) === target);
     if (!matches.length) return null;
     return matches.slice().sort((a, b) => b.tracks.length - a.tracks.length)[0];
+  }
+
+
+  function getReleaseDetailsState(releaseGroupId){
+    return releaseDetailsUiCache.get(String(releaseGroupId || '')) || { status: 'idle' };
+  }
+
+  async function loadReleaseGroupDetails(releaseGroupId, forceRefresh = false){
+    const id = String(releaseGroupId || '').trim();
+    if (!id) return;
+    const previous = releaseDetailsUiCache.get(id);
+    if (previous && previous.status === 'loading') return;
+    releaseDetailsUiCache.set(id, { status: 'loading' });
+    scheduleRender(searchInput.value);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicGetReleaseGroupDetails !== 'function'){
+        throw new Error('Release details are unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicGetReleaseGroupDetails({ releaseGroupId: id, forceRefresh });
+      releaseDetailsUiCache.set(id, { status: 'loaded', details: result || {} });
+    }catch(error){
+      releaseDetailsUiCache.set(id, { status: 'error', error: error && error.message || 'Could not load release details.' });
+    }
+    scheduleRender(searchInput.value);
+  }
+
+  function getArtistRelationshipsState(artistName){
+    return artistRelationshipsUiCache.get(normalizeArtistCredit(artistName)) || { status: 'idle' };
+  }
+
+  async function loadArtistRelationships(artistName, forceRefresh = false){
+    const key = normalizeArtistCredit(artistName);
+    const discographyState = getArtistDiscographyState(artistName);
+    const artistId = discographyState.selectedArtist && discographyState.selectedArtist.id;
+    if (!artistId) return;
+    const previous = artistRelationshipsUiCache.get(key);
+    if (previous && previous.status === 'loading') return;
+    artistRelationshipsUiCache.set(key, { status: 'loading' });
+    scheduleRender(searchInput.value);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicGetArtistRelationships !== 'function'){
+        throw new Error('Artist connections are unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicGetArtistRelationships({ artistId, forceRefresh });
+      artistRelationshipsUiCache.set(key, {
+        status: 'loaded',
+        relationships: Array.isArray(result && result.relationships) ? result.relationships : []
+      });
+    }catch(error){
+      artistRelationshipsUiCache.set(key, { status: 'error', error: error && error.message || 'Could not load artist connections.' });
+    }
+    scheduleRender(searchInput.value);
+  }
+
+  function formatReleaseTrackDuration(durationMs){
+    const value = Number(durationMs);
+    if (!Number.isFinite(value) || value < 0) return '';
+    const seconds = Math.floor(value / 1000);
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   }
 
   function getArtistDiscographyState(artistName){
@@ -6415,6 +6476,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           const year = String(release.firstReleaseDate || '').slice(0, 4);
           const typeLabel = [release.primaryType, ...(release.secondaryTypes || [])].filter(Boolean).join(' · ') || 'Release';
           const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(`${currentView.artist} ${release.title}`)}`;
+          const releaseDetailsState = getReleaseDetailsState(release.id);
           return `
             <article class="artist-catalog-release${localMatch ? ' is-owned' : ' is-missing'}">
               <div class="artist-catalog-art">
@@ -6426,9 +6488,25 @@ async function deleteAllDetectedDuplicateCopies(button) {
                 <span>${escapeHtml([year, typeLabel].filter(Boolean).join(' · '))}</span>
                 <span class="artist-catalog-ownership">${localMatch ? `In your library · ${localMatch.tracks.length} track${localMatch.tracks.length === 1 ? '' : 's'}` : 'Not in your library'}</span>
               </div>
-              ${localMatch
-                ? `<button class="artist-catalog-open-local" type="button" data-open-local-album="${escapeHtml(localMatch.name)}">Open album</button>`
-                : `<button class="artist-catalog-open-external" type="button" data-open-catalog-release="${escapeHtml(spotifySearchUrl)}">View release on Spotify</button>`}
+              <div class="artist-catalog-actions">
+                ${localMatch
+                  ? `<button class="artist-catalog-open-local" type="button" data-open-local-album="${escapeHtml(localMatch.name)}">Open album</button>`
+                  : `<button class="artist-catalog-open-external" type="button" data-open-catalog-release="${escapeHtml(spotifySearchUrl)}">View release on Spotify</button>`}
+                <button class="artist-catalog-details-button" type="button" data-release-details-id="${escapeHtml(release.id)}">${releaseDetailsState.status === 'loaded' ? 'Hide details' : releaseDetailsState.status === 'loading' ? 'Loading…' : 'Release details'}</button>
+              </div>
+              ${releaseDetailsState.status === 'loaded' ? (() => {
+                const details = releaseDetailsState.details || {};
+                const edition = details.selectedEdition || {};
+                const tracks = Array.isArray(details.tracks) ? details.tracks : [];
+                return `<div class="artist-release-details">
+                  <div class="artist-release-details-heading">
+                    <strong>${escapeHtml(details.title || release.title)}</strong>
+                    <span>${escapeHtml([edition.date || details.firstReleaseDate, edition.country, edition.status].filter(Boolean).join(' · ') || 'Release information')}</span>
+                  </div>
+                  ${tracks.length ? `<ol class="artist-release-track-list">${tracks.map(track => `<li><span class="artist-release-track-number">${track.position || '–'}</span><span class="artist-release-track-title">${escapeHtml(track.title || 'Unknown track')}${track.artist ? `<small>${escapeHtml(track.artist)}</small>` : ''}</span><time>${formatReleaseTrackDuration(track.durationMs)}</time></li>`).join('')}</ol>` : '<p class="artist-release-details-empty">No track listing is available for this edition.</p>'}
+                  <button class="artist-release-details-refresh" type="button" data-release-details-refresh="${escapeHtml(release.id)}">Refresh details</button>
+                </div>`;
+              })() : releaseDetailsState.status === 'error' ? `<div class="artist-release-details artist-release-details-error"><p>${escapeHtml(releaseDetailsState.error)}</p><button type="button" data-release-details-refresh="${escapeHtml(release.id)}">Try again</button></div>` : ''}
             </article>`;
         }).join('');
         catalogContent = `
@@ -6486,6 +6564,19 @@ async function deleteAllDetectedDuplicateCopies(button) {
           scheduleRender(searchInput.value);
         });
       });
+      catalogSection.querySelectorAll('[data-release-details-id]').forEach(button => {
+        button.addEventListener('click', () => {
+          const id = button.dataset.releaseDetailsId;
+          const state = getReleaseDetailsState(id);
+          if (state.status === 'loaded'){
+            releaseDetailsUiCache.set(id, { status: 'idle' });
+            scheduleRender(searchInput.value);
+          } else loadReleaseGroupDetails(id);
+        });
+      });
+      catalogSection.querySelectorAll('[data-release-details-refresh]').forEach(button => {
+        button.addEventListener('click', () => loadReleaseGroupDetails(button.dataset.releaseDetailsRefresh, true));
+      });
       catalogSection.querySelectorAll('[data-open-catalog-release]').forEach(button => {
         button.addEventListener('click', async () => {
           const url = button.dataset.openCatalogRelease;
@@ -6503,7 +6594,58 @@ async function deleteAllDetectedDuplicateCopies(button) {
           if (fallback) fallback.hidden = false;
         }, { once: true });
       });
+
       cardGrid.appendChild(catalogSection);
+
+      // Phase 6.3 — explore MusicBrainz artist-to-artist relationships.
+      const relationshipsState = getArtistRelationshipsState(currentView.artist);
+      const relationshipsSection = document.createElement('section');
+      relationshipsSection.className = 'artist-relationships-section';
+      relationshipsSection.setAttribute('aria-label', 'Related artists and collaborations');
+      let relationshipsContent = '';
+      if (catalogState.status !== 'loaded' || !catalogState.selectedArtist){
+        relationshipsContent = '<p class="artist-relationships-note">Load the artist discography first to identify the correct artist entry, then explore related artists and collaborations.</p>';
+      } else if (relationshipsState.status === 'idle'){
+        relationshipsContent = '<p class="artist-relationships-note">Explore artist connections recorded in MusicBrainz, including collaborations and group relationships.</p><button class="artist-relationships-load" type="button" data-load-artist-relationships>Explore artist connections</button>';
+      } else if (relationshipsState.status === 'loading'){
+        relationshipsContent = '<p class="artist-relationships-note" role="status">Loading artist connections…</p>';
+      } else if (relationshipsState.status === 'error'){
+        relationshipsContent = `<p class="artist-relationships-error">${escapeHtml(relationshipsState.error)}</p><button class="artist-relationships-load" type="button" data-load-artist-relationships>Try again</button>`;
+      } else {
+        const related = relationshipsState.relationships || [];
+        relationshipsContent = related.length ? `
+          <div class="artist-relationships-list">
+            ${related.map(item => {
+              const spotifyUrl = `https://open.spotify.com/search/${encodeURIComponent(item.name)}`;
+              const years = [item.begin, item.end].filter(Boolean).join('–');
+              const detail = [item.type, item.direction, years, ...(item.attributes || []), item.disambiguation].filter(Boolean).join(' · ');
+              return `<article class="artist-relationship-card">
+                <div><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(detail || 'Related artist')}</span></div>
+                <button type="button" data-open-related-artist="${escapeHtml(spotifyUrl)}">Find on Spotify</button>
+              </article>`;
+            }).join('')}
+          </div>
+          <button class="artist-relationships-refresh" type="button" data-refresh-artist-relationships>Refresh connections</button>
+        ` : '<p class="artist-relationships-note">MusicBrainz has no artist-to-artist relationships recorded for this artist yet.</p>';
+      }
+      relationshipsSection.innerHTML = `
+        <div class="artist-relationships-heading"><div><span class="artist-profile-eyebrow">ARTIST CONNECTIONS</span><h3>Related artists & collaborations</h3></div></div>
+        ${relationshipsContent}
+      `;
+      const loadRelationshipsButton = relationshipsSection.querySelector('[data-load-artist-relationships]');
+      if (loadRelationshipsButton) loadRelationshipsButton.addEventListener('click', () => loadArtistRelationships(currentView.artist));
+      const refreshRelationshipsButton = relationshipsSection.querySelector('[data-refresh-artist-relationships]');
+      if (refreshRelationshipsButton) refreshRelationshipsButton.addEventListener('click', () => loadArtistRelationships(currentView.artist, true));
+      relationshipsSection.querySelectorAll('[data-open-related-artist]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const url = button.dataset.openRelatedArtist;
+          if (!url || !window.electronAPI || typeof window.electronAPI.findMusicOpenUrl !== 'function') return;
+          try { await window.electronAPI.findMusicOpenUrl(url); }
+          catch (error) { console.warn('Could not open related artist search:', error); }
+        });
+      });
+      cardGrid.appendChild(relationshipsSection);
+
 
       pagedItems.forEach(({ name, tracks }) => {
         if (catalogState.status === 'loaded') return;
