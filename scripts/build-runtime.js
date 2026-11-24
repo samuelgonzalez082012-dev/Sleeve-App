@@ -7,6 +7,7 @@ const esbuild = require('esbuild');
 
 const root = path.resolve(__dirname, '..');
 const rendererFiles = [
+  'stem-presets.js',
   'duplicate-detection.js',
   'renderer.js',
   'music-taste-analysis.js',

@@ -436,16 +436,17 @@ const stemGainNodes = {
   other: null
 };
 
-const STEM_VOLUME_MAX = 2.5;
+const stemPresetCore = window.SleeveStemPresets;
+const STEM_VOLUME_MAX = stemPresetCore.STEM_VOLUME_MAX;
 
-const stemVolumes = {
-  drums: 1,
-  vocals: 1,
-  bass: 1,
-  guitar: 1,
-  piano: 1,
-  other: 1
-};
+const stemVolumes = stemPresetCore.normalizeVolumes(stemPresetCore.ORIGINAL);
+const stemMuted = { drums: false, vocals: false, bass: false, guitar: false, piano: false, other: false };
+let soloStemName = null;
+let stemMixTrack = null;
+let stemCustomPresets = [];
+let stemPresetsLoaded = false;
+let stemPresetLoadPromise = null;
+let selectedStemPresetId = 'original';
 
 function stemPathToUrl(filePath) {
   if (!filePath) return '';
@@ -511,9 +512,68 @@ function stopStemPlayback() {
   hideStemMixerUI();
 }
 
+function syncStemMixerPlacement(expandSidebar = false) {
+  const mixer = document.getElementById('stemMixer');
+  if (!mixer) return;
+
+  const useSpotifySidebar = document.body.classList.contains('preset-spotify');
+  let section = document.getElementById('spotifyStemMixerSection');
+
+  if (useSpotifySidebar) {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    if (!section) {
+      section = document.createElement('section');
+      section.id = 'spotifyStemMixerSection';
+      section.className = 'spotify-stem-mixer-section';
+      section.innerHTML = `
+        <button type="button" class="spotify-stem-mixer-toggle" id="spotifyStemMixerToggle"
+          aria-expanded="true" aria-controls="spotifyStemMixerContent">
+          <span class="spotify-stem-mixer-title"><span class="spotify-stem-mixer-dot"></span>Stem Mixer</span>
+          <span class="spotify-stem-mixer-chevron" aria-hidden="true">⌄</span>
+        </button>
+        <div class="spotify-stem-mixer-content" id="spotifyStemMixerContent"></div>
+      `;
+      const toggle = section.querySelector('#spotifyStemMixerToggle');
+      const content = section.querySelector('#spotifyStemMixerContent');
+      toggle.addEventListener('click', () => {
+        const opening = content.hidden;
+        content.hidden = !opening;
+        toggle.setAttribute('aria-expanded', String(opening));
+      });
+      const addButton = document.getElementById('addBtn');
+      if (addButton && addButton.parentElement === sidebar) sidebar.insertBefore(section, addButton);
+      else sidebar.appendChild(section);
+    }
+    const content = section.querySelector('#spotifyStemMixerContent');
+    if (mixer.parentElement !== content) content.appendChild(mixer);
+    if (expandSidebar) {
+      content.hidden = false;
+      section.querySelector('#spotifyStemMixerToggle').setAttribute('aria-expanded', 'true');
+    }
+    mixer.style.width = '100%';
+    mixer.style.maxWidth = 'none';
+    mixer.style.flexBasis = 'auto';
+    mixer.style.marginTop = '0';
+    mixer.style.padding = '12px';
+  } else {
+    const stage = document.getElementById('stagePanel') || document.body;
+    if (mixer.parentElement !== stage) stage.appendChild(mixer);
+    if (section) section.remove();
+    mixer.style.width = 'min(100%,560px)';
+    mixer.style.maxWidth = '560px';
+    mixer.style.flexBasis = '100%';
+    mixer.style.marginTop = '14px';
+    mixer.style.padding = '16px';
+  }
+}
+
 function showStemMixerUI() {
   const mixer = document.getElementById('stemMixer');
-  if (mixer) mixer.style.display = '';
+  if (mixer) {
+    syncStemMixerPlacement(true);
+    mixer.style.display = '';
+  }
 }
 
 function hideStemMixerUI() {
@@ -521,32 +581,86 @@ function hideStemMixerUI() {
   if (mixer) mixer.style.display = 'none';
 }
 
-function setStemVolume(name, value) {
-  const v = Math.max(0, Math.min(STEM_VOLUME_MAX, Number(value) || 0));
+// Keep the mixer attached to the active layout when the user changes appearance
+// presets while a separated track is already loaded.
+if (document.body && window.MutationObserver) {
+  const stemMixerThemeObserver = new MutationObserver(() => syncStemMixerPlacement());
+  stemMixerThemeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
 
+function updateStemGain(name) {
+  if (!stemPresetCore.STEM_NAMES.includes(name)) return;
+  const gain = stemPresetCore.effectiveGain(stemVolumes, name, {
+    muted: stemMuted[name],
+    solo: soloStemName
+  });
+  if (stemGainNodes[name]) stemGainNodes[name].gain.value = gain;
+  const muteButton = document.querySelector(`[data-stem-mute="${name}"]`);
+  const soloButton = document.querySelector(`[data-stem-solo="${name}"]`);
+  if (muteButton) {
+    muteButton.classList.toggle('active', stemMuted[name]);
+    muteButton.setAttribute('aria-pressed', String(stemMuted[name]));
+  }
+  if (soloButton) {
+    const active = soloStemName === name;
+    soloButton.classList.toggle('active', active);
+    soloButton.setAttribute('aria-pressed', String(active));
+  }
+}
+
+function persistActiveStemMix() {
+  if (!stemMixTrack) return;
+  stemMixTrack.stemMix = stemPresetCore.normalizeVolumes(stemVolumes);
+  if (!stemMixTrack.remoteNetworkTrack) dbPut(stemMixTrack);
+}
+
+function setStemVolume(name, value, options = {}) {
+  if (!stemPresetCore.STEM_NAMES.includes(name)) return;
+  const v = stemPresetCore.clampVolume(value, stemVolumes[name]);
   stemVolumes[name] = v;
 
-  // audio.volume stays at 1 always — actual level (including boosts
-  // above 100%) is applied on the stem's GainNode instead, since
-  // audio.volume can't go above 1.
-  if (stemGainNodes[name]) {
-    stemGainNodes[name].gain.value = v;
-  }
-
-  const slider = document.querySelector(
-    `[data-stem-volume="${name}"]`
-  );
-
-  const valueLabel = document.querySelector(
-    `[data-stem-value="${name}"]`
-  );
-
-  if (slider) slider.value = v;
-
+  const slider = document.querySelector(`[data-stem-volume="${name}"]`);
+  const valueLabel = document.querySelector(`[data-stem-value="${name}"]`);
+  if (slider) slider.value = String(v);
   if (valueLabel) {
     valueLabel.textContent = `${Math.round(v * 100)}%`;
     valueLabel.style.color = v > 1 ? '#f5a524' : '';
   }
+
+  updateStemGain(name);
+  if (options.markCustom !== false) {
+    const select = document.getElementById('stemPresetSelect');
+    if (select) select.value = 'custom';
+    updateStemPresetActions();
+  }
+  if (options.persist !== false) persistActiveStemMix();
+}
+
+function applyStemMix(volumes, options = {}) {
+  const normalized = stemPresetCore.normalizeVolumes(volumes);
+  stemPresetCore.STEM_NAMES.forEach((name) => {
+    setStemVolume(name, normalized[name], { persist: false, markCustom: false });
+  });
+  if (options.clearTransient !== false) {
+    stemPresetCore.STEM_NAMES.forEach((name) => { stemMuted[name] = false; });
+    soloStemName = null;
+    stemPresetCore.STEM_NAMES.forEach(updateStemGain);
+  }
+  if (options.presetId) selectedStemPresetId = options.presetId;
+  if (options.persist !== false) persistActiveStemMix();
+  const select = document.getElementById('stemPresetSelect');
+  if (select) select.value = selectedStemPresetId;
+  updateStemPresetActions();
+}
+
+function toggleStemMute(name) {
+  stemMuted[name] = !stemMuted[name];
+  updateStemGain(name);
+}
+
+function toggleStemSolo(name) {
+  soloStemName = soloStemName === name ? null : name;
+  stemPresetCore.STEM_NAMES.forEach(updateStemGain);
 }
 
 function getStemTime() {
@@ -601,207 +715,273 @@ function pauseAllStems() {
   notifyVisualizerPlaybackState();
 }
 
+function getStemPresetById(id) {
+  return stemPresetCore.BUILT_IN_PRESETS.find((preset) => preset.id === id)
+    || stemCustomPresets.find((preset) => preset.id === id)
+    || null;
+}
+
+function findStemPresetIdForVolumes(volumes) {
+  const normalized = stemPresetCore.normalizeVolumes(volumes);
+  const presets = stemPresetCore.BUILT_IN_PRESETS.concat(stemCustomPresets);
+  const match = presets.find((preset) => stemPresetCore.STEM_NAMES.every((name) =>
+    Math.abs(preset.volumes[name] - normalized[name]) < 0.005
+  ));
+  return match ? match.id : 'custom';
+}
+
+function renderStemPresetOptions() {
+  const select = document.getElementById('stemPresetSelect');
+  if (!select) return;
+  select.replaceChildren();
+  const builtInGroup = document.createElement('optgroup');
+  builtInGroup.label = 'Built-in presets';
+  stemPresetCore.BUILT_IN_PRESETS.forEach((preset) => {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.name;
+    builtInGroup.appendChild(option);
+  });
+  select.appendChild(builtInGroup);
+
+  if (stemCustomPresets.length) {
+    const customGroup = document.createElement('optgroup');
+    customGroup.label = 'My presets';
+    stemCustomPresets.forEach((preset) => {
+      const option = document.createElement('option');
+      option.value = preset.id;
+      option.textContent = preset.name;
+      customGroup.appendChild(option);
+    });
+    select.appendChild(customGroup);
+  }
+  const customOption = document.createElement('option');
+  customOption.value = 'custom';
+  customOption.textContent = 'Current mix';
+  select.appendChild(customOption);
+  select.value = selectedStemPresetId;
+}
+
+function updateStemPresetActions() {
+  const selected = getStemPresetById(selectedStemPresetId);
+  const isCustom = Boolean(selected && !selected.isBuiltIn);
+  const update = document.getElementById('stemPresetUpdate');
+  const duplicate = document.getElementById('stemPresetDuplicate');
+  const remove = document.getElementById('stemPresetDelete');
+  if (update) update.disabled = !isCustom;
+  if (duplicate) duplicate.disabled = !selected;
+  if (remove) remove.disabled = !isCustom;
+}
+
+async function loadStemPresetLibrary() {
+  if (stemPresetsLoaded) return stemCustomPresets;
+  if (stemPresetLoadPromise) return stemPresetLoadPromise;
+  stemPresetLoadPromise = (async () => {
+    try {
+      const records = await dbGetAllStemPresets();
+      stemCustomPresets = records.map(stemPresetCore.normalizePreset).filter(Boolean);
+    } catch (error) {
+      console.warn('[Sleeve] Could not load stem presets:', error);
+      stemCustomPresets = [];
+    }
+    stemPresetsLoaded = true;
+    renderStemPresetOptions();
+    updateStemPresetActions();
+    return stemCustomPresets;
+  })();
+  return stemPresetLoadPromise;
+}
+
+async function saveCustomStemPreset(name, volumes, existingId) {
+  const cleanName = String(name || '').trim().slice(0, 48);
+  if (!cleanName) return false;
+  const now = Date.now();
+  const existing = existingId ? stemCustomPresets.find((preset) => preset.id === existingId) : null;
+  const record = stemPresetCore.normalizePreset({
+    id: existing ? existing.id : `stem-custom-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    name: cleanName,
+    volumes: stemPresetCore.normalizeVolumes(volumes),
+    createdAt: existing ? existing.createdAt : now,
+    updatedAt: now
+  });
+  if (!record) return false;
+  await dbPutStemPreset(record);
+  const index = stemCustomPresets.findIndex((preset) => preset.id === record.id);
+  if (index === -1) stemCustomPresets.push(record);
+  else stemCustomPresets[index] = record;
+  selectedStemPresetId = record.id;
+  renderStemPresetOptions();
+  updateStemPresetActions();
+  return true;
+}
+
 function createStemMixerUI() {
   if (document.getElementById('stemMixer')) return;
 
   const mixer = document.createElement('div');
-
   mixer.id = 'stemMixer';
-
-  mixer.style.cssText = `
-    flex-basis: 100%;
-    margin-top: 14px;
-    padding: 16px;
-    border-radius: 12px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    width: min(100%, 520px);
-    box-sizing: border-box;
-  `;
-
+  mixer.style.cssText = 'flex-basis:100%;margin-top:14px;padding:16px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);width:min(100%,560px);box-sizing:border-box;';
   mixer.innerHTML = `
-    <div style="
-      font-size:14px;
-      font-weight:600;
-      margin-bottom:12px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-    ">
-      <span>Stem Mixer</span>
-      <span style="font-size:11px;opacity:.55;">DEMUCS</span>
+    <div class="stem-mix-heading"><span>Stem Mixer</span><span class="stem-mix-engine">DEMUCS · 6 STEMS</span></div>
+    <div class="stem-preset-toolbar">
+      <label class="stem-preset-field"><span>Mix preset</span><select id="stemPresetSelect" aria-label="Stem mix preset"></select></label>
+      <button type="button" id="stemPresetSave">Save as</button>
+      <button type="button" id="stemPresetUpdate" disabled>Update</button>
+      <button type="button" id="stemPresetDuplicate" disabled>Duplicate</button>
+      <button type="button" id="stemPresetDelete" disabled>Delete</button>
+      <button type="button" id="stemPresetReset">Reset</button>
     </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Drums</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="drums"
-      >
-      <span class="stem-mix-value" data-stem-value="drums">100%</span>
+    <div class="stem-mix-list">
+      ${stemPresetCore.STEM_NAMES.map((name) => `
+        <div class="stem-mix-row" data-stem-row="${name}">
+          <span class="stem-mix-name">${name[0].toUpperCase() + name.slice(1)}</span>
+          <input type="range" min="0" max="2.5" step="0.01" value="1" data-stem-volume="${name}" aria-label="${name} volume">
+          <span class="stem-mix-value" data-stem-value="${name}">100%</span>
+          <button type="button" class="stem-mix-toggle" data-stem-mute="${name}" aria-label="Mute ${name}" aria-pressed="false">Mute</button>
+          <button type="button" class="stem-mix-toggle" data-stem-solo="${name}" aria-label="Solo ${name}" aria-pressed="false">Solo</button>
+        </div>`).join('')}
     </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Vocals</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="vocals"
-      >
-      <span class="stem-mix-value" data-stem-value="vocals">100%</span>
-    </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Bass</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="bass"
-      >
-      <span class="stem-mix-value" data-stem-value="bass">100%</span>
-    </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Guitar</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="guitar"
-      >
-      <span class="stem-mix-value" data-stem-value="guitar">100%</span>
-    </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Piano</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="piano"
-      >
-      <span class="stem-mix-value" data-stem-value="piano">100%</span>
-    </div>
-
-    <div class="stem-mix-row">
-      <span class="stem-mix-name">Other</span>
-      <input
-        type="range"
-        min="0"
-        max="2.5"
-        step="0.01"
-        value="1"
-        data-stem-volume="other"
-      >
-      <span class="stem-mix-value" data-stem-value="other">100%</span>
-    </div>
+    <div class="stem-mix-footnote">Mute and solo are temporary. Volume levels are saved with this track.</div>
   `;
 
   const style = document.createElement('style');
-
   style.textContent = `
-    #stemMixer .stem-mix-row {
-      display:grid;
-      grid-template-columns:70px 1fr 45px;
-      align-items:center;
-      gap:10px;
-      margin:9px 0;
-    }
-
-    #stemMixer .stem-mix-name {
-      font-size:12px;
-      opacity:.8;
-    }
-
-    #stemMixer .stem-mix-value {
-      font-size:11px;
-      text-align:right;
-      opacity:.65;
-    }
-
-    #stemMixer input[type="range"] {
-      width:100%;
-    }
+    #stemMixer .stem-mix-heading{font-size:14px;font-weight:650;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+    #stemMixer .stem-mix-engine{font-size:10px;letter-spacing:.08em;opacity:.55}
+    #stemMixer .stem-preset-toolbar{display:grid;grid-template-columns:minmax(130px,1fr) repeat(5,auto);gap:6px;align-items:end;margin-bottom:15px}
+    #stemMixer .stem-preset-field{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:10px;opacity:.8}
+    #stemMixer .stem-preset-field select,#stemMixer .stem-preset-toolbar button{height:30px;min-width:0;padding:0 8px;border:1px solid var(--line-bright);border-radius:7px;background:var(--bg-elevated);color:var(--text);font-size:10px}
+    #stemMixer .stem-preset-toolbar button{cursor:pointer}
+    #stemMixer .stem-preset-toolbar button:disabled{opacity:.35;cursor:not-allowed}
+    #stemMixer .stem-mix-row{display:grid;grid-template-columns:64px minmax(60px,1fr) 42px 48px 48px;align-items:center;gap:8px;margin:10px 0}
+    #stemMixer .stem-mix-name{font-size:12px;opacity:.85}
+    #stemMixer .stem-mix-value{font:11px var(--mono);text-align:right;opacity:.75}
+    #stemMixer input[type=range]{width:100%;accent-color:var(--accent-blue-bright)}
+    #stemMixer .stem-mix-toggle{height:25px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg-elevated);color:var(--text-dim);font-size:10px;cursor:pointer}
+    #stemMixer .stem-mix-toggle.active{border-color:var(--accent-blue-bright);background:color-mix(in srgb,var(--accent-blue) 35%,var(--bg-elevated));color:var(--text)}
+    #stemMixer .stem-mix-footnote{font-size:10px;color:var(--text-dimmer);margin-top:12px}
+    body.preset-spotify .spotify-stem-mixer-section{flex:0 0 auto;margin:4px 0 8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+    body.preset-spotify .spotify-stem-mixer-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:#fff;font:600 13px var(--sans);cursor:pointer}
+    body.preset-spotify .spotify-stem-mixer-toggle:hover{background:rgba(255,255,255,.08)}
+    body.preset-spotify .spotify-stem-mixer-title{display:flex;align-items:center;gap:9px}
+    body.preset-spotify .spotify-stem-mixer-dot{width:8px;height:8px;border-radius:50%;background:#1ed760;box-shadow:0 0 9px rgba(30,215,96,.45)}
+    body.preset-spotify .spotify-stem-mixer-chevron{font-size:17px;color:#b3b3b3;transition:transform .15s ease}
+    body.preset-spotify .spotify-stem-mixer-toggle[aria-expanded="false"] .spotify-stem-mixer-chevron{transform:rotate(-90deg)}
+    body.preset-spotify .spotify-stem-mixer-content{min-width:0;padding:4px 0 0}
+    body.preset-spotify #stemMixer{background:#202020!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:10px!important;color:#fff;overflow:hidden}
+    body.preset-spotify #stemMixer .stem-mix-heading{color:#fff}
+    body.preset-spotify #stemMixer .stem-preset-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+    body.preset-spotify #stemMixer .stem-preset-field{grid-column:1/-1}
+    body.preset-spotify #stemMixer .stem-preset-field select{width:100%;height:34px;background:#282828;color:#fff;border-color:rgba(255,255,255,.12)}
+    body.preset-spotify #stemMixer .stem-preset-toolbar button{height:30px;background:#282828;color:#fff;border-color:rgba(255,255,255,.12)}
+    body.preset-spotify #stemMixer .stem-preset-toolbar button:hover:not(:disabled){background:#333}
+    body.preset-spotify #stemMixer .stem-mix-row{grid-template-columns:48px minmax(35px,1fr) 34px 38px 38px;gap:4px;margin:12px 0}
+    body.preset-spotify #stemMixer .stem-mix-name{font-size:11px;color:#eee}
+    body.preset-spotify #stemMixer .stem-mix-value{font-size:10px;color:#b3b3b3}
+    body.preset-spotify #stemMixer input[type=range]{accent-color:#1ed760;min-width:0}
+    body.preset-spotify #stemMixer .stem-mix-toggle{height:25px;padding:0 3px;background:#282828;border-color:rgba(255,255,255,.12);color:#b3b3b3}
+    body.preset-spotify #stemMixer .stem-mix-toggle.active{background:rgba(30,215,96,.16);border-color:#1ed760;color:#1ed760}
+    body.preset-spotify #stemMixer .stem-mix-footnote{color:#b3b3b3;line-height:1.4}
+    @media(max-width:560px){#stemMixer .stem-preset-toolbar{grid-template-columns:1fr 1fr 1fr}#stemMixer .stem-preset-field{grid-column:1/-1}#stemMixer .stem-mix-row{grid-template-columns:55px minmax(45px,1fr) 38px 42px 42px;gap:5px}}
   `;
-
   document.head.appendChild(style);
-
-  const parent =
-    document.getElementById('stagePanel') ||
-    document.body;
-
+  const parent = document.getElementById('stagePanel') || document.body;
   parent.appendChild(mixer);
+  syncStemMixerPlacement();
 
-  Object.keys(stemAudio).forEach((name) => {
-    const slider = mixer.querySelector(
-      `[data-stem-volume="${name}"]`
-    );
-
+  mixer.querySelectorAll('[data-stem-volume]').forEach((slider) => {
     slider.addEventListener('input', (event) => {
-      setStemVolume(name, Number(event.target.value));
+      setStemVolume(event.currentTarget.dataset.stemVolume, Number(event.currentTarget.value));
     });
   });
+  mixer.querySelectorAll('[data-stem-mute]').forEach((button) => {
+    button.addEventListener('click', () => toggleStemMute(button.dataset.stemMute));
+  });
+  mixer.querySelectorAll('[data-stem-solo]').forEach((button) => {
+    button.addEventListener('click', () => toggleStemSolo(button.dataset.stemSolo));
+  });
+
+  document.getElementById('stemPresetSelect').addEventListener('change', (event) => {
+    const preset = getStemPresetById(event.target.value);
+    if (preset) applyStemMix(preset.volumes, { presetId: preset.id });
+  });
+  document.getElementById('stemPresetSave').addEventListener('click', async () => {
+    const name = prompt('Name this stem preset:');
+    if (name === null) return;
+    try {
+      if (!await saveCustomStemPreset(name, stemVolumes)) alert('Enter a valid preset name.');
+    } catch (error) { alert('Sleeve could not save this preset: ' + error.message); }
+  });
+  document.getElementById('stemPresetUpdate').addEventListener('click', async () => {
+    const preset = getStemPresetById(selectedStemPresetId);
+    if (!preset || preset.isBuiltIn) return;
+    try {
+      await saveCustomStemPreset(preset.name, stemVolumes, preset.id);
+    } catch (error) { alert('Sleeve could not update this preset: ' + error.message); }
+  });
+  document.getElementById('stemPresetDuplicate').addEventListener('click', async () => {
+    const preset = getStemPresetById(selectedStemPresetId);
+    if (!preset) return;
+    const name = prompt('Name the duplicated preset:', preset.name + ' Copy');
+    if (name === null) return;
+    try {
+      if (!await saveCustomStemPreset(name, stemVolumes)) alert('Enter a valid preset name.');
+    } catch (error) { alert('Sleeve could not duplicate this preset: ' + error.message); }
+  });
+  document.getElementById('stemPresetDelete').addEventListener('click', async () => {
+    const preset = getStemPresetById(selectedStemPresetId);
+    if (!preset || preset.isBuiltIn || !confirm(`Delete the "${preset.name}" preset?`)) return;
+    try {
+      await dbDeleteStemPreset(preset.id);
+      stemCustomPresets = stemCustomPresets.filter((item) => item.id !== preset.id);
+      applyStemMix(stemPresetCore.ORIGINAL, { presetId: 'original' });
+      renderStemPresetOptions();
+    } catch (error) { alert('Sleeve could not delete this preset: ' + error.message); }
+  });
+  document.getElementById('stemPresetReset').addEventListener('click', () => {
+    applyStemMix(stemPresetCore.ORIGINAL, { presetId: 'original' });
+  });
+
+  renderStemPresetOptions();
+  updateStemPresetActions();
 }
 
 async function loadStemTrack(track) {
   if (!track?.stems) return false;
 
   const stems = track.stems;
-
-  if (
-    !stems.drums ||
-    !stems.vocals ||
-    !stems.bass ||
-    !stems.guitar ||
-    !stems.piano ||
-    !stems.other
-  ) {
-    return false;
-  }
+  if (!stemPresetCore.STEM_NAMES.every((name) => stems[name])) return false;
 
   stopStemPlayback();
-
+  stemMixTrack = track;
+  stemPresetCore.STEM_NAMES.forEach((name) => { stemMuted[name] = false; });
+  soloStemName = null;
+  await loadStemPresetLibrary();
+  selectedStemPresetId = track.stemMix ? findStemPresetIdForVolumes(track.stemMix) : 'original';
+  applyStemMix(track.stemMix || stemPresetCore.ORIGINAL, { presetId: selectedStemPresetId, persist: false });
   createStemMixerUI();
+  stemPresetCore.STEM_NAMES.forEach((name) => {
+    setStemVolume(name, stemVolumes[name], { persist: false, markCustom: false });
+  });
+  renderStemPresetOptions();
+  updateStemPresetActions();
   showStemMixerUI();
 
   stemMode = true;
   currentEngine = 'stems';
-
   ensureStemAudioGraph();
 
-  const names = ['drums', 'vocals', 'bass', 'guitar', 'piano', 'other'];
-
-  names.forEach((name) => {
+  stemPresetCore.STEM_NAMES.forEach((name) => {
     const audio = stemAudio[name];
-
     audio.preload = 'auto';
     audio.src = stemPathToUrl(stems[name]);
-    // Real level is applied via the stem's GainNode (see
-    // ensureStemAudioGraph/setStemVolume) so it can go above 100%.
     audio.volume = 1;
     audio.playbackRate = currentSpeed;
     audio.load();
-    if (stemGainNodes[name]) {
-      stemGainNodes[name].gain.value = stemVolumes[name];
-    }
+    if (stemGainNodes[name]) stemGainNodes[name].gain.value = stemPresetCore.effectiveGain(stemVolumes, name, { muted: stemMuted[name], solo: soloStemName });
   });
 
   setAllStemTimes(0);
-
   return true;
 }
 
@@ -1069,18 +1249,20 @@ stemAudio.drums.addEventListener('ended', () => {
   const PLAYLIST_STORE = 'playlists';
   const ALBUM_ART_STORE = 'albumArt';
   const ARTIST_ART_STORE = 'artistArt';
+  const STEM_PRESET_STORE = 'stemPresets';
 
   function openDB(){
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
       if (!window.indexedDB){ reject(new Error('no indexedDB')); return; }
-      const req = indexedDB.open(DB_NAME, 4);
+      const req = indexedDB.open(DB_NAME, 5);
       req.onupgradeneeded = () => {
         const db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(PLAYLIST_STORE)) db.createObjectStore(PLAYLIST_STORE, { keyPath: 'id' });
         if (!db.objectStoreNames.contains(ALBUM_ART_STORE)) db.createObjectStore(ALBUM_ART_STORE, { keyPath: 'key' });
         if (!db.objectStoreNames.contains(ARTIST_ART_STORE)) db.createObjectStore(ARTIST_ART_STORE, { keyPath: 'key' });
+        if (!db.objectStoreNames.contains(STEM_PRESET_STORE)) db.createObjectStore(STEM_PRESET_STORE, { keyPath: 'id' });
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -1093,7 +1275,7 @@ stemAudio.drums.addEventListener('ended', () => {
   let trackWriteFlushPromise = null;
 
   function queueTrackWrite(track){
-    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null });
+    pendingTrackWrites.set(track.id, { id: track.id, title: track.title, kind: track.kind, file: track.file, thumb: track.thumb || null, thumbKind: track.thumbKind || null, lyrics: track.lyrics || null, artist: track.artist || null, album: track.album || null, year: track.year || null, genre: track.genre || null, trackNum: track.trackNum || null, duration: track.duration || null, manualMetadata: track.manualMetadata || {}, playCount: track.playCount || 0, lastPlayedAt: track.lastPlayedAt || null, addedAt: track.addedAt || Date.now(), sourcePath: track.sourcePath || track.file?.webkitRelativePath || track.file?.path || track.file?.name || '', stems: track.stems || null, stemMix: track.stemMix ? stemPresetCore.normalizeVolumes(track.stemMix) : null });
     if (!trackWriteTimer) trackWriteTimer = setTimeout(flushTrackWrites, 100);
   }
 
@@ -1119,6 +1301,46 @@ stemAudio.drums.addEventListener('ended', () => {
   }
 
   async function dbPut(track){ queueTrackWrite(track); scheduleLocalNetworkLibrarySync(); }
+
+  async function dbGetAllStemPresets(){
+    const db = await openDB();
+    if (!db) return [];
+    return new Promise((resolve) => {
+      try {
+        const request = db.transaction(STEM_PRESET_STORE, 'readonly').objectStore(STEM_PRESET_STORE).getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+      } catch (error) { resolve([]); }
+    });
+  }
+
+  async function dbPutStemPreset(preset){
+    const db = await openDB();
+    if (!db) throw new Error('Library storage is unavailable.');
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction(STEM_PRESET_STORE, 'readwrite');
+        tx.objectStore(STEM_PRESET_STORE).put(preset);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Could not save preset.'));
+        tx.onabort = () => reject(tx.error || new Error('Preset save was cancelled.'));
+      } catch (error) { reject(error); }
+    });
+  }
+
+  async function dbDeleteStemPreset(id){
+    const db = await openDB();
+    if (!db) throw new Error('Library storage is unavailable.');
+    return new Promise((resolve, reject) => {
+      try {
+        const tx = db.transaction(STEM_PRESET_STORE, 'readwrite');
+        tx.objectStore(STEM_PRESET_STORE).delete(id);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('Could not delete preset.'));
+        tx.onabort = () => reject(tx.error || new Error('Preset deletion was cancelled.'));
+      } catch (error) { reject(error); }
+    });
+  }
 
   async function dbGetAll(){
     const db = await openDB();
