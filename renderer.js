@@ -4533,7 +4533,7 @@ const titleVariants = [...new Set([
       case 'yourTaste': {
         const profile = window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.analyze(musicTracks) : null;
         const previousTasteTrackIds = playlists
-          .filter(pl => /^Your Taste Mix Mix(?: \\d+)?$/.test(pl.name || ''))
+          .filter(pl => /^Your Taste Mix Mix(?: \d+)?$/.test(pl.name || ''))
           .flatMap(pl => Array.isArray(pl.trackIds) ? pl.trackIds : []);
         return window.SleeveTasteAnalysis ? window.SleeveTasteAnalysis.buildTasteMixTracks(musicTracks, profile, SMART_PLAYLIST_SIZE, { previousTrackIds: previousTasteTrackIds }) : [];
       }
