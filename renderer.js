@@ -3251,7 +3251,7 @@ startAudioOutputMonitoring();
     }
   }
 
-  async function loadArtistDiscography(artistName){
+  async function loadArtistDiscography(artistName, forceRefresh = false){
     const key = normalizeArtistCredit(artistName);
     if (!key) return;
     const previous = artistDiscographyCache.get(key);
@@ -3262,7 +3262,7 @@ startAudioOutputMonitoring();
       if (!window.electronAPI || typeof window.electronAPI.findMusicSearchArtistCatalog !== 'function'){
         throw new Error('Artist catalog lookup is unavailable in this version of Sleeve.');
       }
-      const result = await window.electronAPI.findMusicSearchArtistCatalog({ artistName });
+      const result = await window.electronAPI.findMusicSearchArtistCatalog({ artistName, forceRefresh });
       const candidates = Array.isArray(result && result.artists) ? result.artists : [];
       if (!candidates.length){
         artistDiscographyCache.set(key, { status: 'empty', candidates: [] });
@@ -3271,7 +3271,7 @@ startAudioOutputMonitoring();
       }
       const exactCandidates = candidates.filter(candidate => candidate.exactName);
       if (exactCandidates.length === 1){
-        await fetchArtistDiscography(artistName, exactCandidates[0]);
+        await fetchArtistDiscography(artistName, exactCandidates[0], forceRefresh);
         return;
       }
       artistDiscographyCache.set(key, { status: 'chooseArtist', candidates });
@@ -3286,7 +3286,7 @@ startAudioOutputMonitoring();
     }
   }
 
-  async function fetchArtistDiscography(artistName, candidate){
+  async function fetchArtistDiscography(artistName, candidate, forceRefresh = false){
     const key = normalizeArtistCredit(artistName);
     if (!candidate || !candidate.id) return;
     artistDiscographyCache.set(key, { status: 'loading', candidates: [], selectedArtist: candidate });
@@ -3295,7 +3295,7 @@ startAudioOutputMonitoring();
       if (!window.electronAPI || typeof window.electronAPI.findMusicGetArtistDiscography !== 'function'){
         throw new Error('Full discography lookup is unavailable in this version of Sleeve.');
       }
-      const result = await window.electronAPI.findMusicGetArtistDiscography({ artistId: candidate.id });
+      const result = await window.electronAPI.findMusicGetArtistDiscography({ artistId: candidate.id, forceRefresh });
       artistDiscographyCache.set(key, {
         status: 'loaded',
         selectedArtist: candidate,
@@ -5940,9 +5940,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
         ? `${artistsData.length} artist${artistsData.length === 1 ? '' : 's'} in your library`
         : 'Artist names are read automatically from your files\u2019 tags';
     } else if (isArtistAlbums){
-      subhead.textContent = albumsData.length
-        ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
-        : `No albums found for ${currentView.artist}`;
+      const artistCatalog = getArtistDiscographyState(currentView.artist);
+      subhead.textContent = artistCatalog.status === 'loaded'
+        ? `${artistCatalog.totalCount || artistCatalog.fetchedCount} releases in the public catalog`
+        : albumsData.length
+          ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
+          : `No named albums in your library yet · Load the full discography below`;
     } else if (isAlbum){
       subhead.textContent = `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'} \u2022 ${currentView.artist}`;
     } else if (isBrowse){
@@ -6444,7 +6447,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           </div>
           ${catalogState.truncated ? '<p class="artist-catalog-status">This artist has a very large catalog. The first 500 release groups are shown.</p>' : ''}
           <div class="artist-catalog-footer">
-            <span>Catalog data provided by MusicBrainz</span>
+            <span>MusicBrainz catalog · Matches use artist and normalized album title; alternate editions may appear separately.</span>
             <button class="artist-catalog-refresh" type="button" data-catalog-refresh>Refresh catalog</button>
           </div>`;
       }
@@ -6491,7 +6494,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
         });
       });
       const catalogRefreshButton = catalogSection.querySelector('[data-catalog-refresh]');
-      if (catalogRefreshButton) catalogRefreshButton.addEventListener('click', () => loadArtistDiscography(currentView.artist));
+      if (catalogRefreshButton) catalogRefreshButton.addEventListener('click', () => loadArtistDiscography(currentView.artist, true));
       catalogSection.querySelectorAll('.artist-catalog-art img').forEach(image => {
         image.addEventListener('error', () => {
           image.hidden = true;
