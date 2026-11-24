@@ -860,7 +860,7 @@ function createStemMixerUI() {
     #stemMixer .stem-mix-toggle{height:25px;padding:0 6px;border:1px solid var(--line);border-radius:6px;background:var(--bg-elevated);color:var(--text-dim);font-size:10px;cursor:pointer}
     #stemMixer .stem-mix-toggle.active{border-color:var(--accent-blue-bright);background:color-mix(in srgb,var(--accent-blue) 35%,var(--bg-elevated));color:var(--text)}
     #stemMixer .stem-mix-footnote{font-size:10px;color:var(--text-dimmer);margin-top:12px}
-    body.preset-spotify .spotify-stem-mixer-section{order:8;flex:0 0 auto;margin:4px 0 8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
+    body.preset-spotify .spotify-stem-mixer-section{flex:0 0 auto;margin:4px 0 8px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
     body.preset-spotify .spotify-stem-mixer-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border:0;border-radius:8px;background:transparent;color:#fff;font:600 13px var(--sans);cursor:pointer}
     body.preset-spotify .spotify-stem-mixer-toggle:hover{background:rgba(255,255,255,.08)}
     body.preset-spotify .spotify-stem-mixer-title{display:flex;align-items:center;gap:9px}
