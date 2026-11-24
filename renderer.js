@@ -2889,6 +2889,33 @@ startAudioOutputMonitoring();
     probe.src = track.url;
   }
 
+  // Video duration is read lazily for artist-profile cards. This only
+  // loads metadata; it does not start playback or add videos to music counts.
+  function probeVideoDuration(track){
+    if (!track || track.kind !== 'video' || track.duration != null || durationProbeCache.has(track.id)) return;
+    durationProbeCache.add(track.id);
+    const probe = document.createElement('video');
+    probe.preload = 'metadata';
+    probe.muted = true;
+    const releaseProbe = () => {
+      probe.removeAttribute('src');
+      try{ probe.load(); }catch(err){}
+    };
+    probe.addEventListener('loadedmetadata', () => {
+      if (Number.isFinite(probe.duration) && probe.duration > 0){
+        track.duration = probe.duration;
+        dbPut(track);
+        if (currentView.type === 'artistAlbums'
+          && normalizeArtistCredit(currentView.artist) === normalizeArtistCredit(track.artist)){
+          scheduleRender(searchInput.value);
+        }
+      }
+      releaseProbe();
+    }, { once: true });
+    probe.addEventListener('error', releaseProbe, { once: true });
+    probe.src = track.url;
+  }
+
   // ---------- Song thumbnails ----------
   const thumbInput = document.getElementById('thumbInput');
   let thumbEditTrackId = null;
@@ -3145,6 +3172,149 @@ startAudioOutputMonitoring();
         if (b.name === 'Unknown Album') return -1;
         return a.name.localeCompare(b.name);
       });
+  }
+
+  // Match artist credits conservatively: normalize case/spacing, but do not
+  // use substring matching or split collaboration text into guessed identities.
+  function normalizeArtistCredit(value){
+    return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+
+  function getArtistPlaylistAppearances(artistName){
+    const targetArtist = normalizeArtistCredit(artistName);
+    if (!targetArtist) return [];
+    const tracksById = new Map(playlist.map(track => [track.id, track]));
+    return playlists
+      .filter(pl => (pl.type || 'music') === 'music')
+      .map(pl => {
+        const tracks = (Array.isArray(pl.trackIds) ? pl.trackIds : [])
+          .map(id => tracksById.get(id))
+          .filter(track => track && track.kind !== 'video');
+        const matchedTracks = tracks.filter(track => normalizeArtistCredit(track.artist) === targetArtist);
+        return matchedTracks.length ? { playlist: pl, matchedTracks, totalTrackCount: tracks.length } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.playlist.name.localeCompare(b.playlist.name));
+  }
+
+  function getArtistMusicVideos(artistName){
+    const targetArtist = normalizeArtistCredit(artistName);
+    if (!targetArtist) return [];
+    return playlist
+      .filter(track => track && track.kind === 'video'
+        && normalizeArtistCredit(track.artist) === targetArtist)
+      .slice()
+      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  }
+
+  const artistDiscographyCache = new Map();
+
+  function normalizeDiscographyTitle(value){
+    return String(value || '').normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .toLocaleLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+  }
+
+  function getDiscographyCategories(release){
+    const secondary = (release.secondaryTypes || []).map(value => String(value).toLocaleLowerCase());
+    const primary = String(release.primaryType || '').toLocaleLowerCase();
+    const categories = [];
+    if (secondary.includes('compilation')) categories.push('compilations');
+    if (secondary.includes('live')) categories.push('live');
+    if (primary === 'album') categories.push('albums');
+    else if (primary === 'single') categories.push('singles');
+    else if (primary === 'ep') categories.push('eps');
+    return categories.length ? categories : ['other'];
+  }
+
+  function getLocalAlbumMatchForRelease(artistName, release, localAlbumIndex){
+    const target = normalizeDiscographyTitle(release && release.title);
+    if (!target) return null;
+    if (localAlbumIndex) return localAlbumIndex.get(target) || null;
+    const matches = getAlbumsForArtist(artistName)
+      .filter(album => normalizeDiscographyTitle(album.name) === target);
+    if (!matches.length) return null;
+    return matches.slice().sort((a, b) => b.tracks.length - a.tracks.length)[0];
+  }
+
+  function getArtistDiscographyState(artistName){
+    return artistDiscographyCache.get(normalizeArtistCredit(artistName)) || { status: 'idle' };
+  }
+
+  function refreshArtistDiscographyIfVisible(artistName){
+    if (currentView.type === 'artistAlbums'
+      && normalizeArtistCredit(currentView.artist) === normalizeArtistCredit(artistName)){
+      scheduleRender(searchInput.value);
+    }
+  }
+
+  async function loadArtistDiscography(artistName, forceRefresh = false){
+    const key = normalizeArtistCredit(artistName);
+    if (!key) return;
+    const previous = artistDiscographyCache.get(key);
+    if (previous && ['searching', 'loading'].includes(previous.status)) return;
+    artistDiscographyCache.set(key, { status: 'searching', candidates: [], selectedArtist: null });
+    refreshArtistDiscographyIfVisible(artistName);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicSearchArtistCatalog !== 'function'){
+        throw new Error('Artist catalog lookup is unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicSearchArtistCatalog({ artistName, forceRefresh });
+      const candidates = Array.isArray(result && result.artists) ? result.artists : [];
+      if (!candidates.length){
+        artistDiscographyCache.set(key, { status: 'empty', candidates: [] });
+        refreshArtistDiscographyIfVisible(artistName);
+        return;
+      }
+      const exactCandidates = candidates.filter(candidate => candidate.exactName);
+      if (exactCandidates.length === 1){
+        await fetchArtistDiscography(artistName, exactCandidates[0], forceRefresh);
+        return;
+      }
+      artistDiscographyCache.set(key, { status: 'chooseArtist', candidates, forceRefresh });
+      refreshArtistDiscographyIfVisible(artistName);
+    }catch(error){
+      artistDiscographyCache.set(key, {
+        status: 'error',
+        error: String(error && error.message || 'Could not load artist catalog.'),
+        candidates: []
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }
+  }
+
+  async function fetchArtistDiscography(artistName, candidate, forceRefresh = false){
+    const key = normalizeArtistCredit(artistName);
+    if (!candidate || !candidate.id) return;
+    artistDiscographyCache.set(key, { status: 'loading', candidates: [], selectedArtist: candidate });
+    refreshArtistDiscographyIfVisible(artistName);
+    try{
+      if (!window.electronAPI || typeof window.electronAPI.findMusicGetArtistDiscography !== 'function'){
+        throw new Error('Full discography lookup is unavailable in this version of Sleeve.');
+      }
+      const result = await window.electronAPI.findMusicGetArtistDiscography({ artistId: candidate.id, forceRefresh });
+      artistDiscographyCache.set(key, {
+        status: 'loaded',
+        selectedArtist: candidate,
+        releaseGroups: Array.isArray(result && result.releaseGroups) ? result.releaseGroups : [],
+        totalCount: Number(result && result.totalCount) || 0,
+        fetchedCount: Number(result && result.fetchedCount) || 0,
+        truncated: !!(result && result.truncated),
+        generatedAt: Number(result && result.generatedAt) || Date.now()
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }catch(error){
+      artistDiscographyCache.set(key, {
+        status: 'error',
+        error: String(error && error.message || 'Could not load this artist’s discography.'),
+        selectedArtist: candidate,
+        candidates: []
+      });
+      refreshArtistDiscographyIfVisible(artistName);
+    }
   }
 
   function getYears(){
@@ -5652,7 +5822,25 @@ async function deleteAllDetectedDuplicateCopies(button) {
     } else if (isArtistAlbums){
       // Guard against a stale view if every track from this artist was deleted.
       if (getArtists().every(a => a.name !== currentView.artist)) currentView = { type: 'artists' };
-      else albumsData = getAlbumsForArtist(currentView.artist).filter(a => !query || a.name.toLowerCase().includes(query));
+      else {
+        const allArtistAlbums = getAlbumsForArtist(currentView.artist)
+          .filter(a => a.name !== 'Unknown Album');
+        const releaseFilter = currentView.artistReleaseFilter || 'popular';
+        const releaseStats = album => ({
+          plays: album.tracks.reduce((sum, track) => sum + Math.max(0, Number(track.playCount) || 0), 0),
+          year: album.tracks.map(track => Number(track.year)).filter(year => Number.isFinite(year) && year > 0).sort((a, b) => b - a)[0] || null
+        });
+        const sortedAlbums = allArtistAlbums.slice().sort((a, b) => {
+          const aStats = releaseStats(a), bStats = releaseStats(b);
+          if (releaseFilter === 'popular') return bStats.plays - aStats.plays || a.name.localeCompare(b.name);
+          if (releaseFilter === 'singles') return a.tracks.length - b.tracks.length || a.name.localeCompare(b.name);
+          return (bStats.year || 0) - (aStats.year || 0) || a.name.localeCompare(b.name);
+        });
+        albumsData = sortedAlbums.filter(album => {
+          if (releaseFilter === 'singles' && album.tracks.length > 6) return false;
+          return !query || album.name.toLowerCase().includes(query);
+        });
+      }
     }
 
     let browseData = null;
@@ -5733,7 +5921,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
     }
 
     const hasAnyInView = isArtists ? artistsData.length > 0
-      : isArtistAlbums ? albumsData.length > 0
+      : isArtistAlbums ? getArtists().some(artist => artist.name === currentView.artist)
       : isBrowse ? browseData.length > 0
       : baseIndices.length > 0;
 
@@ -5752,9 +5940,12 @@ async function deleteAllDetectedDuplicateCopies(button) {
         ? `${artistsData.length} artist${artistsData.length === 1 ? '' : 's'} in your library`
         : 'Artist names are read automatically from your files\u2019 tags';
     } else if (isArtistAlbums){
-      subhead.textContent = albumsData.length
-        ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
-        : `No albums found for ${currentView.artist}`;
+      const artistCatalog = getArtistDiscographyState(currentView.artist);
+      subhead.textContent = artistCatalog.status === 'loaded'
+        ? `${artistCatalog.totalCount || artistCatalog.fetchedCount} releases in the public catalog`
+        : albumsData.length
+          ? `${albumsData.length} album${albumsData.length === 1 ? '' : 's'} by ${currentView.artist}`
+          : `No named albums in your library yet · Load the full discography below`;
     } else if (isAlbum){
       subhead.textContent = `${baseIndices.length} track${baseIndices.length === 1 ? '' : 's'} \u2022 ${currentView.artist}`;
     } else if (isBrowse){
@@ -5774,8 +5965,11 @@ async function deleteAllDetectedDuplicateCopies(button) {
       emptyMain.querySelector('h3').textContent = 'No artists found yet';
       emptyMain.querySelector('p').textContent = 'Add some music with artist tags — most MP3s already have them — and they\u2019ll show up here automatically.';
     } else if (isArtistAlbums){
-      emptyMain.querySelector('h3').textContent = 'No albums found';
-      emptyMain.querySelector('p').textContent = `None of ${currentView.artist}'s tracks have an album tag yet.`;
+      const releaseFilter = currentView.artistReleaseFilter || 'popular';
+      emptyMain.querySelector('h3').textContent = releaseFilter === 'singles' ? 'No short releases found' : 'No albums found';
+      emptyMain.querySelector('p').textContent = releaseFilter === 'singles'
+        ? 'No releases with six or fewer tracks were found in this artist’s local collection.'
+        : `None of ${currentView.artist}'s tracks have a named album tag yet.`;
     } else if (isBrowse){
       emptyMain.querySelector('h3').textContent = currentView.mode === 'year' ? 'No years found yet' : 'No genres found yet';
       emptyMain.querySelector('p').textContent = 'Add some music with year/genre tags — most MP3s already have them — and they\u2019ll show up here automatically.';
@@ -6027,6 +6221,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           ${thumbClearHtml}
           <div class="card-title">${escapeHtml(name)}</div>
           <div class="card-sub">${tracks.length} track${tracks.length === 1 ? '' : 's'}</div>
+          <div class="artist-release-card-meta">${tracks.map(track => Number(track.year)).filter(year => Number.isFinite(year) && year > 0).sort((a, b) => b - a)[0] || 'Year unavailable'} <span>·</span> ${tracks.reduce((sum, track) => sum + Math.max(0, Number(track.playCount) || 0), 0).toLocaleString()} plays</div>
         `;
         card.addEventListener('click', (e) => {
           if (e.target.closest('.card-thumb-btn') || e.target.closest('.card-thumb-clear-btn')) return;
@@ -6045,7 +6240,273 @@ async function deleteAllDetectedDuplicateCopies(button) {
         cardGrid.appendChild(card);
       });
     } else if (isArtistAlbums){
+      // Phase 6.1: artist profile header. Only show facts derived from the
+      // local library; biography/origin/similar-artist data needs a metadata
+      // provider and is intentionally not fabricated here.
+      const profileArtist = getArtists().find(a => a.name === currentView.artist);
+      const profileCatalogState = getArtistDiscographyState(currentView.artist);
+      const profileTracks = profileArtist ? profileArtist.tracks : [];
+      const profileAlbums = getAlbumsForArtist(currentView.artist);
+      const profileAlbumCount = profileAlbums.filter(album => album.name !== 'Unknown Album').length;
+      const profileThumb = artistThumbs.get(currentView.artist);
+      const profileGenres = Array.from(new Set(profileTracks
+        .map(track => String(track.genre || '').trim())
+        .filter(Boolean))).sort((a, b) => a.localeCompare(b));
+      const profilePlays = profileTracks.reduce((total, track) => total + Math.max(0, Number(track.playCount) || 0), 0);
+      const profilePopularTracks = profileTracks
+        .filter(track => Math.max(0, Number(track.playCount) || 0) > 0)
+        .slice()
+        .sort((a, b) => (Number(b.playCount) || 0) - (Number(a.playCount) || 0)
+          || String(a.title || '').localeCompare(String(b.title || '')))
+        .slice(0, 5);
+      const profileBackdrop = profileThumb && profileThumb.url
+        ? `<img class="artist-profile-backdrop-image" src="${escapeHtml(profileThumb.url)}" alt="" loading="lazy" decoding="async">`
+        : '';
+      const profile = document.createElement('section');
+      profile.className = 'artist-profile';
+      profile.setAttribute('aria-label', `${currentView.artist} artist profile`);
+      profile.innerHTML = `
+        <header class="artist-profile-hero${profileBackdrop ? ' has-artist-image' : ''}">
+          ${profileBackdrop}
+          <div class="artist-profile-hero-shade" aria-hidden="true"></div>
+          <div class="artist-profile-heading">
+            <div class="artist-profile-eyebrow"><span class="artist-profile-eyebrow-mark" aria-hidden="true">♪</span> ARTIST</div>
+            <h2>${escapeHtml(currentView.artist)}</h2>
+            <p>${profileTracks.length.toLocaleString()} tracks <span aria-hidden="true">·</span> ${profileAlbumCount.toLocaleString()} albums in your library</p>
+            <div class="artist-profile-actions">
+              <button class="artist-profile-action artist-profile-photo-btn" type="button">${profileThumb ? 'Change artist image' : 'Add artist image'}</button>
+              ${profileThumb ? '<button class="artist-profile-action artist-profile-remove-photo" type="button">Remove image</button>' : ''}
+            </div>
+          </div>
+        </header>
+        <section class="artist-popular" aria-label="Popular tracks">
+          <div class="artist-section-heading">
+            <div><span class="artist-profile-eyebrow">YOUR LISTENING HISTORY</span><h3>Popular tracks</h3></div>
+            <span class="artist-popular-caption">Most played in your library</span>
+          </div>
+          <div class="artist-popular-list">
+            ${profilePopularTracks.length ? profilePopularTracks.map((track, rank) => {
+              const artEntry = albumArtForTrack(track);
+              const artMarkup = track.thumbUrl
+                ? `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`
+                : (artEntry ? albumArtMarkup(artEntry, track.album || track.title) : '<span class="artist-popular-art-placeholder" aria-hidden="true">♪</span>');
+              return `<button class="artist-popular-row" type="button" data-track-id="${escapeHtml(String(track.id))}" aria-label="Play ${escapeHtml(track.title)}">
+                <span class="artist-popular-rank">${rank + 1}</span>
+                <span class="artist-popular-art">${artMarkup}</span>
+                <span class="artist-popular-track-meta"><strong>${escapeHtml(track.title || 'Untitled track')}</strong><span>${escapeHtml((track.album || '').trim() || 'Unknown Album')}</span></span>
+                <span class="artist-popular-plays">${Math.max(0, Number(track.playCount) || 0).toLocaleString()} <small>plays</small></span>
+                <span class="artist-popular-duration">${Number(track.duration) > 0 ? formatTime(Number(track.duration)) : '—'}</span>
+                <span class="artist-popular-play-icon" aria-hidden="true">▶</span>
+              </button>`;
+            }).join('') : '<p class="artist-popular-empty">Your most-played tracks will appear here as you listen to this artist.</p>'}
+          </div>
+        </section>
+        <div class="artist-profile-stats" aria-label="Collection statistics">
+          <div class="artist-profile-stat"><strong>${profileAlbumCount}</strong><span>Albums in library</span></div>
+          <div class="artist-profile-stat"><strong>${profileTracks.length}</strong><span>Tracks</span></div>
+          <div class="artist-profile-stat"><strong>${profilePlays.toLocaleString()}</strong><span>Plays</span></div>
+        </div>
+        <div class="artist-profile-details">
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">About</div>
+            <p class="artist-profile-muted">Biography and country of origin will appear when artist metadata is connected. Sleeve won't guess or invent profile details.</p>
+          </section>
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">Genres in your library</div>
+            <div class="artist-profile-tags">${profileGenres.length
+              ? profileGenres.slice(0, 8).map(genre => `<span class="artist-profile-tag">${escapeHtml(genre)}</span>`).join('')
+              : '<span class="artist-profile-muted">No genre tags found in this artist’s tracks yet.</span>'}</div>
+          </section>
+          <section class="artist-profile-panel">
+            <div class="artist-profile-panel-heading">Artist timeline</div>
+            <p class="artist-profile-muted">Active years will be shown once verified artist profile data is available.</p>
+          </section>
+          <section class="artist-profile-panel artist-profile-similar">
+            <div class="artist-profile-panel-heading">Similar artists</div>
+            <p class="artist-profile-muted">Artist connections are part of Phase 6.3.</p>
+          </section>
+        </div>
+        <section class="artist-discography" aria-label="Artist collection">
+          <div class="artist-profile-discography-heading">
+            <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Albums in your library</h3></div>
+            <span>${profileAlbumCount} release${profileAlbumCount === 1 ? '' : 's'}</span>
+          </div>
+          <p class="artist-release-filter-note">${profileCatalogState.status === 'loaded' ? 'Your owned releases are marked in the full discography below.' : 'Load the full discography to compare your local albums with the artist’s catalog.'}</p>
+        </section>
+      `;
+      profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
+      const removePhotoButton = profile.querySelector('.artist-profile-remove-photo');
+      if (removePhotoButton) removePhotoButton.addEventListener('click', () => clearArtistThumb(currentView.artist));
+      profile.querySelectorAll('.artist-release-filter:not(:disabled)').forEach(button => {
+        const filter = button.dataset.releaseFilter;
+        button.classList.toggle('active', (currentView.artistReleaseFilter || 'popular') === filter);
+        button.setAttribute('aria-pressed', String((currentView.artistReleaseFilter || 'popular') === filter));
+        button.addEventListener('click', () => {
+          currentView.artistReleaseFilter = filter;
+          scheduleRender(searchInput.value);
+        });
+      });
+      profile.querySelectorAll('.artist-popular-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const trackIndex = playlist.findIndex(track => String(track.id) === row.dataset.trackId);
+          if (trackIndex !== -1) playTrackAt(trackIndex, true, profileTracks.map(track => track.id));
+        });
+      });
+      cardGrid.appendChild(profile);
+
+      // Phase 6.2 — compare the full MusicBrainz release-group catalog with local albums.
+      const catalogState = profileCatalogState;
+      const catalogSection = document.createElement('section');
+      catalogSection.className = 'artist-catalog-section';
+      catalogSection.setAttribute('aria-label', 'Full artist discography');
+      const catalogReleases = Array.isArray(catalogState.releaseGroups) ? catalogState.releaseGroups : [];
+      const localAlbumIndex = new Map();
+      getAlbumsForArtist(currentView.artist).forEach(album => {
+        const titleKey = normalizeDiscographyTitle(album.name);
+        if (!titleKey) return;
+        const existing = localAlbumIndex.get(titleKey);
+        if (!existing || album.tracks.length > existing.tracks.length) localAlbumIndex.set(titleKey, album);
+      });
+      const ownedCatalogCount = catalogState.status === 'loaded'
+        ? catalogReleases.filter(release => getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex)).length
+        : 0;
+      const missingCatalogCount = catalogState.status === 'loaded' ? catalogReleases.length - ownedCatalogCount : 0;
+      let catalogContent = '';
+
+      if (catalogState.status === 'idle'){
+        catalogContent = `
+          <div class="artist-catalog-intro">
+            <p>Browse albums, singles, EPs, compilations, and live releases from the public music catalog. Sleeve will compare release titles with the albums in your library.</p>
+            <button class="artist-catalog-primary" type="button" data-catalog-load>Load full discography</button>
+          </div>`;
+      } else if (catalogState.status === 'searching'){
+        catalogContent = '<p class="artist-catalog-status" role="status">Finding the matching artist in MusicBrainz…</p>';
+      } else if (catalogState.status === 'chooseArtist'){
+        catalogContent = `
+          <p class="artist-catalog-status">Choose the correct artist entry before loading releases. This prevents mixing up artists with similar names.</p>
+          <div class="artist-catalog-candidates">
+            ${(catalogState.candidates || []).map(candidate => `
+              <button class="artist-catalog-candidate" type="button" data-catalog-artist-id="${escapeHtml(candidate.id)}">
+                <strong>${escapeHtml(candidate.name)}</strong>
+                <span>${escapeHtml([candidate.type, candidate.country, candidate.disambiguation].filter(Boolean).join(' · ') || 'Artist entry')}</span>
+                <small>${candidate.score ? `Match score ${candidate.score}` : 'Catalog artist'}</small>
+              </button>`).join('')}
+          </div>`;
+      } else if (catalogState.status === 'loading'){
+        catalogContent = `<p class="artist-catalog-status" role="status">Loading releases for ${escapeHtml(catalogState.selectedArtist && catalogState.selectedArtist.name || currentView.artist)}…</p>`;
+      } else if (catalogState.status === 'error'){
+        catalogContent = `
+          <p class="artist-catalog-error" role="alert">${escapeHtml(catalogState.error || 'The discography could not be loaded.')}</p>
+          <button class="artist-catalog-primary" type="button" data-catalog-retry>${catalogState.selectedArtist ? 'Retry loading releases' : 'Try again'}</button>`;
+      } else if (catalogState.status === 'empty'){
+        catalogContent = `
+          <p class="artist-catalog-status">No matching artist entry was found. Check the artist name in your local track metadata.</p>
+          <button class="artist-catalog-primary" type="button" data-catalog-load>Search again</button>`;
+      } else if (catalogState.status === 'loaded'){
+        const filter = currentView.artistCatalogFilter || 'all';
+        const filterLabels = [
+          ['all', 'All'], ['albums', 'Albums'], ['singles', 'Singles'], ['eps', 'EPs'],
+          ['compilations', 'Compilations'], ['live', 'Live'], ['other', 'Other']
+        ];
+        const filteredReleases = catalogReleases.filter(release => filter === 'all' || getDiscographyCategories(release).includes(filter));
+        const categoryCount = category => catalogReleases.filter(release => category === 'all' || getDiscographyCategories(release).includes(category)).length;
+        const releaseCards = filteredReleases.map(release => {
+          const localMatch = getLocalAlbumMatchForRelease(currentView.artist, release, localAlbumIndex);
+          const year = String(release.firstReleaseDate || '').slice(0, 4);
+          const typeLabel = [release.primaryType, ...(release.secondaryTypes || [])].filter(Boolean).join(' · ') || 'Release';
+          const spotifySearchUrl = `https://open.spotify.com/search/${encodeURIComponent(`${currentView.artist} ${release.title}`)}`;
+          return `
+            <article class="artist-catalog-release${localMatch ? ' is-owned' : ' is-missing'}">
+              <div class="artist-catalog-art">
+                ${release.coverArtUrl ? `<img src="${escapeHtml(release.coverArtUrl)}" alt="" loading="lazy" decoding="async">` : ''}
+                <span class="artist-catalog-art-fallback" ${release.coverArtUrl ? 'hidden' : ''} aria-hidden="true">♫</span>
+              </div>
+              <div class="artist-catalog-release-meta">
+                <strong title="${escapeHtml(release.title)}">${escapeHtml(release.title)}</strong>
+                <span>${escapeHtml([year, typeLabel].filter(Boolean).join(' · '))}</span>
+                <span class="artist-catalog-ownership">${localMatch ? `In your library · ${localMatch.tracks.length} track${localMatch.tracks.length === 1 ? '' : 's'}` : 'Not in your library'}</span>
+              </div>
+              ${localMatch
+                ? `<button class="artist-catalog-open-local" type="button" data-open-local-album="${escapeHtml(localMatch.name)}">Open album</button>`
+                : `<button class="artist-catalog-open-external" type="button" data-open-catalog-release="${escapeHtml(spotifySearchUrl)}">View release on Spotify</button>`}
+            </article>`;
+        }).join('');
+        catalogContent = `
+          <div class="artist-catalog-summary">
+            <span>${catalogReleases.length} releases</span>
+            <span class="artist-catalog-owned-count">${ownedCatalogCount} in your library</span>
+            <span class="artist-catalog-missing-count">${missingCatalogCount} missing</span>
+          </div>
+          <div class="artist-catalog-filters" role="group" aria-label="Filter full discography">
+            ${filterLabels.map(([value, label]) => `
+              <button class="artist-catalog-filter${filter === value ? ' active' : ''}" type="button" data-catalog-filter="${value}" aria-pressed="${filter === value}">
+                ${label}<span>${categoryCount(value)}</span>
+              </button>`).join('')}
+          </div>
+          <div class="artist-catalog-grid">
+            ${releaseCards || '<p class="artist-catalog-status">There are no releases in this category.</p>'}
+          </div>
+          ${catalogState.truncated ? '<p class="artist-catalog-status">This artist has a very large catalog. The first 500 release groups are shown.</p>' : ''}
+          <div class="artist-catalog-footer">
+            <span>MusicBrainz catalog · Matches use artist and normalized album title; alternate editions may appear separately.</span>
+            <button class="artist-catalog-refresh" type="button" data-catalog-refresh>Refresh catalog</button>
+          </div>`;
+      }
+
+      const selectedCatalogArtist = catalogState.selectedArtist;
+      catalogSection.innerHTML = `
+        <div class="artist-catalog-heading">
+          <div><span class="artist-profile-eyebrow">ARTIST CATALOG</span><h3>Full discography</h3></div>
+          ${catalogState.status === 'loaded' && selectedCatalogArtist ? `<span class="artist-catalog-provider-name">${escapeHtml(selectedCatalogArtist.name)}</span>` : ''}
+        </div>
+        ${catalogContent}
+      `;
+      const catalogLoadButton = catalogSection.querySelector('[data-catalog-load]');
+      if (catalogLoadButton) catalogLoadButton.addEventListener('click', () => loadArtistDiscography(currentView.artist));
+      catalogSection.querySelectorAll('[data-catalog-artist-id]').forEach(button => {
+        button.addEventListener('click', () => {
+          const candidate = (catalogState.candidates || []).find(item => item.id === button.dataset.catalogArtistId);
+          if (candidate) fetchArtistDiscography(currentView.artist, candidate, catalogState.forceRefresh === true);
+        });
+      });
+      const catalogRetryButton = catalogSection.querySelector('[data-catalog-retry]');
+      if (catalogRetryButton) catalogRetryButton.addEventListener('click', () => {
+        if (selectedCatalogArtist) fetchArtistDiscography(currentView.artist, selectedCatalogArtist);
+        else loadArtistDiscography(currentView.artist);
+      });
+      catalogSection.querySelectorAll('[data-catalog-filter]').forEach(button => {
+        button.addEventListener('click', () => {
+          currentView.artistCatalogFilter = button.dataset.catalogFilter;
+          scheduleRender(searchInput.value);
+        });
+      });
+      catalogSection.querySelectorAll('[data-open-local-album]').forEach(button => {
+        button.addEventListener('click', () => {
+          currentView = { type: 'album', artist: currentView.artist, album: button.dataset.openLocalAlbum };
+          scheduleRender(searchInput.value);
+        });
+      });
+      catalogSection.querySelectorAll('[data-open-catalog-release]').forEach(button => {
+        button.addEventListener('click', async () => {
+          const url = button.dataset.openCatalogRelease;
+          if (!url || !window.electronAPI || typeof window.electronAPI.findMusicOpenUrl !== 'function') return;
+          try { await window.electronAPI.findMusicOpenUrl(url); }
+          catch (error) { console.warn('Could not open Spotify release search:', error); }
+        });
+      });
+      const catalogRefreshButton = catalogSection.querySelector('[data-catalog-refresh]');
+      if (catalogRefreshButton) catalogRefreshButton.addEventListener('click', () => loadArtistDiscography(currentView.artist, true));
+      catalogSection.querySelectorAll('.artist-catalog-art img').forEach(image => {
+        image.addEventListener('error', () => {
+          image.hidden = true;
+          const fallback = image.parentElement.querySelector('.artist-catalog-art-fallback');
+          if (fallback) fallback.hidden = false;
+        }, { once: true });
+      });
+      cardGrid.appendChild(catalogSection);
+
       pagedItems.forEach(({ name, tracks }) => {
+        if (catalogState.status === 'loaded') return;
         const key = albumKey(currentView.artist, name);
         const entry = albumThumbs.get(key);
         const thumbUrl = entry ? entry.url : null;
@@ -6078,6 +6539,92 @@ async function deleteAllDetectedDuplicateCopies(button) {
         });
         cardGrid.appendChild(card);
       });
+
+      // Phase 6.1.4 — local playlist appearances and locally imported music videos.
+      // These sections use existing playlist IDs and media tracks as their source of truth.
+      const artistPlaylists = getArtistPlaylistAppearances(currentView.artist);
+      const artistVideos = getArtistMusicVideos(currentView.artist);
+      const visibleArtistVideos = currentView.artistVideosExpanded
+        ? artistVideos
+        : artistVideos.slice(0, 4);
+      visibleArtistVideos.forEach(probeVideoDuration);
+      const relatedSections = document.createElement('section');
+      relatedSections.className = 'artist-related-sections';
+      relatedSections.setAttribute('aria-label', 'Artist playlists and music videos');
+      relatedSections.innerHTML = `
+        <section class="artist-related-section" aria-label="Featuring this artist">
+          <div class="artist-related-heading">
+            <div><span class="artist-profile-eyebrow">IN YOUR PLAYLISTS</span><h3>Featuring this artist</h3></div>
+            <span class="artist-related-count">${artistPlaylists.length} playlist${artistPlaylists.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="artist-featured-playlists">
+            ${artistPlaylists.length ? artistPlaylists.map(({ playlist: pl, matchedTracks, totalTrackCount }) => {
+              const firstTrack = matchedTracks[0];
+              const artEntry = pl.thumb
+                ? { url: pl.thumb, kind: 'image' }
+                : (firstTrack.thumbUrl
+                  ? { url: firstTrack.thumbUrl, kind: firstTrack.thumbKind || 'image' }
+                  : albumArtForTrack(firstTrack));
+              const artMarkup = artEntry && artEntry.url
+                ? (artEntry.kind === 'video'
+                  ? `<video src="${escapeHtml(artEntry.url)}" muted playsinline preload="metadata" aria-hidden="true"></video>`
+                  : `<img src="${escapeHtml(artEntry.url)}" alt="" loading="lazy" decoding="async">`)
+                : '<span aria-hidden="true">♫</span>';
+              return `<button class="artist-featured-playlist" type="button" data-playlist-id="${escapeHtml(String(pl.id))}" aria-label="Open playlist ${escapeHtml(pl.name)}">
+                <span class="artist-featured-playlist-art">${artMarkup}</span>
+                <span class="artist-featured-playlist-meta"><strong>${escapeHtml(pl.name)}</strong><span>${matchedTracks.length} song${matchedTracks.length === 1 ? '' : 's'} by this artist · ${totalTrackCount} total</span></span>
+                <span class="artist-featured-playlist-open" aria-hidden="true">›</span>
+              </button>`;
+            }).join('') : '<p class="artist-related-empty">Music playlists containing this artist’s tracks will appear here.</p>'}
+          </div>
+        </section>
+        <section class="artist-related-section" aria-label="Music videos">
+          <div class="artist-related-heading">
+            <div><span class="artist-profile-eyebrow">YOUR LOCAL MEDIA</span><h3>Music Videos</h3></div>
+            <span class="artist-related-count">${artistVideos.length} video${artistVideos.length === 1 ? '' : 's'}</span>
+          </div>
+          <div class="artist-music-videos">
+            ${artistVideos.length ? visibleArtistVideos.map(track => {
+              const artMarkup = track.thumbUrl
+                ? (track.thumbKind === 'video'
+                  ? `<video src="${escapeHtml(track.thumbUrl)}" muted loop autoplay playsinline preload="metadata" aria-hidden="true"></video>`
+                  : `<img src="${escapeHtml(track.thumbUrl)}" alt="" loading="lazy" decoding="async">`)
+                : '<span class="artist-video-placeholder" aria-hidden="true">▣</span>';
+              return `<button class="artist-video-card" type="button" data-video-track-id="${escapeHtml(String(track.id))}" aria-label="Play video ${escapeHtml(track.title || 'Untitled video')}">
+                <span class="artist-video-art">${artMarkup}<span class="artist-video-play" aria-hidden="true">▶</span></span>
+                <span class="artist-video-meta"><strong>${escapeHtml(track.title || 'Untitled video')}</strong><span>${track.duration > 0 ? formatTime(track.duration) : 'Local video'}</span></span>
+              </button>`;
+            }).join('') : '<p class="artist-related-empty">No local videos are tagged with this artist yet. Add a video, then set its Artist in Edit metadata to show it here.</p>'}
+          </div>
+          ${artistVideos.length > 4 ? `<button class="artist-videos-toggle" type="button" data-artist-videos-toggle>${currentView.artistVideosExpanded ? 'Show fewer' : `Show all ${artistVideos.length} videos`}</button>` : ''}
+        </section>
+      `;
+      relatedSections.querySelectorAll('.artist-featured-playlist').forEach(button => {
+        button.addEventListener('click', () => {
+          const targetPlaylist = playlists.find(pl => String(pl.id) === button.dataset.playlistId);
+          if (!targetPlaylist) return;
+          currentView = { type: 'playlist', id: targetPlaylist.id };
+          queueIds = targetPlaylist.trackIds.slice();
+          activeQueueIds = queueIds.slice();
+          if (shuffleEnabled) queueIds = shuffleArray(queueIds);
+          scheduleRender(searchInput.value);
+        });
+      });
+      relatedSections.querySelectorAll('.artist-video-card').forEach(button => {
+        button.addEventListener('click', () => {
+          const trackId = Number(button.dataset.videoTrackId);
+          const trackIndex = playlist.findIndex(track => track.id === trackId && track.kind === 'video');
+          if (trackIndex === -1) return;
+          const artistVideoIds = artistVideos.map(track => track.id);
+          playTrackAt(trackIndex, true, artistVideoIds);
+        });
+      });
+      const videosToggle = relatedSections.querySelector('[data-artist-videos-toggle]');
+      if (videosToggle) videosToggle.addEventListener('click', () => {
+        currentView.artistVideosExpanded = !currentView.artistVideosExpanded;
+        scheduleRender(searchInput.value);
+      });
+      cardGrid.appendChild(relatedSections);
     } else if (isBrowse){
       cardGrid.classList.add('browse-grid');
       cardGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
