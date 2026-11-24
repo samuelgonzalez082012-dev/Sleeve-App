@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   localNetworkPair: (payload) => ipcRenderer.invoke('network:pair', payload),
   localNetworkRevokeDevice: (deviceId) => ipcRenderer.invoke('network:device-revoke', deviceId),
   localNetworkSyncLibrary: (snapshot) => ipcRenderer.invoke('network:library-sync', snapshot),
+  localNetworkGetPairedServers: () => ipcRenderer.invoke('network:paired-servers'),
+  localNetworkGetRemoteLibrary: (payload) => ipcRenderer.invoke('network:remote-library', payload),
+  localNetworkGetRemotePlaylistTracks: (payload) => ipcRenderer.invoke('network:remote-playlist-tracks', payload),
+  localNetworkGetRemoteStreamUrl: (payload) => ipcRenderer.invoke('network:remote-stream-url', payload),
   getMediaFileUrl: (filePath) =>
   ipcRenderer.invoke('media:file-url', filePath),
   splitStems: (filePath) => ipcRenderer.invoke('stems:split', filePath),
