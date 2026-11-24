@@ -5652,7 +5652,25 @@ async function deleteAllDetectedDuplicateCopies(button) {
     } else if (isArtistAlbums){
       // Guard against a stale view if every track from this artist was deleted.
       if (getArtists().every(a => a.name !== currentView.artist)) currentView = { type: 'artists' };
-      else albumsData = getAlbumsForArtist(currentView.artist).filter(a => !query || a.name.toLowerCase().includes(query));
+      else {
+        const allArtistAlbums = getAlbumsForArtist(currentView.artist)
+          .filter(a => a.name !== 'Unknown Album');
+        const releaseFilter = currentView.artistReleaseFilter || 'popular';
+        const releaseStats = album => ({
+          plays: album.tracks.reduce((sum, track) => sum + Math.max(0, Number(track.playCount) || 0), 0),
+          year: album.tracks.map(track => Number(track.year)).filter(year => Number.isFinite(year) && year > 0).sort((a, b) => b - a)[0] || null
+        });
+        const sortedAlbums = allArtistAlbums.slice().sort((a, b) => {
+          const aStats = releaseStats(a), bStats = releaseStats(b);
+          if (releaseFilter === 'popular') return bStats.plays - aStats.plays || a.name.localeCompare(b.name);
+          if (releaseFilter === 'singles') return a.tracks.length - b.tracks.length || a.name.localeCompare(b.name);
+          return (bStats.year || 0) - (aStats.year || 0) || a.name.localeCompare(b.name);
+        });
+        albumsData = sortedAlbums.filter(album => {
+          if (releaseFilter === 'singles' && album.tracks.length > 6) return false;
+          return !query || album.name.toLowerCase().includes(query);
+        });
+      }
     }
 
     let browseData = null;
@@ -6027,6 +6045,7 @@ async function deleteAllDetectedDuplicateCopies(button) {
           ${thumbClearHtml}
           <div class="card-title">${escapeHtml(name)}</div>
           <div class="card-sub">${tracks.length} track${tracks.length === 1 ? '' : 's'}</div>
+          <div class="artist-release-card-meta">${tracks.map(track => Number(track.year)).filter(year => Number.isFinite(year) && year > 0).sort((a, b) => b - a)[0] || 'Year unavailable'} <span>·</span> ${tracks.reduce((sum, track) => sum + Math.max(0, Number(track.playCount) || 0), 0).toLocaleString()} plays</div>
         `;
         card.addEventListener('click', (e) => {
           if (e.target.closest('.card-thumb-btn') || e.target.closest('.card-thumb-clear-btn')) return;
@@ -6130,14 +6149,32 @@ async function deleteAllDetectedDuplicateCopies(button) {
             <p class="artist-profile-muted">Artist connections are part of Phase 6.3.</p>
           </section>
         </div>
-        <div class="artist-profile-discography-heading">
-          <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Albums by ${escapeHtml(currentView.artist)}</h3></div>
-          <span>${profileAlbumCount} album${profileAlbumCount === 1 ? '' : 's'}</span>
-        </div>
+        <section class="artist-discography" aria-label="Artist discography in your library">
+          <div class="artist-profile-discography-heading">
+            <div><span class="artist-profile-eyebrow">YOUR COLLECTION</span><h3>Discography</h3></div>
+            <span>${profileAlbumCount} release${profileAlbumCount === 1 ? '' : 's'}</span>
+          </div>
+          <div class="artist-release-filters" role="group" aria-label="Filter artist releases">
+            <button class="artist-release-filter" type="button" data-release-filter="popular">Popular releases</button>
+            <button class="artist-release-filter" type="button" data-release-filter="albums">Albums</button>
+            <button class="artist-release-filter" type="button" data-release-filter="singles">Singles &amp; EPs</button>
+            <button class="artist-release-filter" type="button" data-release-filter="compilations" disabled title="Compilation tags are not currently available in the local library metadata">Compilations</button>
+          </div>
+          <p class="artist-release-filter-note">${currentView.artistReleaseFilter === 'singles' ? 'Showing shorter releases with six or fewer tracks.' : currentView.artistReleaseFilter === 'compilations' ? 'Compilation details need release metadata support.' : 'Release order and popularity are based on your local library.'}</p>
+        </section>
       `;
       profile.querySelector('.artist-profile-photo-btn').addEventListener('click', () => openArtistThumbPicker(currentView.artist));
       const removePhotoButton = profile.querySelector('.artist-profile-remove-photo');
       if (removePhotoButton) removePhotoButton.addEventListener('click', () => clearArtistThumb(currentView.artist));
+      profile.querySelectorAll('.artist-release-filter:not(:disabled)').forEach(button => {
+        const filter = button.dataset.releaseFilter;
+        button.classList.toggle('active', (currentView.artistReleaseFilter || 'popular') === filter);
+        button.setAttribute('aria-pressed', String((currentView.artistReleaseFilter || 'popular') === filter));
+        button.addEventListener('click', () => {
+          currentView.artistReleaseFilter = filter;
+          scheduleRender(searchInput.value);
+        });
+      });
       profile.querySelectorAll('.artist-popular-row').forEach(row => {
         row.addEventListener('click', () => {
           const trackIndex = playlist.findIndex(track => String(track.id) === row.dataset.trackId);
