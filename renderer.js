@@ -1790,7 +1790,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
       const meta = document.createElement('span');
       meta.className = 'network-remote-meta';
       const title = document.createElement('strong');
-      title.textContent = item.title || item.name || item.artist || 'Untitled';
+      title.textContent = typeof item === 'string' ? item : (item.title || item.name || item.artist || 'Untitled');
       const subtitle = document.createElement('small');
       subtitle.textContent = section === 'tracks'
         ? [item.artist, item.album].filter(Boolean).join(' · ')
@@ -1818,7 +1818,7 @@ console.log('[STEMS DEBUG] file.webkitRelativePath:', track?.file?.webkitRelativ
               : { genre: item, limit: 200 };
             const result = await window.electronAPI.localNetworkGetRemoteLibrary({ serverId, section: 'tracks', options });
             renderRemoteNetworkRows(result.items || [], 'tracks', serverId);
-            networkStatusText(networkRemoteStatus, 'Showing tracks from ' + (item.name || item.title || item));
+            networkStatusText(networkRemoteStatus, 'Showing tracks from ' + (typeof item === 'string' ? item : (item.name || item.title || 'selection')));
           }
         } catch (error) { networkStatusText(networkRemoteStatus, error.message, true); }
         finally { action.disabled = false; }
