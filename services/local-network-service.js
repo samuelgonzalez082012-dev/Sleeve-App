@@ -245,7 +245,7 @@ class LocalNetworkService {
     const url = new URL(req.url || '/', 'http://127.0.0.1');
     res.setHeader('cache-control', 'no-store');
     res.setHeader('x-content-type-options', 'nosniff');
-    if (url.pathname === '/v1/library' || url.pathname.startsWith('/v1/library/') || /^\\/v1\\/tracks\\/\\d+\\/stream$/.test(url.pathname)) {
+    if (url.pathname === '/v1/library' || url.pathname.startsWith('/v1/library/') || /^\/v1\/tracks\/\d+\/stream$/.test(url.pathname)) {
       const device = this.authorize(req);
       if (!device) return this.sendJson(res, 401, { error: 'Device authorization required.' });
       const handled = await this.libraryStreaming.handleRequest(req, res, url);
