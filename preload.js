@@ -52,6 +52,8 @@ verifyStems: (stems) => ipcRenderer.invoke('stems:verify', stems),
   findMusicDiscoverByTaste: (payload) => ipcRenderer.invoke('find-music:discover-by-taste', payload),
   findMusicSearchArtistCatalog: (payload) => ipcRenderer.invoke('find-music:search-artist-catalog', payload),
   findMusicGetArtistDiscography: (payload) => ipcRenderer.invoke('find-music:get-artist-discography', payload),
+  findMusicGetReleaseGroupDetails: (payload) => ipcRenderer.invoke('find-music:get-release-group-details', payload),
+  findMusicGetArtistRelationships: (payload) => ipcRenderer.invoke('find-music:get-artist-relationships', payload),
   findMusicOpenUrl: (url) => ipcRenderer.invoke('find-music:open-url', url),
   // Folder watching is opt-in. Only paths reported from the selected folder can be read for import.
   findMusicWatchSelectFolder: () => ipcRenderer.invoke('find-music:watch-select-folder'),
