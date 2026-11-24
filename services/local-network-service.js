@@ -265,14 +265,14 @@ class LocalNetworkService {
   async getRemoteStreamUrl(serverId, trackId, quality = 'original') {
     const record = this.getPairedServer(serverId);
     if (!record) throw new Error('That Sleeve server is not paired with this device.');
-    if (!/^\\d+$/.test(String(trackId)) || !['original', 'compact'].includes(quality)) {
+    if (!/^\d+$/.test(String(trackId)) || !['original', 'compact'].includes(quality)) {
       throw new Error('Invalid remote track or quality setting.');
     }
     if (!this.remoteProxyServer) {
       this.remoteProxySecret = crypto.randomBytes(24).toString('hex');
       this.remoteProxyServer = http.createServer((req, res) => {
         const url = new URL(req.url || '/', 'http://127.0.0.1');
-        const match = /^\\/([a-f0-9]{48})\\/([a-f0-9-]{36})\\/tracks\\/(\\d+)\\/stream$/.exec(url.pathname);
+        const match = /^\/([a-f0-9]{48})\/([a-f0-9-]{36})\/tracks\/(\d+)\/stream$/.exec(url.pathname);
         if (req.method !== 'GET' || !match || !safeEqualText(match[1], this.remoteProxySecret)) {
           res.writeHead(404); return res.end();
         }
